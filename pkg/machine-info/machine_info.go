@@ -241,7 +241,7 @@ func GetMachineLocation(publicIP string) *apiv1.MachineLocation {
 
 	// Try IP geolocation first if we have a public IP
 	if publicIP != "" {
-		location := getMachineLocationFromIP(ctx, publicIP) // 🎯 Pass IP directly
+		location := getMachineLocationFromIP(ctx, publicIP)
 		if location != nil {
 			return location
 		}
@@ -258,12 +258,6 @@ func getMachineLocationFromIP(ctx context.Context, publicIP string) *apiv1.Machi
 		log.Logger.Warnw("failed to get IP geolocation", "ip", publicIP, "error", err)
 		return nil
 	}
-
-	log.Logger.Debugw("successfully obtained location via IP geolocation",
-		"ip", publicIP,
-		"country", ipLocation.Country,
-		"region", ipLocation.Region,
-		"city", ipLocation.City)
 
 	return &apiv1.MachineLocation{
 		Region:      ipLocation.RegionCode,
@@ -286,9 +280,6 @@ func getMachineLocationFromLatency(ctx context.Context) *apiv1.MachineLocation {
 	}
 
 	closest := latencies.Closest()
-	log.Logger.Infow("successfully obtained location via latency measurement",
-		"region", closest.RegionCode,
-		"latency", closest.LatencyMilliseconds)
 
 	return &apiv1.MachineLocation{
 		Region: closest.RegionCode,

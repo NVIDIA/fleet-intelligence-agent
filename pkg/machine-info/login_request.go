@@ -59,6 +59,8 @@ func createLoginRequest(
 		log.Logger.Errorw("failed to get public ip", "error", err)
 	}
 
+	// Kick off a goroutine to get the machine location
+	// after we have the public ip to use for the location detection
 	machineLocationCh := make(chan *apiv1.MachineLocation, 1)
 	go func() {
 		select {
@@ -121,7 +123,6 @@ func createLoginRequest(
 		req.Resources["nvidia.com/gpu"] = gpuCnt
 	}
 
-	// 4. Wait for location result
 	req.Location = <-machineLocationCh
 
 	return req, nil
