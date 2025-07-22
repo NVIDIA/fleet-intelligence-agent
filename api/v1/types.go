@@ -489,4 +489,12 @@ type MachineNetworkInterface struct {
 type MachineLocation struct {
 	Region string `json:"region,omitempty"`
 	Zone   string `json:"zone,omitempty"`
+
+	Country     string  `json:"country,omitempty"`
+	CountryCode string  `json:"country_code,omitempty"`
+	City        string  `json:"city,omitempty"`
+	Latitude    float64 `json:"latitude,omitempty"`
+	Longitude   float64 `json:"longitude,omitempty"`
+	Timezone    string  `json:"timezone,omitempty"`
+	Source      string  `json:"source,omitempty"`
 }
