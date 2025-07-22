@@ -235,14 +235,16 @@ func GetProvider(publicIP string) *providers.Info {
 	return providerInfo
 }
 
-func GetMachineLocation() *apiv1.MachineLocation {
+func GetMachineLocation(publicIP string) *apiv1.MachineLocation {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Try IP geolocation first - provides richer data
-	location := getMachineLocationFromIP(ctx)
-	if location != nil {
-		return location
+	// Try IP geolocation first if we have a public IP
+	if publicIP != "" {
+		location := getMachineLocationFromIP(ctx, publicIP) // 🎯 Pass IP directly
+		if location != nil {
+			return location
+		}
 	}
 
 	// Fall back to latency-based detection
@@ -250,22 +252,14 @@ func GetMachineLocation() *apiv1.MachineLocation {
 }
 
 // getMachineLocationFromIP uses IP geolocation services to determine location
-func getMachineLocationFromIP(ctx context.Context) *apiv1.MachineLocation {
-	// Get public IP
-	publicIP, err := netutil.PublicIP()
-	if err != nil {
-		log.Logger.Warnw("failed to get public IP for geolocation", "error", err)
-		return nil
-	}
-
-	// Get geolocation from IP
+func getMachineLocationFromIP(ctx context.Context, publicIP string) *apiv1.MachineLocation {
 	ipLocation, err := netutil.GetIPGeolocation(ctx, publicIP)
 	if err != nil {
 		log.Logger.Warnw("failed to get IP geolocation", "ip", publicIP, "error", err)
 		return nil
 	}
 
-	log.Logger.Infow("successfully obtained location via IP geolocation",
+	log.Logger.Debugw("successfully obtained location via IP geolocation",
 		"ip", publicIP,
 		"country", ipLocation.Country,
 		"region", ipLocation.Region,

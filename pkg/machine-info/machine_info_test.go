@@ -47,7 +47,7 @@ func TestGetMachineLocation(t *testing.T) {
 
 	// Always run a basic test, but don't assert on the results
 	// as it may return nil depending on network conditions
-	location := GetMachineLocation()
+	location := GetMachineLocation("")
 	t.Logf("location: %+v", location)
 
 	// More detailed test when environment variable is set
@@ -275,7 +275,7 @@ func TestGetMachineLocation_Basic(t *testing.T) {
 		t.Skip("TEST_MACHINE_LOCATION is not set")
 	}
 
-	location := GetMachineLocation()
+	location := GetMachineLocation("")
 	// Location can be nil if not on a cloud provider or network issues
 	if location != nil {
 		t.Logf("Location: %+v", location)
@@ -424,36 +424,8 @@ func TestGetSystemResourceRootVolumeTotal_Validation(t *testing.T) {
 	t.Logf("Root volume: %s (parsed: %d bytes)", volume, volQty.Value())
 }
 
-// TestGetMachineLocation_IPGeolocation tests the enhanced location detection
+// TestGetMachineLocation_IPGeolocation tests the enhanced location detection with detailed logging
 func TestGetMachineLocation_IPGeolocation(t *testing.T) {
-	if os.Getenv("TEST_MACHINE_LOCATION_IP") != "true" {
-		t.Skip("TEST_MACHINE_LOCATION_IP is not set")
-	}
-
-	location := GetMachineLocation()
-	if location == nil {
-		t.Skip("No location data available (network issues or service failures)")
-	}
-
-	t.Logf("\n🌍 Machine Location Detection Results:")
-	t.Logf("   🌍 Region: %s", location.Region)
-	t.Logf("   🏢 Zone: %s", location.Zone)
-	t.Logf("   🏳️  Country: %s (%s)", location.Country, location.CountryCode)
-	t.Logf("   🌆 City: %s", location.City)
-	t.Logf("   📍 Coordinates: %.4f, %.4f", location.Latitude, location.Longitude)
-	t.Logf("   ⏰ Timezone: %s", location.Timezone)
-	t.Logf("   🔧 Source: %s", location.Source)
-
-	// Basic validation
-	assert.NotNil(t, location)
-	if location.Region != "" {
-		assert.NotEmpty(t, location.Region)
-		t.Logf("\n✅ Successfully detected location with region: %s", location.Region)
-	}
-}
-
-// TestGetMachineLocationEnhanced tests the enhanced location detection with detailed logging
-func TestGetMachineLocationEnhanced(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping enhanced geolocation test in short mode")
 	}
@@ -461,7 +433,7 @@ func TestGetMachineLocationEnhanced(t *testing.T) {
 	t.Logf("🔍 Testing enhanced machine location detection...")
 	t.Logf("   (This will try IP geolocation first, then fall back to latency measurement)")
 
-	location := GetMachineLocation()
+	location := GetMachineLocation("8.8.8.8")
 	if location == nil {
 		t.Skip("No location data available (network issues or all services failed)")
 	}
