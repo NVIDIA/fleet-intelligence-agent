@@ -424,8 +424,8 @@ func TestGetSystemResourceRootVolumeTotal_Validation(t *testing.T) {
 	t.Logf("Root volume: %s (parsed: %d bytes)", volume, volQty.Value())
 }
 
-// TestGetMachineLocation_IPGeolocation tests the enhanced location detection with detailed logging
-func TestGetMachineLocation_IPGeolocation(t *testing.T) {
+// TestGetMachineLocation_IPv4Geolocation tests the enhanced location detection with detailed logging
+func TestGetMachineLocation_IPv4Geolocation(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping enhanced geolocation test in short mode")
 	}
@@ -451,5 +451,43 @@ func TestGetMachineLocation_IPGeolocation(t *testing.T) {
 	if location.Region != "" {
 		assert.NotEmpty(t, location.Region)
 		t.Logf("\n Successfully detected location with region: %s", location.Region)
+	}
+}
+
+// TestGetMachineLocation_IPv6Geolocation tests the enhanced location detection with IPv6 address
+func TestGetMachineLocation_IPv6Geolocation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping IPv6 geolocation test in short mode")
+	}
+
+	t.Logf("🔍 Testing IPv6 machine location detection...")
+	t.Logf("   (Testing with Google's IPv6 DNS: 2001:4860:4860::8888)")
+
+	location := GetMachineLocation("2001:4860:4860::8888")
+	if location == nil {
+		t.Skip("No IPv6 location data available (network issues or all services failed)")
+	}
+
+	t.Logf("\n  IPv6 Location Detection Results:")
+	t.Logf("   Region: %s", location.Region)
+	t.Logf("   Zone: %s", location.Zone)
+	t.Logf("   Country: %s (%s)", location.Country, location.CountryCode)
+	t.Logf("   City: %s", location.City)
+	t.Logf("   Coordinates: %.4f, %.4f", location.Latitude, location.Longitude)
+	t.Logf("   Timezone: %s", location.Timezone)
+	t.Logf("   Source: %s", location.Source)
+
+	assert.NotNil(t, location)
+	if location.Region != "" {
+		assert.NotEmpty(t, location.Region)
+		t.Logf("\n ✅ Successfully detected IPv6 location with region: %s", location.Region)
+	}
+
+	// IPv6 specific assertions
+	if location.Source == "ip-geolocation" {
+		t.Logf("\n 🎯 IPv6 geolocation service succeeded!")
+		assert.NotEmpty(t, location.CountryCode, "IPv6 geolocation should provide country code")
+	} else if location.Source == "latency-measurement" {
+		t.Logf("\n ⚠️  IPv6 geolocation failed, fell back to latency measurement")
 	}
 }
