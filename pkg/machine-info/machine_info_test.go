@@ -438,18 +438,18 @@ func TestGetMachineLocation_IPGeolocation(t *testing.T) {
 		t.Skip("No location data available (network issues or all services failed)")
 	}
 
-	t.Logf("\n✅ Enhanced Location Detection Results:")
-	t.Logf("   🌍 Region: %s", location.Region)
-	t.Logf("   🏢 Zone: %s", location.Zone)
-	t.Logf("   🏳️  Country: %s (%s)", location.Country, location.CountryCode)
-	t.Logf("   🌆 City: %s", location.City)
-	t.Logf("   📍 Coordinates: %.4f, %.4f", location.Latitude, location.Longitude)
-	t.Logf("   ⏰ Timezone: %s", location.Timezone)
-	t.Logf("   🔧 Source: %s", location.Source)
+	t.Logf("\n  Enhanced Location Detection Results:")
+	t.Logf("   Region: %s", location.Region)
+	t.Logf("   Zone: %s", location.Zone)
+	t.Logf("   Country: %s (%s)", location.Country, location.CountryCode)
+	t.Logf("   City: %s", location.City)
+	t.Logf("   Coordinates: %.4f, %.4f", location.Latitude, location.Longitude)
+	t.Logf("   Timezone: %s", location.Timezone)
+	t.Logf("   Source: %s", location.Source)
 
 	assert.NotNil(t, location)
 	if location.Region != "" {
 		assert.NotEmpty(t, location.Region)
-		t.Logf("\n✅ Successfully detected location with region: %s", location.Region)
+		t.Logf("\n Successfully detected location with region: %s", location.Region)
 	}
 }

@@ -314,17 +314,17 @@ func TestIndividualGeolocationServices(t *testing.T) {
 
 		location, err := service.GetLocation(ctx, testIP)
 		if err != nil {
-			t.Logf("❌ %s failed: %v\n", service.Name(), err)
+			t.Logf("%s failed: %v\n", service.Name(), err)
 			continue
 		}
 
-		t.Logf("✅ %s succeeded:", service.Name())
-		t.Logf("   📍 Country: %s (%s)", location.Country, location.CountryCode)
-		t.Logf("   🏙️  Region: %s (%s)", location.Region, location.RegionCode)
-		t.Logf("   🌆 City: %s", location.City)
-		t.Logf("   🌍 Coordinates: %.4f, %.4f", location.Latitude, location.Longitude)
-		t.Logf("   ⏰ Timezone: %s", location.Timezone)
-		t.Logf("   🌐 ISP: %s\n", location.ISP)
+		t.Logf("%s succeeded:", service.Name())
+		t.Logf("    Country: %s (%s)", location.Country, location.CountryCode)
+		t.Logf("    Region: %s (%s)", location.Region, location.RegionCode)
+		t.Logf("    City: %s", location.City)
+		t.Logf("    Coordinates: %.4f, %.4f", location.Latitude, location.Longitude)
+		t.Logf("    Timezone: %s", location.Timezone)
+		t.Logf("    ISP: %s\n", location.ISP)
 	}
 }
 
@@ -341,7 +341,7 @@ func TestCurrentIPGeolocation(t *testing.T) {
 	// Get the machine's public IP first
 	publicIP, err := PublicIP()
 	if err != nil {
-		t.Logf("❌ Failed to get public IP: %v", err)
+		t.Logf("Failed to get public IP: %v", err)
 		t.Skip("Cannot get public IP, skipping test")
 	}
 
@@ -350,17 +350,17 @@ func TestCurrentIPGeolocation(t *testing.T) {
 	// Now geolocate it
 	location, err := GetIPGeolocation(ctx, publicIP)
 	if err != nil {
-		t.Logf("❌ Failed to geolocate your IP: %v", err)
+		t.Logf("Failed to geolocate your IP: %v", err)
 		return
 	}
 
-	t.Logf("\n✅ Your location based on IP geolocation:")
-	t.Logf("   📍 Country: %s (%s)", location.Country, location.CountryCode)
-	t.Logf("   🏙️  Region: %s (%s)", location.Region, location.RegionCode)
-	t.Logf("   🌆 City: %s", location.City)
-	t.Logf("   🌍 Coordinates: %.4f, %.4f", location.Latitude, location.Longitude)
-	t.Logf("   ⏰ Timezone: %s", location.Timezone)
-	t.Logf("   🌐 ISP: %s", location.ISP)
+	t.Logf("\n Your location based on IP geolocation:")
+	t.Logf("   Country: %s (%s)", location.Country, location.CountryCode)
+	t.Logf("   Region: %s (%s)", location.Region, location.RegionCode)
+	t.Logf("   City: %s", location.City)
+	t.Logf("   Coordinates: %.4f, %.4f", location.Latitude, location.Longitude)
+	t.Logf("   Timezone: %s", location.Timezone)
+	t.Logf("   ISP: %s", location.ISP)
 
 	// Assertions for the test framework
 	assert.NotNil(t, location)
