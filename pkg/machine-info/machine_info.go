@@ -235,18 +235,55 @@ func GetProvider(publicIP string) *providers.Info {
 	return providerInfo
 }
 
-func GetMachineLocation() *apiv1.MachineLocation {
+func GetMachineLocation(publicIP string) *apiv1.MachineLocation {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Try IP geolocation first if we have a public IP
+	if publicIP != "" {
+		location := getMachineLocationFromIP(ctx, publicIP)
+		if location != nil {
+			return location
+		}
+	}
+
+	// Fall back to latency-based detection
+	return getMachineLocationFromLatency(ctx)
+}
+
+// getMachineLocationFromIP uses IP geolocation services to determine location
+func getMachineLocationFromIP(ctx context.Context, publicIP string) *apiv1.MachineLocation {
+	ipLocation, err := netutil.GetIPGeolocation(ctx, publicIP)
+	if err != nil {
+		log.Logger.Warnw("failed to get IP geolocation", "ip", publicIP, "error", err)
+		return nil
+	}
+
+	return &apiv1.MachineLocation{
+		Region:      ipLocation.RegionCode,
+		Zone:        "", // IP geolocation doesn't provide zone info
+		Country:     ipLocation.Country,
+		CountryCode: ipLocation.CountryCode,
+		City:        ipLocation.City,
+		Latitude:    ipLocation.Latitude,
+		Longitude:   ipLocation.Longitude,
+		Timezone:    ipLocation.Timezone,
+		Source:      "ip-geolocation",
+	}
+}
+
+// getMachineLocationFromLatency uses latency measurement to determine region (existing method)
+func getMachineLocationFromLatency(ctx context.Context) *apiv1.MachineLocation {
 	latencies, err := pkgnetutillatencyedge.Measure(ctx)
 	if err != nil || len(latencies) == 0 {
 		return nil
 	}
 
 	closest := latencies.Closest()
+
 	return &apiv1.MachineLocation{
 		Region: closest.RegionCode,
+		Source: "latency-measurement",
 	}
 }
 

@@ -132,7 +132,7 @@ func TestCreateLoginRequest_Basic(t *testing.T) {
 		machineID                            string
 		gpuCount                             string
 		getPublicIPFunc                      func() (string, error)
-		getMachineLocationFunc               func() *apiv1.MachineLocation
+		getMachineLocationFunc               func(string) *apiv1.MachineLocation
 		getMachineInfoFunc                   func(nvidianvml.Instance) (*apiv1.MachineInfo, error)
 		getProviderFunc                      func(string) *providers.Info
 		getSystemResourceRootVolumeTotalFunc func() (string, error)
@@ -149,7 +149,7 @@ func TestCreateLoginRequest_Basic(t *testing.T) {
 			getPublicIPFunc: func() (string, error) {
 				return "1.2.3.4", nil
 			},
-			getMachineLocationFunc: func() *apiv1.MachineLocation {
+			getMachineLocationFunc: func(ip string) *apiv1.MachineLocation {
 				return &apiv1.MachineLocation{
 					Region: "us-east-1",
 					Zone:   "us-east-1a",
@@ -207,7 +207,7 @@ func TestCreateLoginRequest_Basic(t *testing.T) {
 			getPublicIPFunc: func() (string, error) {
 				return "5.6.7.8", nil
 			},
-			getMachineLocationFunc: func() *apiv1.MachineLocation {
+			getMachineLocationFunc: func(ip string) *apiv1.MachineLocation {
 				return &apiv1.MachineLocation{}
 			},
 			getMachineInfoFunc: func(nvidianvml.Instance) (*apiv1.MachineInfo, error) {
@@ -253,7 +253,7 @@ func TestCreateLoginRequest_Basic(t *testing.T) {
 			getPublicIPFunc: func() (string, error) {
 				return "", nil
 			},
-			getMachineLocationFunc: func() *apiv1.MachineLocation {
+			getMachineLocationFunc: func(ip string) *apiv1.MachineLocation {
 				return &apiv1.MachineLocation{}
 			},
 			getMachineInfoFunc: func(nvidianvml.Instance) (*apiv1.MachineInfo, error) {
@@ -300,7 +300,7 @@ func TestCreateLoginRequest_Basic(t *testing.T) {
 			getPublicIPFunc: func() (string, error) {
 				return "", nil
 			},
-			getMachineLocationFunc: func() *apiv1.MachineLocation {
+			getMachineLocationFunc: func(ip string) *apiv1.MachineLocation {
 				return &apiv1.MachineLocation{}
 			},
 			getMachineInfoFunc: func(nvidianvml.Instance) (*apiv1.MachineInfo, error) {
@@ -326,7 +326,7 @@ func TestCreateLoginRequest_Basic(t *testing.T) {
 			getPublicIPFunc: func() (string, error) {
 				return "", nil
 			},
-			getMachineLocationFunc: func() *apiv1.MachineLocation {
+			getMachineLocationFunc: func(ip string) *apiv1.MachineLocation {
 				return &apiv1.MachineLocation{}
 			},
 			getMachineInfoFunc: func(nvidianvml.Instance) (*apiv1.MachineInfo, error) {
@@ -359,7 +359,7 @@ func TestCreateLoginRequest_Basic(t *testing.T) {
 			getPublicIPFunc: func() (string, error) {
 				return "", nil
 			},
-			getMachineLocationFunc: func() *apiv1.MachineLocation {
+			getMachineLocationFunc: func(ip string) *apiv1.MachineLocation {
 				return &apiv1.MachineLocation{}
 			},
 			getMachineInfoFunc: func(nvidianvml.Instance) (*apiv1.MachineInfo, error) {
@@ -392,7 +392,7 @@ func TestCreateLoginRequest_Basic(t *testing.T) {
 			getPublicIPFunc: func() (string, error) {
 				return "", errors.New("public ip error")
 			},
-			getMachineLocationFunc: func() *apiv1.MachineLocation {
+			getMachineLocationFunc: func(ip string) *apiv1.MachineLocation {
 				return &apiv1.MachineLocation{}
 			},
 			getMachineInfoFunc: func(nvidianvml.Instance) (*apiv1.MachineInfo, error) {
@@ -493,7 +493,7 @@ func TestCreateLoginRequest_NetworkBasics(t *testing.T) {
 		"1",
 		&mockNvmlInstance{},
 		func() (string, error) { return "1.2.3.4", nil },
-		func() *apiv1.MachineLocation { return &apiv1.MachineLocation{} },
+		func(ip string) *apiv1.MachineLocation { return &apiv1.MachineLocation{} },
 		getMachineInfoFunc,
 		func(ip string) *providers.Info {
 			return &providers.Info{Provider: fmt.Sprintf("provider-%s", ip), PublicIP: ip}
@@ -587,7 +587,7 @@ func TestCreateLoginRequest_PrivateIPDetection(t *testing.T) {
 				"1",
 				&mockNvmlInstance{},
 				func() (string, error) { return "1.2.3.4", nil },
-				func() *apiv1.MachineLocation { return &apiv1.MachineLocation{} },
+				func(ip string) *apiv1.MachineLocation { return &apiv1.MachineLocation{} },
 				getMachineInfoFunc,
 				func(ip string) *providers.Info { return &providers.Info{Provider: "provider"} },
 				func() (string, error) { return "100Gi", nil },
@@ -653,7 +653,7 @@ func TestCreateLoginRequest_ResourceCalculation(t *testing.T) {
 				"0",
 				&mockNvmlInstance{},
 				func() (string, error) { return "", nil },
-				func() *apiv1.MachineLocation { return &apiv1.MachineLocation{} },
+				func(ip string) *apiv1.MachineLocation { return &apiv1.MachineLocation{} },
 				getMachineInfoFunc,
 				func(ip string) *providers.Info { return &providers.Info{Provider: ""} },
 				func() (string, error) { return "100Gi", nil },
@@ -812,7 +812,7 @@ func TestCreateLoginRequest_ProviderPrivateIPFallback(t *testing.T) {
 				"1",
 				&mockNvmlInstance{},
 				func() (string, error) { return "1.2.3.4", nil },
-				func() *apiv1.MachineLocation { return &apiv1.MachineLocation{} },
+				func(ip string) *apiv1.MachineLocation { return &apiv1.MachineLocation{} },
 				getMachineInfoFunc,
 				getProviderFunc,
 				func() (string, error) { return "100Gi", nil },
@@ -932,7 +932,7 @@ func TestCreateLoginRequest_ProviderInfoUsage(t *testing.T) {
 				"1",
 				&mockNvmlInstance{},
 				tt.publicIPFunc,
-				func() *apiv1.MachineLocation { return &apiv1.MachineLocation{} },
+				func(ip string) *apiv1.MachineLocation { return &apiv1.MachineLocation{} },
 				getMachineInfoFunc,
 				getProviderFunc,
 				func() (string, error) { return "100Gi", nil },
