@@ -36,7 +36,7 @@ func TestGetIPGeolocation(t *testing.T) {
 
 		location, err := GetIPGeolocation(ctx, test.ip)
 		if err != nil {
-			t.Logf("❌ Failed to get geolocation for %s: %v", test.ip, err)
+			t.Logf("Failed to get geolocation for %s: %v", test.ip, err)
 			continue
 		}
 
@@ -45,13 +45,13 @@ func TestGetIPGeolocation(t *testing.T) {
 		assert.NotEmpty(t, location.CountryCode)
 
 		// Print detailed geolocation information
-		t.Logf("✅ Geolocation for %s:", test.ip)
-		t.Logf("   📍 Country: %s (%s)", location.Country, location.CountryCode)
-		t.Logf("   🏙️  Region: %s (%s)", location.Region, location.RegionCode)
-		t.Logf("   🌆 City: %s", location.City)
-		t.Logf("   🌍 Coordinates: %.4f, %.4f", location.Latitude, location.Longitude)
-		t.Logf("   ⏰ Timezone: %s", location.Timezone)
-		t.Logf("   🌐 ISP: %s", location.ISP)
+		t.Logf(" Geolocation for %s:", test.ip)
+		t.Logf("    Country: %s (%s)", location.Country, location.CountryCode)
+		t.Logf("     Region: %s (%s)", location.Region, location.RegionCode)
+		t.Logf("    City: %s", location.City)
+		t.Logf("    Coordinates: %.4f, %.4f", location.Latitude, location.Longitude)
+		t.Logf("    Timezone: %s", location.Timezone)
+		t.Logf("    ISP: %s", location.ISP)
 	}
 }
 
@@ -310,7 +310,7 @@ func TestIndividualGeolocationServices(t *testing.T) {
 	t.Logf("Test IP: %s (Google DNS)\n", testIP)
 
 	for _, service := range services {
-		t.Logf("🔍 Testing service: %s", service.Name())
+		t.Logf(" Testing service: %s", service.Name())
 
 		location, err := service.GetLocation(ctx, testIP)
 		if err != nil {
@@ -345,7 +345,7 @@ func TestCurrentIPGeolocation(t *testing.T) {
 		t.Skip("Cannot get public IP, skipping test")
 	}
 
-	t.Logf("🌐 Your public IP: %s", publicIP)
+	t.Logf(" Your public IP: %s", publicIP)
 
 	// Now geolocate it
 	location, err := GetIPGeolocation(ctx, publicIP)
