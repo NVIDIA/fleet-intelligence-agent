@@ -1,0 +1,117 @@
+// Package gpuhealthconfig provides configuration for the GPU health metrics exporter.
+// This is a simplified configuration focused only on health monitoring,
+// removing all management functionality like auto-updates, plugins, etc.
+package gpuhealthconfig
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	pkgconfigcommon "github.com/leptonai/gpud/pkg/config/common"
+)
+
+// Config provides configuration for the health metrics exporter
+type Config struct {
+	// APIVersion for the health server
+	APIVersion string `json:"api_version"`
+
+	// Address for the health server to listen on
+	Address string `json:"address"`
+
+	// State file that persists health status and metrics
+	// If empty, states are not persisted to file
+	State string `json:"state"`
+
+	// Amount of time to retain health states/metrics
+	// Once elapsed, old data is purged/compacted
+	RetentionPeriod metav1.Duration `json:"retention_period"`
+
+	// Interval at which to compact the state database
+	CompactPeriod metav1.Duration `json:"compact_period"`
+
+	// Set true to enable profiler endpoints
+	Pprof bool `json:"pprof"`
+
+	// NVIDIA tool command paths to overwrite defaults
+	NvidiaToolOverwrites pkgconfigcommon.ToolOverwrites `json:"nvidia_tool_overwrites"`
+
+	// Components specifies which health components to enable
+	// Leave empty, "*", or "all" to enable all components
+	// Prefix component names with "-" to disable them
+	Components         []string       `json:"components"`
+	selectedComponents map[string]any `json:"-"`
+	disabledComponents map[string]any `json:"-"`
+}
+
+// Validate checks if the configuration is valid
+func (config *Config) Validate() error {
+	if config.Address == "" {
+		return errors.New("address is required")
+	}
+	if config.RetentionPeriod.Duration < time.Minute {
+		return fmt.Errorf("retention_period must be at least 1 minute, got %v", config.RetentionPeriod.Duration)
+	}
+	return nil
+}
+
+// ShouldEnable returns true if the component should be enabled.
+// If no components are specified, all components are enabled by default.
+func (config *Config) ShouldEnable(componentName string) bool {
+	// Not specified, enable all components
+	if len(config.Components) == 0 || config.Components[0] == "*" || config.Components[0] == "all" {
+		return true
+	}
+
+	if config.selectedComponents == nil {
+		config.selectedComponents = make(map[string]any)
+
+		for _, c := range config.Components {
+			if c == "*" || c == "all" {
+				// Enable all components
+				return true
+			}
+
+			// Prefix "-" is used to disable a component
+			if strings.HasPrefix(c, "-") {
+				continue
+			}
+			config.selectedComponents[c] = struct{}{}
+		}
+	}
+
+	_, shouldEnable := config.selectedComponents[componentName]
+	return shouldEnable
+}
+
+// ShouldDisable returns true if the component should be disabled.
+// If no disable components are specified, all components are enabled by default.
+func (config *Config) ShouldDisable(componentName string) bool {
+	// Not specified, enable all components (don't disable any)
+	if len(config.Components) == 0 || config.Components[0] == "*" || config.Components[0] == "all" {
+		return false
+	}
+
+	if config.disabledComponents == nil {
+		config.disabledComponents = make(map[string]any)
+
+		for _, c := range config.Components {
+			if c == "*" || c == "all" {
+				// Enable all components
+				return false
+			}
+
+			// Prefix "-" is used to disable a component
+			if !strings.HasPrefix(c, "-") {
+				continue
+			}
+			config.disabledComponents[c] = struct{}{}
+		}
+	}
+
+	_, shouldDisable := config.disabledComponents[componentName]
+	return shouldDisable
+}
