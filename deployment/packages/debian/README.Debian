@@ -1,0 +1,61 @@
+NVIDIA GPU Health Agent
+===================
+
+GPU Health Agent provides comprehensive monitoring for NVIDIA datacenter GPUs.
+
+Configuration
+-------------
+
+The service configuration is located at:
+  /etc/default/gpuhealth
+
+To configure the service:
+  1. Edit: sudo vi /etc/default/gpuhealth
+  2. Restart: sudo systemctl restart gpuhealthd
+
+The default configuration sets log level to 'info'. Available levels:
+  debug, info, warn, error, fatal, panic
+
+Data Directory
+--------------
+
+GPU Health Agent stores data in:
+  /var/lib/gpuhealth/
+
+This directory is automatically created during installation.
+
+Service Management
+------------------
+
+Start/stop the service:
+  sudo systemctl start gpuhealthd
+  sudo systemctl stop gpuhealthd
+
+Enable/disable automatic startup:
+  sudo systemctl enable gpuhealthd
+  sudo systemctl disable gpuhealthd
+
+Check service status:
+  sudo systemctl status gpuhealthd
+
+View logs:
+  sudo journalctl -u gpuhealthd -f
+
+Requirements
+------------
+
+- NVIDIA drivers version 535 or higher (recommended)
+- systemd version 230 or higher
+- curl
+
+The agent will work without NVIDIA drivers but GPU monitoring will be limited.
+
+Troubleshooting
+---------------
+
+If the service fails to start:
+  1. Check logs: sudo journalctl -u gpuhealthd
+  2. Verify NVIDIA drivers: nvidia-smi
+  3. Check configuration: sudo vi /etc/default/gpuhealth
+
+ -- GPU Health Team <gpuhealth@exchange.nvidia.com> 

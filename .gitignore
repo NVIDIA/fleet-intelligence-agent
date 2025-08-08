@@ -33,3 +33,11 @@ coverage.html
 CLAUDE.md
 GEMINI.md
 CODEX.md
+
+# Debian packaging build artifacts
+deployment/packages/debian/.debhelper/
+deployment/packages/debian/debhelper-build-stamp
+deployment/packages/debian/*.substvars
+deployment/packages/debian/files
+deployment/packages/debian/gpuhealth/
+*.deb

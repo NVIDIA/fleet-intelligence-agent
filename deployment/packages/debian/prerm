@@ -1,0 +1,36 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    remove)
+        echo "Removing GPU Health Agent..."
+        
+        if [ -d /run/systemd/system ]; then
+            # Stop if active
+            if systemctl is-active --quiet gpuhealthd.service 2>/dev/null; then
+                echo "Stopping gpuhealthd service..."
+                systemctl stop gpuhealthd.service || echo "[WARNING] Failed to stop service"
+            fi
+            
+            # Disable if enabled
+            if systemctl is-enabled --quiet gpuhealthd.service 2>/dev/null; then
+                echo "Disabling gpuhealthd service..."
+                systemctl disable gpuhealthd.service || echo "[WARNING] Failed to disable service"
+            fi
+        fi
+        
+        echo "GPU Health Agent service stopped and disabled"
+        ;;
+        
+    upgrade)
+        echo "Preparing GPU Health Agent for upgrade..."
+        # Don't stop service during upgrade
+        ;;
+        
+    failed-upgrade|deconfigure)
+        echo "GPU Health Agent operation failed, stopping service..."
+        if [ -d /run/systemd/system ] && systemctl is-active --quiet gpuhealthd.service 2>/dev/null; then
+            systemctl stop gpuhealthd.service || true
+        fi
+        ;;
+esac 
