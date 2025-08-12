@@ -50,6 +50,9 @@ type Instance interface {
 	// CUDAVersion returns the CUDA version of the GPU.
 	CUDAVersion() string
 
+	// VBIOSVersion returns the VBIOS version of the GPU.
+	VBIOSVersion() string
+
 	// FabricManagerSupported returns true if the fabric manager is supported.
 	FabricManagerSupported() bool
 
@@ -147,6 +150,7 @@ func newInstance(refreshCtx context.Context, refreshNVML func(context.Context)) 
 	productName := ""
 	archFamily := ""
 	brand := ""
+	vbiosVersion := ""
 
 	devs := make(map[string]device.Device)
 	if len(devices) > 0 {
@@ -155,6 +159,15 @@ func newInstance(refreshCtx context.Context, refreshNVML func(context.Context)) 
 			return nil, fmt.Errorf("failed to get device name: %v", nvml.ErrorString(ret))
 		}
 		productName = name
+
+		// Get VBIOS version from the first device
+		vbios, ret := devices[0].GetVbiosVersion()
+		if ret != nvml.SUCCESS {
+			log.Logger.Debugw("failed to get VBIOS version", "error", nvml.ErrorString(ret))
+			vbiosVersion = "" // Not a fatal error, just log and continue
+		} else {
+			vbiosVersion = vbios
+		}
 
 		for _, dev := range devices {
 			uuid, ret := dev.GetUUID()
@@ -193,6 +206,7 @@ func newInstance(refreshCtx context.Context, refreshNVML func(context.Context)) 
 		driverVersion:        driverVersion,
 		driverMajor:          driverMajor,
 		cudaVersion:          cudaVersion,
+		vbiosVersion:         vbiosVersion,
 		devices:              devs,
 		sanitizedProductName: SanitizeProductName(productName),
 		architecture:         archFamily,
@@ -213,6 +227,7 @@ type instance struct {
 	driverVersion string
 	driverMajor   int
 	cudaVersion   string
+	vbiosVersion  string
 
 	devices map[string]device.Device
 
@@ -260,6 +275,10 @@ func (inst *instance) CUDAVersion() string {
 	return inst.cudaVersion
 }
 
+func (inst *instance) VBIOSVersion() string {
+	return inst.vbiosVersion
+}
+
 func (inst *instance) FabricManagerSupported() bool {
 	return inst.fabricMgrSupported
 }
@@ -293,6 +312,7 @@ func (inst *noOpInstance) Brand() string                     { return "" }
 func (inst *noOpInstance) DriverVersion() string             { return "" }
 func (inst *noOpInstance) DriverMajor() int                  { return 0 }
 func (inst *noOpInstance) CUDAVersion() string               { return "" }
+func (inst *noOpInstance) VBIOSVersion() string              { return "" }
 func (inst *noOpInstance) FabricManagerSupported() bool      { return false }
 func (inst *noOpInstance) GetMemoryErrorManagementCapabilities() MemoryErrorManagementCapabilities {
 	return MemoryErrorManagementCapabilities{}

@@ -16,14 +16,21 @@ import (
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/google/uuid"
 
 	"github.com/leptonai/gpud/components"
 	"github.com/leptonai/gpud/components/all"
+	"github.com/leptonai/gpud/pkg/eventstore"
 	"github.com/leptonai/gpud/pkg/gpuhealthconfig"
+	pkghealthexporter "github.com/leptonai/gpud/pkg/healthexporter"
+	pkghost "github.com/leptonai/gpud/pkg/host"
 	"github.com/leptonai/gpud/pkg/log"
 	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
 	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
+	pkgmetricsrecorder "github.com/leptonai/gpud/pkg/metrics/recorder"
+	pkgmetricsscraper "github.com/leptonai/gpud/pkg/metrics/scraper"
 	pkgmetricsstore "github.com/leptonai/gpud/pkg/metrics/store"
+	pkgmetricssyncer "github.com/leptonai/gpud/pkg/metrics/syncer"
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
 	"github.com/leptonai/gpud/pkg/sqlite"
 )
@@ -38,6 +45,16 @@ type Server struct {
 	gpudInstance       *components.GPUdInstance
 
 	config *gpuhealthconfig.Config
+	
+	// healthExporter is the health exporter instance
+	healthExporter pkghealthexporter.Exporter
+	
+	machineID string
+}
+
+// generateMachineID generates a new UUID to be used as machine ID
+func generateMachineID() string {
+	return uuid.New().String()
 }
 
 // New creates a new simplified health server for metrics export only
@@ -72,21 +89,60 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *gpuhealthconf
 		}
 	}()
 
-	// Read machine ID for identification
+	// Try to read existing machine ID from database
 	machineID, err := pkgmetadata.ReadMachineIDWithFallback(ctx, dbRW, dbRO)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("failed to read machine uid: %w", err)
 	}
+
+	// If no machine ID found in database, generate a new UUID and store it persistently
+	if machineID == "" {
+		machineID = generateMachineID()
+		log.Logger.Infow("generating new machine ID", "machineID", machineID)
+		
+		// Store the generated machine ID in database for persistence across reboots
+		if err := pkgmetadata.SetMetadata(ctx, dbRW, pkgmetadata.MetadataKeyMachineID, machineID); err != nil {
+			return nil, fmt.Errorf("failed to store generated machine ID: %w", err)
+		}
+		log.Logger.Infow("stored new machine ID in database", "machineID", machineID)
+	} else {
+		log.Logger.Infow("loaded existing machine ID from database", "machineID", machineID)
+	}
+	
+	s.machineID = machineID
 
 	nvmlInstance, err := nvidianvml.NewWithExitOnSuccessfulLoad(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create NVML instance: %w", err)
 	}
 
+	// Create event store needed for health exporter
+	eventStore, err := eventstore.New(dbRW, dbRO, 24*time.Hour)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open events database: %w", err)
+	}
+
+	// Create reboot event store
+	rebootEventStore := pkghost.NewRebootEventStore(eventStore)
+
+	// Record reboot event once when creating the server instance
+	cctx, ccancel := context.WithTimeout(ctx, time.Minute)
+	err = rebootEventStore.RecordReboot(cctx)
+	ccancel()
+	if err != nil {
+		log.Logger.Errorw("failed to record reboot", "error", err)
+	}
+
 	s.gpudInstance = &components.GPUdInstance{
-		RootCtx:      ctx,
-		MachineID:    machineID,
-		NVMLInstance: nvmlInstance,
+		RootCtx:          ctx,
+		MachineID:        machineID,
+		NVMLInstance:     nvmlInstance,
+		DBRW:             dbRW,
+		DBRO:             dbRO,
+		EventStore:       eventStore,
+		RebootEventStore: rebootEventStore,
+		MountPoints:      []string{"/"},
+		MountTargets:     []string{"/var/lib/kubelet"},
 	}
 
 	// Register only enabled components for health monitoring
@@ -111,6 +167,66 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *gpuhealthconf
 		}
 	}
 
+	// Create metrics infrastructure needed for health exporter
+	promScraper, err := pkgmetricsscraper.NewPrometheusScraper(pkgmetrics.DefaultGatherer())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create scraper: %w", err)
+	}
+	metricsSQLiteStore, err := pkgmetricsstore.NewSQLiteStore(ctx, dbRW, dbRO, pkgmetricsstore.DefaultTableName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create metrics store: %w", err)
+	}
+	syncer := pkgmetricssyncer.NewSyncer(ctx, promScraper, metricsSQLiteStore, time.Minute, time.Minute, 24*time.Hour)
+	syncer.Start()
+
+	promRecorder := pkgmetricsrecorder.NewPrometheusRecorder(ctx, 15*time.Minute, dbRO)
+	promRecorder.Start()
+
+	// Start mock endpoint
+	// TODO: Remove this once we have a real endpoint
+	mock := pkghealthexporter.NewMockEndpoint(8080)
+	if err := mock.Start(); err != nil {
+		panic(fmt.Sprintf("Failed to start mock endpoint: %v", err))
+	}
+
+	log.Logger.Infow("healthexporter: Mocked global health endpoint URL", "mock", mock.HealthBulkURL())
+
+	// TODO: We require user register agent with  -- datacenter and --node-group, and agent need to send metrics with above metadata information
+	// gpud login --endpoint <health-endpoint> --token <sak-token> --data-center <data-center> --node-group <node-group>
+	
+	// Create and start health exporter with all dependencies if enabled
+	if config.HealthExporter != nil && config.HealthExporter.Enabled {
+		healthExporterConfig := &pkghealthexporter.Config{
+			Endpoint:             mock.HealthBulkURL(), // Use the mock endpoint URL for testing
+			Interval:             config.HealthExporter.Interval.Duration,
+			MachineID:            machineID,
+			Timeout:              config.HealthExporter.Timeout.Duration,
+			IncludeMetrics:       config.HealthExporter.IncludeMetrics,
+			IncludeEvents:        config.HealthExporter.IncludeEvents,
+			IncludeMachineInfo:   config.HealthExporter.IncludeMachineInfo,
+			IncludeComponentData: config.HealthExporter.IncludeComponentData,
+			MetricsLookback:      config.HealthExporter.MetricsLookback.Duration,
+			EventsLookback:       config.HealthExporter.EventsLookback.Duration,
+			RetryMaxAttempts:     config.HealthExporter.RetryMaxAttempts,
+		}
+		
+		s.healthExporter = pkghealthexporter.New(
+			ctx,
+			healthExporterConfig,
+			metricsSQLiteStore,
+			eventStore,
+			s.componentsRegistry,
+			nvmlInstance,
+		)
+		
+		// Start the health exporter
+		if err := s.healthExporter.Start(); err != nil {
+			log.Logger.Errorw("failed to start health exporter", "error", err)
+		} else {
+			log.Logger.Info("healthexporter: Started health exporter successfully")
+		}
+	}
+
 	// Start database compaction
 	go s.doCompact(ctx, dbRW, config.CompactPeriod.Duration)
 
@@ -122,6 +238,13 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *gpuhealthconf
 
 // Stop gracefully stops the server
 func (s *Server) Stop() {
+	// Stop health exporter if running
+	if s.healthExporter != nil {
+		if err := s.healthExporter.Stop(); err != nil {
+			log.Logger.Errorw("failed to stop health exporter", "error", err)
+		}
+	}
+
 	if s.componentsRegistry != nil {
 		for _, c := range s.componentsRegistry.All() {
 			c.Close()

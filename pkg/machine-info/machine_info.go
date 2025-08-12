@@ -31,13 +31,12 @@ import (
 	"github.com/leptonai/gpud/pkg/providers"
 	pkgprovidersall "github.com/leptonai/gpud/pkg/providers/all"
 	"github.com/leptonai/gpud/pkg/providers/nebius"
-	"github.com/leptonai/gpud/version"
 )
 
 func GetMachineInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineInfo, error) {
 	hostname, _ := os.Hostname()
 	info := &apiv1.MachineInfo{
-		GPUdVersion: version.Version,
+		GPUHealthVersion: "0.0.0", // TODO: add real version
 
 		GPUDriverVersion:        nvmlInstance.DriverVersion(),
 		CUDAVersion:             nvmlInstance.CUDAVersion(),
@@ -64,6 +63,9 @@ func GetMachineInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineInfo, error
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+
+	// Get VBIOS version using NVML wrapper
+	info.VBIOSVersion = nvmlInstance.VBIOSVersion()
 
 	if runtime.GOOS == "linux" {
 		info.DiskInfo, err = GetMachineDiskInfo(ctx)

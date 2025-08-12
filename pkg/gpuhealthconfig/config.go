@@ -45,6 +45,45 @@ type Config struct {
 	Components         []string       `json:"components"`
 	selectedComponents map[string]any `json:"-"`
 	disabledComponents map[string]any `json:"-"`
+
+	// Health Exporter Configuration
+	HealthExporter *HealthExporterConfig `json:"health_exporter,omitempty"`
+}
+
+// HealthExporterConfig holds configuration for the health data exporter
+type HealthExporterConfig struct {
+	// Enabled controls whether the health exporter is active
+	Enabled bool `json:"enabled"`
+	
+	// Endpoint is the global health endpoint URL where data will be sent
+	Endpoint string `json:"endpoint"`
+	
+	// Interval is how often to export health data
+	Interval metav1.Duration `json:"interval"`
+	
+	// Timeout for HTTP requests to the global health endpoint
+	Timeout metav1.Duration `json:"timeout"`
+	
+	// IncludeMetrics controls whether to include metrics data in exports
+	IncludeMetrics bool `json:"include_metrics"`
+	
+	// IncludeEvents controls whether to include events data in exports
+	IncludeEvents bool `json:"include_events"`
+	
+	// IncludeMachineInfo controls whether to include machine hardware info in exports
+	IncludeMachineInfo bool `json:"include_machine_info"`
+	
+	// IncludeComponentData controls whether to include actual component data/numbers in exports
+	IncludeComponentData bool `json:"include_component_data"`
+	
+	// MetricsLookback determines how far back to look for metrics data
+	MetricsLookback metav1.Duration `json:"metrics_lookback"`
+	
+	// EventsLookback determines how far back to look for events data
+	EventsLookback metav1.Duration `json:"events_lookback"`
+	
+	// RetryMaxAttempts is the maximum number of retry attempts for failed requests
+	RetryMaxAttempts int `json:"retry_max_attempts"`
 }
 
 // Validate checks if the configuration is valid

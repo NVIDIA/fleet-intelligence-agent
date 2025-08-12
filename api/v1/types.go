@@ -260,10 +260,14 @@ func EventTypeFromString(s string) EventType {
 type MachineInfo struct {
 	// GPUdVersion represents the current version of GPUd
 	GPUdVersion string `json:"gpudVersion,omitempty"`
+	// GPUHealthVersion represents the current version of GPU health check.
+	GPUHealthVersion string `json:"gpuHealthVersion,omitempty"`
 	// GPUDriverVersion represents the current version of GPU driver installed
 	GPUDriverVersion string `json:"gpuDriverVersion,omitempty"`
 	// CUDAVersion represents the current version of cuda library.
 	CUDAVersion string `json:"cudaVersion,omitempty"`
+	// VBIOSVersion represents the current version of GPU VBIOS (Video BIOS).
+	VBIOSVersion string `json:"vbiosVersion,omitempty"`
 	// ContainerRuntime Version reported by the node through runtime remote API (e.g. containerd://1.4.2).
 	ContainerRuntimeVersion string `json:"containerRuntimeVersion,omitempty"`
 	// Kernel Version reported by the node from 'uname -r' (e.g. 3.16.0-0.bpo.4-amd64).
@@ -314,6 +318,7 @@ func (i *MachineInfo) RenderTable(wr io.Writer) {
 	}
 
 	table.Append([]string{"CUDA Version", i.CUDAVersion})
+	table.Append([]string{"VBIOS Version", i.VBIOSVersion})
 	if i.GPUInfo != nil {
 		table.Append([]string{"GPU Driver Version", i.GPUDriverVersion})
 		table.Append([]string{"GPU Product", i.GPUInfo.Product})
