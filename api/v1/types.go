@@ -302,7 +302,7 @@ type MachineInfo struct {
 func (i *MachineInfo) RenderTable(wr io.Writer) {
 	table := tablewriter.NewWriter(wr)
 	table.SetAlignment(tablewriter.ALIGN_CENTER)
-	table.Append([]string{"GPUd Version", i.GPUdVersion})
+	table.Append([]string{"GPU Health Version", i.GPUHealthVersion})
 	table.Append([]string{"Container Runtime Version", i.ContainerRuntimeVersion})
 	table.Append([]string{"OS Image", i.OSImage})
 	table.Append([]string{"Kernel Version", i.KernelVersion})
