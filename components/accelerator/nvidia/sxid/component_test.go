@@ -476,6 +476,10 @@ func (m *MockNVMLInstanceWithProduct) ProductName() string {
 	return "Tesla V100"
 }
 
+func (m *MockNVMLInstance) VBIOSVersion() string {
+	return ""
+}
+
 func TestIsSupported(t *testing.T) {
 	// Test when nvmlInstance is nil
 	comp := &component{}

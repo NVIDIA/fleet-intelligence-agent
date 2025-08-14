@@ -132,6 +132,11 @@ func (m *mockNVMLInstance) CUDAVersion() string {
 	return args.String(0)
 }
 
+func (m *mockNVMLInstance) VBIOSVersion() string {
+	args := m.Called()
+	return args.String(0)
+}
+
 func (m *mockNVMLInstance) FabricManagerSupported() bool {
 	args := m.Called()
 	return args.Bool(0)

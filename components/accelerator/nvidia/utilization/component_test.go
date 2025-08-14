@@ -61,6 +61,10 @@ func (m *mockInstance) CUDAVersion() string {
 	return ""
 }
 
+func (m *mockInstance) VBIOSVersion() string {
+	return ""
+}
+
 func (m *mockInstance) FabricManagerSupported() bool {
 	return true
 }

@@ -561,6 +561,10 @@ type mockNVMLInstance struct {
 	deviceCount int // Add device count field
 }
 
+func (m *mockNVMLInstance) VBIOSVersion() string {
+	return ""
+}
+
 func (m *mockNVMLInstance) NVMLExists() bool {
 	return m.exists
 }

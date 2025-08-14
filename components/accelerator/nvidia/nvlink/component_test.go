@@ -64,6 +64,10 @@ func (m *mockNVMLInstance) CUDAVersion() string {
 	return ""
 }
 
+func (m *mockNVMLInstance) VBIOSVersion() string {
+	return ""
+}
+
 func (m *mockNVMLInstance) NVMLExists() bool {
 	return true
 }

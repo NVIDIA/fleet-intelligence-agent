@@ -61,6 +61,10 @@ func (m *mockNVMLInstance) CUDAVersion() string {
 	return "test-cuda-version"
 }
 
+func (m *mockNVMLInstance) VBIOSVersion() string {
+	return ""
+}
+
 func (m *mockNVMLInstance) FabricManagerSupported() bool {
 	return true
 }

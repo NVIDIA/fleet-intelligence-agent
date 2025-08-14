@@ -66,6 +66,10 @@ func (m *mockNVMLInstance) CUDAVersion() string {
 	return ""
 }
 
+func (m *mockNVMLInstance) VBIOSVersion() string {
+	return ""
+}
+
 func (m *mockNVMLInstance) NVMLExists() bool {
 	return true
 }
@@ -117,6 +121,10 @@ func (m *customMockNVMLInstance) DriverMajor() int {
 }
 
 func (m *customMockNVMLInstance) CUDAVersion() string {
+	return ""
+}
+
+func (m *customMockNVMLInstance) VBIOSVersion() string {
 	return ""
 }
 

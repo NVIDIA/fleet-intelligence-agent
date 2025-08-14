@@ -26,7 +26,6 @@ require (
 	github.com/prometheus/client_model v0.6.1
 	github.com/prometheus/procfs v0.16.1
 	github.com/shirou/gopsutil/v4 v4.25.6
-	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.0

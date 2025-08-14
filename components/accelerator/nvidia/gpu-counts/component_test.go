@@ -55,6 +55,10 @@ func (m *mockNVMLInstance) Brand() string {
 	return m.brand
 }
 
+func (m *mockNVMLInstance) VBIOSVersion() string {
+	return ""
+}
+
 func (m *mockNVMLInstance) DriverVersion() string {
 	return "test-driver-version"
 }

@@ -61,6 +61,10 @@ func (m *MockNvmlInstance) DriverMajor() int {
 	return 0
 }
 
+func (m *MockNvmlInstance) VBIOSVersion() string {
+	return ""
+}
+
 func (m *MockNvmlInstance) CUDAVersion() string {
 	return ""
 }
