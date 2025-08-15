@@ -297,6 +297,8 @@ type MachineInfo struct {
 	DiskInfo *MachineDiskInfo `json:"diskInfo,omitempty"`
 	// NICInfo is the network info of the machine.
 	NICInfo *MachineNICInfo `json:"nicInfo,omitempty"`
+	// Location is the geographical location info of the machine.
+	Location *MachineLocation `json:"location,omitempty"`
 }
 
 func (i *MachineInfo) RenderTable(wr io.Writer) {
@@ -325,6 +327,18 @@ func (i *MachineInfo) RenderTable(wr io.Writer) {
 		table.Append([]string{"GPU Manufacturer", i.GPUInfo.Manufacturer})
 		table.Append([]string{"GPU Architecture", i.GPUInfo.Architecture})
 		table.Append([]string{"GPU Memory", i.GPUInfo.Memory})
+	}
+
+	if i.Location != nil {
+		table.Append([]string{"Location Country", i.Location.Country})
+		table.Append([]string{"Location Country Code", i.Location.CountryCode})
+		table.Append([]string{"Location City", i.Location.City})
+		table.Append([]string{"Location Region", i.Location.Region})
+		table.Append([]string{"Location Zone", i.Location.Zone})
+		table.Append([]string{"Location Latitude", strconv.FormatFloat(i.Location.Latitude, 'f', -1, 64)})
+		table.Append([]string{"Location Longitude", strconv.FormatFloat(i.Location.Longitude, 'f', -1, 64)})
+		table.Append([]string{"Location Timezone", i.Location.Timezone})
+		table.Append([]string{"Location Source", i.Location.Source})
 	}
 
 	if i.NICInfo != nil {

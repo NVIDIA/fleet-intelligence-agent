@@ -67,6 +67,15 @@ func GetMachineInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineInfo, error
 	// Get VBIOS version using NVML wrapper
 	info.VBIOSVersion = nvmlInstance.VBIOSVersion()
 
+	// Get public IP for location detection
+	publicIP, err := netutil.PublicIP()
+	if err != nil {
+		log.Logger.Warnw("failed to get public IP for location detection", "error", err)
+	}
+
+	// Get machine location
+	info.Location = GetMachineLocation(publicIP)
+
 	if runtime.GOOS == "linux" {
 		info.DiskInfo, err = GetMachineDiskInfo(ctx)
 		if err != nil {
