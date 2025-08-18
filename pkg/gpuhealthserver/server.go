@@ -15,7 +15,6 @@ import (
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/leptonai/gpud/components"
@@ -50,11 +49,6 @@ type Server struct {
 	healthExporter pkghealthexporter.Exporter
 
 	machineID string
-}
-
-// generateMachineID generates a new UUID to be used as machine ID
-func generateMachineID() string {
-	return uuid.New().String()
 }
 
 // New creates a new simplified health server for metrics export only
@@ -95,18 +89,21 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *gpuhealthconf
 		return nil, fmt.Errorf("failed to read machine uid: %w", err)
 	}
 
-	// If no machine ID found in database, generate a new UUID and store it persistently
+	// If no machine ID found in database, use system machine ID and store it persistently
 	if machineID == "" {
-		machineID = generateMachineID()
-		log.Logger.Infow("generating new machine ID", "machineID", machineID)
-
-		// Store the generated machine ID in database for persistence across reboots
-		if err := pkgmetadata.SetMetadata(ctx, dbRW, pkgmetadata.MetadataKeyMachineID, machineID); err != nil {
-			return nil, fmt.Errorf("failed to store generated machine ID: %w", err)
+		machineID = pkghost.MachineID()
+		if machineID == "" {
+			// Fallback to dynamic lookup if not cached
+			var err error
+			machineID, err = pkghost.GetMachineID(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get system machine ID: %w", err)
+			}
 		}
-		log.Logger.Infow("stored new machine ID in database", "machineID", machineID)
-	} else {
-		log.Logger.Infow("loaded existing machine ID from database", "machineID", machineID)
+		// Store the system machine ID in database for persistence across reboots
+		if err := pkgmetadata.SetMetadata(ctx, dbRW, pkgmetadata.MetadataKeyMachineID, machineID); err != nil {
+			return nil, fmt.Errorf("failed to store system machine ID: %w", err)
+		}
 	}
 
 	s.machineID = machineID
@@ -192,7 +189,6 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *gpuhealthconf
 		if err := mock.Start(); err != nil {
 			panic(fmt.Sprintf("Failed to start mock endpoint: %v", err))
 		}
-		log.Logger.Infow("healthexporter: Mocked global health endpoint URL", "mock", mock.HealthBulkURL())
 	}
 
 	// TODO: We require user register agent with  -- datacenter and --node-group, and agent need to send metrics with above metadata information
@@ -220,8 +216,6 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *gpuhealthconf
 		// Start the health exporter
 		if err := s.healthExporter.Start(); err != nil {
 			log.Logger.Errorw("failed to start health exporter", "error", err)
-		} else {
-			log.Logger.Info("healthexporter: Started health exporter successfully")
 		}
 	}
 
