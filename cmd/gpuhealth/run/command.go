@@ -194,6 +194,7 @@ func Command(cliContext *cli.Context) error {
 			IncludeComponentData: true,
 			// Set reasonable intervals for data collection
 			Interval:        metav1.Duration{Duration: 30 * time.Second},
+			Timeout:         metav1.Duration{Duration: 2 * time.Minute},
 			MetricsLookback: metav1.Duration{Duration: 30 * time.Second},
 			EventsLookback:  metav1.Duration{Duration: 30 * time.Second},
 		}

@@ -130,7 +130,6 @@ func (h *healthExporter) getMachineID(ctx context.Context) (string, error) {
 
 // exportHealthData collects and exports health data
 func (h *healthExporter) exportHealthData() error {
-	log.Logger.Infow("healthexporter: Health Exporter: Exporting health data")
 	ctx, cancel := context.WithTimeout(h.ctx, h.config.Timeout.Duration)
 	defer cancel()
 
@@ -179,54 +178,34 @@ func (h *healthExporter) collectHealthData(ctx context.Context) (*HealthData, er
 		MachineID:    machineID,
 		Timestamp:    time.Now().UTC(),
 	}
-	log.Logger.Infow("healthexporter: Starting data collection...", "collection_id", collectionID, "timestamp", data.Timestamp.Format("2006-01-02 15:04:05 PDT"), "machine_id", machineID)
+	log.Logger.Infow("Starting health data collection")
 
 	// Collect machine info if enabled
 	if h.config.IncludeMachineInfo && h.nvmlInstance != nil {
-		log.Logger.Infow("healthexporter: Collecting machine info...")
 		machineInfo, err := machineinfo.GetMachineInfo(h.nvmlInstance)
 		if err != nil {
 			log.Logger.Errorw("Failed to get machine info", "error", err)
 		} else {
 			data.MachineInfo = machineInfo
-			log.Logger.Infow("healthexporter: Collected machine info", "machine_info", data.MachineInfo)
+			log.Logger.Debugw("Collected machine info", "machine_info", data.MachineInfo)
 		}
-	} else {
-		log.Logger.Infow("Machine info collection disabled")
 	}
-	log.Logger.Infow("healthexporter: Machine info collection completed", "machine_info", data.MachineInfo)
 
 	// Collect metrics if enabled
 	if h.config.IncludeMetrics && h.metricsStore != nil {
 		since := time.Now().Add(-h.config.MetricsLookback.Duration)
-		log.Logger.Infow("healthexporter: Collecting metrics...", "since", since.Format("15:04:05 PDT"))
-
 		metrics, err := h.metricsStore.Read(ctx, pkgmetrics.WithSince(since))
 		if err != nil {
 			log.Logger.Errorw("Failed to read metrics", "error", err)
 		} else {
 			data.Metrics = metrics
-			log.Logger.Infow("healthexporter: Collected metrics", "count", len(metrics), "metrics", metrics)
-
-			// Show sample metrics
-			if len(metrics) > 0 {
-				for i, metric := range metrics {
-					if i >= 10 { // Show max 3 samples
-						log.Logger.Infow("healthexporter: ... and more", "count", len(metrics)-10)
-						break
-					}
-					log.Logger.Infow("healthexporter: Metric", "metric", metric)
-				}
-			}
+			log.Logger.Debugw("Collected metrics", "count", len(metrics), "metrics", metrics)
 		}
-	} else {
-		log.Logger.Infow("Metrics collection disabled")
 	}
 
 	// Collect events if enabled
 	if h.config.IncludeEvents && h.eventStore != nil && h.componentsRegistry != nil {
 		since := time.Now().Add(-h.config.EventsLookback.Duration)
-		log.Logger.Infow("healthexporter: Collecting events...", "since", since.Format("15:04:05 PDT"))
 
 		// Collect events from all components (since there's no unified "all" bucket)
 		var allEvents eventstore.Events
@@ -265,46 +244,17 @@ func (h *healthExporter) collectHealthData(ctx context.Context) (*HealthData, er
 		}
 
 		data.Events = allEvents
-		log.Logger.Infow("healthexporter: Collected events from all components", "totalEvents", len(allEvents))
-
-		// Show sample events for debugging
-		if len(allEvents) > 0 {
-			for i, event := range allEvents {
-				if i >= 10 { // Show max 10 samples
-					log.Logger.Infow("healthexporter: ... and more", "count", len(allEvents)-10)
-					break
-				}
-				log.Logger.Infow("healthexporter: Event", "event", event)
-			}
-		}
-	} else {
-		log.Logger.Infow("Events collection disabled in config")
+		log.Logger.Debugw("Collected events", "count", len(allEvents), "events", allEvents)
 	}
 
 	// Collect component data (actual numbers/metrics) if enabled
 	if h.config.IncludeComponentData && h.componentsRegistry != nil {
-		log.Logger.Infow("healthexporter: Collecting component data...")
 		componentData := h.collectComponentData()
 		data.ComponentData = componentData
-		log.Logger.Infow("healthexporter: Collected component data", "componentCount", len(componentData))
-
-		// Show sample component data
-		if len(componentData) > 0 {
-			count := 0
-			for componentName, componentResult := range componentData {
-				if count >= 10 { // Show max 10 samples
-					log.Logger.Infow("healthexporter: ... and more", "remainingCount", len(componentData)-10)
-					break
-				}
-				log.Logger.Infow("healthexporter: Component data", "component", componentName, "data", componentResult)
-				count++
-			}
-		}
-	} else {
-		log.Logger.Infow("Component data collection disabled")
+		log.Logger.Debugw("Collected component data", "count", len(componentData), "data", componentData)
 	}
 
-	log.Logger.Infow("healthexporter: Data collection completed!")
+	log.Logger.Infow("Health data collection completed", "metrics", len(data.Metrics), "events", len(data.Events), "components", len(data.ComponentData))
 	return data, nil
 }
 
@@ -321,7 +271,7 @@ func (h *healthExporter) collectComponentData() map[string]interface{} {
 
 		// Get health states - use the first one as primary health status
 		healthStates := component.LastHealthStates()
-		log.Logger.Infow("healthexporter: Collecting health states...", "component", componentName, "health_states", healthStates)
+		log.Logger.Debugw("healthexporter: Collecting health states...", "component", componentName, "health_states", healthStates)
 		health := "Unknown"
 		reason := "No health data"
 
@@ -358,8 +308,6 @@ type OTLPData struct {
 
 // converts HealthData to OTLP metrics and logs format
 func (h *healthExporter) convertToOTLP(data *HealthData) *OTLPData {
-	log.Logger.Infow("healthexporter: Converting to OTLP format...", "data", data)
-
 	// Create shared resource for both metrics and logs
 	resource := h.createOTLPResource(data)
 
@@ -519,7 +467,7 @@ func convertStructToOTLPAttributesWithPrefix(v interface{}, prefix string) []*co
 
 // creates OTLP resource with machine info and identification
 func (h *healthExporter) createOTLPResource(data *HealthData) *resourcev1.Resource {
-	log.Logger.Infow("healthexporter: Creating OTLP resource...")
+
 	attributes := []*commonv1.KeyValue{
 		{
 			Key: "service.name",
@@ -548,7 +496,7 @@ func (h *healthExporter) createOTLPResource(data *HealthData) *resourcev1.Resour
 
 // converts gpud metrics to OTLP metrics format
 func (h *healthExporter) convertMetricsToOTLP(data *HealthData) []*metricsv1.Metric {
-	log.Logger.Infow("healthexporter: Creating OTLP metrics...")
+
 	var otlpMetrics []*metricsv1.Metric
 
 	// Convert regular metrics if available
@@ -615,7 +563,6 @@ func (h *healthExporter) convertMetricsToOTLP(data *HealthData) []*metricsv1.Met
 		},
 	}
 	otlpMetrics = append(otlpMetrics, summaryMetric)
-	log.Logger.Infow("healthexporter: Created OTLP metrics...", "otlpMetrics", otlpMetrics)
 
 	return otlpMetrics
 }
@@ -636,13 +583,11 @@ func (h *healthExporter) convertLabelsToOTLPAttributes(labels map[string]string)
 
 // convertToOTLPLogs converts HealthData events and component data to OTLP log records
 func (h *healthExporter) convertToOTLPLogs(data *HealthData) []*logsv1.LogRecord {
-	log.Logger.Infow("healthexporter: Creating OTLP logs...")
+
 	var logRecords []*logsv1.LogRecord
 
 	// Add events as log records
 	if len(data.Events) > 0 {
-		log.Logger.Infow("healthexporter: Converting events to OTLP logs", "count", len(data.Events))
-		log.Logger.Infow("healthexporter: Events", "events", data.Events)
 		for _, event := range data.Events {
 			logRecord := &logsv1.LogRecord{
 				TimeUnixNano:   uint64(event.Time.UnixNano()),
@@ -686,7 +631,7 @@ func (h *healthExporter) convertToOTLPLogs(data *HealthData) []*logsv1.LogRecord
 
 	// Add component data as log records with timestamp and extra info
 	if len(data.ComponentData) > 0 {
-		log.Logger.Infow("healthexporter: Converting component data to OTLP logs", "count", len(data.ComponentData))
+
 		for componentName, componentResult := range data.ComponentData {
 
 			// Cast to simple map structure
@@ -765,7 +710,6 @@ func (h *healthExporter) convertToOTLPLogs(data *HealthData) []*logsv1.LogRecord
 		}
 	}
 
-	log.Logger.Infow("healthexporter: Created OTLP log records", "total", len(logRecords))
 	return logRecords
 }
 
@@ -776,7 +720,6 @@ func (h *healthExporter) sendHealthData(ctx context.Context, data *HealthData) e
 
 	// Convert to OTLP format
 	otlpRequest := h.convertToOTLP(data)
-	log.Logger.Infow("healthexporter: After converting to OTLP protobuf format...", "otlpRequest", otlpRequest)
 
 	// Send combined data (metrics + logs) as separate requests
 	// Send metrics first
@@ -795,10 +738,6 @@ func (h *healthExporter) sendHealthData(ctx context.Context, data *HealthData) e
 				"size_bytes", len(metricsBytes),
 				"will_continue_with_logs", true)
 			// Continue to send logs even if metrics fail - this ensures we don't lose event data
-		} else {
-			log.Logger.Infow("healthexporter: Successfully sent metrics data",
-				"collection_id", data.CollectionID,
-				"size_bytes", len(metricsBytes))
 		}
 
 	}
@@ -819,14 +758,10 @@ func (h *healthExporter) sendHealthData(ctx context.Context, data *HealthData) e
 				"size_bytes", len(logsBytes),
 				"contains_events", true)
 			return fmt.Errorf("failed to send critical logs data (includes events): %w", err)
-		} else {
-			log.Logger.Infow("healthexporter: Successfully sent logs data",
-				"collection_id", data.CollectionID,
-				"size_bytes", len(logsBytes))
 		}
 	}
 
-	log.Logger.Infow("healthexporter: Successfully sent combined OTLP (metrics + logs)")
+	log.Logger.Infow("Successfully sent health data to endpoint")
 	return nil
 }
 
@@ -835,15 +770,12 @@ func (h *healthExporter) writeHealthDataToFile(data *HealthData) error {
 	timestamp := data.Timestamp.Format("20060102_150405")
 	otlpRequest := h.convertToOTLP(data)
 
-	log.Logger.Infow("healthexporter: Writing OTLP data to files", "timestamp", timestamp)
-
 	// Write pure OTLP JSON files for direct use with OTEL collectors via curl
 	if otlpRequest.Metrics != nil {
 		metricsFilename := filepath.Join(h.config.OutputPath, fmt.Sprintf("gpuhealth_metrics_%s.json", timestamp))
 		if err := h.writeOTLPJSONFile(metricsFilename, otlpRequest.Metrics); err != nil {
 			return fmt.Errorf("failed to write OTLP metrics file: %w", err)
 		}
-		log.Logger.Infow("healthexporter: Created OTLP metrics file for curl", "filename", metricsFilename)
 	}
 
 	if otlpRequest.Logs != nil {
@@ -851,17 +783,14 @@ func (h *healthExporter) writeHealthDataToFile(data *HealthData) error {
 		if err := h.writeOTLPJSONFile(logsFilename, otlpRequest.Logs); err != nil {
 			return fmt.Errorf("failed to write OTLP logs file: %w", err)
 		}
-		log.Logger.Infow("healthexporter: Created OTLP logs file for curl", "filename", logsFilename)
 	}
 
-	log.Logger.Infow("healthexporter: Successfully wrote OTLP files", "outputPath", h.config.OutputPath)
+	log.Logger.Infow("Successfully wrote health data files", "path", h.config.OutputPath)
 	return nil
 }
 
 // writeOTLPJSONFile writes protobuf message as standard OTLP JSON format
 func (h *healthExporter) writeOTLPJSONFile(filename string, message proto.Message) error {
-	log.Logger.Infow("healthexporter: Writing OTLP JSON file", "filename", filename)
-
 	// Use protojson to ensure proper OTLP field naming and format
 	marshaler := protojson.MarshalOptions{
 		Multiline:       true,
@@ -885,7 +814,6 @@ func (h *healthExporter) writeOTLPJSONFile(filename string, message proto.Messag
 		return fmt.Errorf("failed to write OTLP JSON to file %s: %w", filename, err)
 	}
 
-	log.Logger.Infow("healthexporter: Successfully wrote OTLP JSON file", "filename", filename)
 	return nil
 }
 
@@ -953,8 +881,6 @@ func (h *healthExporter) sendOTLPRequestWithRetry(ctx context.Context, reqData [
 func (h *healthExporter) sendOTLPRequest(ctx context.Context, reqData []byte, dataType string, collectionID string) error {
 	contentType := "application/x-protobuf"
 
-	log.Logger.Infow("healthexporter: OTLP request", "type", dataType, "size", len(reqData), "reqData", reqData)
-
 	// Get machine ID dynamically
 	machineID, err := h.getMachineID(ctx)
 	if err != nil {
@@ -988,8 +914,6 @@ func (h *healthExporter) sendOTLPRequest(ctx context.Context, reqData []byte, da
 		log.Logger.Errorw("HTTP request failed", "type", dataType, "status", resp.StatusCode, "status_text", resp.Status)
 		return fmt.Errorf("HTTP request failed: %s (status %d)", resp.Status, resp.StatusCode)
 	}
-
-	log.Logger.Infow("healthexporter: Successfully sent data", "type", dataType, "status", resp.StatusCode, "size", len(reqData))
 
 	return nil
 }
