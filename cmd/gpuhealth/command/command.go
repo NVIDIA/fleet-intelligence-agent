@@ -21,13 +21,13 @@ func App() *cli.App {
 	app.Name = "gpuhealth"
 	app.Usage = "NVIDIA GPU health monitoring and reporting tool"
 	app.Version = version.Version
-	app.Description = "Use this tool to monitor the health of your NVIDIA GPUs and optionally report the results to NGC for further analysis"
+	app.Description = "Use this tool to monitor the health of your NVIDIA GPUs and export metrics for analysis"
 
 	app.Commands = []cli.Command{
 		{
 			Name:    "scan",
 			Aliases: []string{"check", "s"},
-			Usage:   "quick scans the host for any major issues",
+			Usage:   "quickly scans the host for any major issues",
 			Action:  cmdscan.CreateCommand(),
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -58,7 +58,7 @@ func App() *cli.App {
 		},
 		{
 			Name:   "run",
-			Usage:  "starts gpuhealth server",
+			Usage:  "starts the gpuhealth server",
 			Action: cmdrun.Command,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -110,12 +110,24 @@ func App() *cli.App {
 					Value:  "",
 					Hidden: true, // only for testing
 				},
+				&cli.BoolFlag{
+					Name:  "offline-mode",
+					Usage: "enable offline mode to write telemetry data and machine information to a file",
+				},
+				&cli.StringFlag{
+					Name:  "path",
+					Usage: "path where file will be written (required when --offline-mode is used)",
+				},
+				&cli.StringFlag{
+					Name:  "duration",
+					Usage: "duration for offline mode run in HH:MM:SS format (required when --offline-mode is used)",
+				},
 			},
 		},
 		{
 			Name:    "status",
 			Aliases: []string{"st"},
-			Usage:   "checks the status of gpuhealth",
+			Usage:   "checks the status of the gpuhealth server",
 			Action:  cmdstatus.Command,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -131,7 +143,7 @@ func App() *cli.App {
 		},
 		{
 			Name:      "machine-info",
-			Usage:     "get machine info (useful for debugging)",
+			Usage:     "gets machine information (useful for debugging)",
 			UsageText: "gpuhealth machine-info",
 			Action:    cmdmachineinfo.Command,
 			Flags: []cli.Flag{
@@ -143,7 +155,7 @@ func App() *cli.App {
 		},
 		{
 			Name:   "metadata",
-			Usage:  "inspects/updates metadata table",
+			Usage:  "inspects/updates the metadata table",
 			Action: cmdmetadata.Command,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -162,7 +174,7 @@ func App() *cli.App {
 		},
 		{
 			Name:   "compact",
-			Usage:  "compact the GPUhealth state database to reduce the size in disk (GPUhealth must be stopped)",
+			Usage:  "compacts the gpuhealth state database to reduce disk usage (gpuhealth daemon/server must be stopped)",
 			Action: cmdcompact.Command,
 			Flags: []cli.Flag{
 				&cli.StringFlag{

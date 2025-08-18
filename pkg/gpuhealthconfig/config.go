@@ -54,46 +54,72 @@ type Config struct {
 type HealthExporterConfig struct {
 	// Enabled controls whether the health exporter is active
 	Enabled bool `json:"enabled"`
-	
+
 	// Endpoint is the global health endpoint URL where data will be sent
 	Endpoint string `json:"endpoint"`
-	
+
 	// Interval is how often to export health data
 	Interval metav1.Duration `json:"interval"`
-	
+
 	// Timeout for HTTP requests to the global health endpoint
 	Timeout metav1.Duration `json:"timeout"`
-	
+
 	// IncludeMetrics controls whether to include metrics data in exports
 	IncludeMetrics bool `json:"include_metrics"`
-	
+
 	// IncludeEvents controls whether to include events data in exports
 	IncludeEvents bool `json:"include_events"`
-	
+
 	// IncludeMachineInfo controls whether to include machine hardware info in exports
 	IncludeMachineInfo bool `json:"include_machine_info"`
-	
+
 	// IncludeComponentData controls whether to include actual component data/numbers in exports
 	IncludeComponentData bool `json:"include_component_data"`
-	
+
 	// MetricsLookback determines how far back to look for metrics data
 	MetricsLookback metav1.Duration `json:"metrics_lookback"`
-	
+
 	// EventsLookback determines how far back to look for events data
 	EventsLookback metav1.Duration `json:"events_lookback"`
-	
+
 	// RetryMaxAttempts is the maximum number of retry attempts for failed requests
 	RetryMaxAttempts int `json:"retry_max_attempts"`
+
+	// Offline mode configuration
+	// OfflineMode controls whether to use offline mode (write to files instead of HTTP endpoint)
+	OfflineMode bool `json:"offline_mode"`
+
+	// OutputPath is the directory path where files will be written (required when OfflineMode is true)
+	OutputPath string `json:"output_path"`
+
+	// Duration is how long to collect telemetry data in offline mode
+	Duration time.Duration `json:"duration"`
 }
 
 // Validate checks if the configuration is valid
 func (config *Config) Validate() error {
-	if config.Address == "" {
-		return errors.New("address is required")
+	// In offline mode, address is not required
+	isOfflineMode := config.HealthExporter != nil && config.HealthExporter.OfflineMode
+	if !isOfflineMode {
+		if config.Address == "" {
+			return errors.New("address is required")
+		}
 	}
+
 	if config.RetentionPeriod.Duration < time.Minute {
 		return fmt.Errorf("retention_period must be at least 1 minute, got %v", config.RetentionPeriod.Duration)
 	}
+
+	// Validate offline mode configuration if present
+	if config.HealthExporter != nil && config.HealthExporter.OfflineMode {
+		if config.HealthExporter.OutputPath == "" {
+			return errors.New("offline mode: output_path is required")
+		}
+		if config.HealthExporter.Duration <= 0 {
+			return errors.New("offline mode: duration is required")
+		}
+	}
+
 	return nil
 }
 

@@ -8,21 +8,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
 
 	"github.com/leptonai/gpud/components"
 	"github.com/leptonai/gpud/pkg/eventstore"
+	"github.com/leptonai/gpud/pkg/gpuhealthconfig"
+	pkghost "github.com/leptonai/gpud/pkg/host"
 	"github.com/leptonai/gpud/pkg/log"
-	"github.com/leptonai/gpud/pkg/machine-info"
+	machineinfo "github.com/leptonai/gpud/pkg/machine-info"
 	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
-	
+
 	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	logsv1 "go.opentelemetry.io/proto/otlp/logs/v1"
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
 	resourcev1 "go.opentelemetry.io/proto/otlp/resource/v1"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -36,52 +41,52 @@ var _ Exporter = (*healthExporter)(nil)
 type healthExporter struct {
 	ctx    context.Context
 	cancel context.CancelFunc
-	config *Config
-	
+	config *gpuhealthconfig.HealthExporterConfig
+
 	// Data sources
-	metricsStore      pkgmetrics.Store
-	eventStore        eventstore.Store
+	metricsStore       pkgmetrics.Store
+	eventStore         eventstore.Store
 	componentsRegistry components.Registry
-	nvmlInstance      nvidianvml.Instance
-	
+	nvmlInstance       nvidianvml.Instance
+
 	// HTTP client for sending data
 	httpClient *http.Client
-	
+
 	// Last export timestamp for tracking
 	lastExport time.Time
 }
 
 // New creates a new health exporter instance
-func New(ctx context.Context, config *Config, metricsStore pkgmetrics.Store, eventStore eventstore.Store, componentsRegistry components.Registry, nvmlInstance nvidianvml.Instance) Exporter {
+func New(ctx context.Context, config *gpuhealthconfig.HealthExporterConfig, metricsStore pkgmetrics.Store, eventStore eventstore.Store, componentsRegistry components.Registry, nvmlInstance nvidianvml.Instance) Exporter {
 	cctx, cancel := context.WithCancel(ctx)
-	
+
 	return &healthExporter{
-		ctx:               cctx,
-		cancel:            cancel,
-		config:            config,
-		metricsStore:      metricsStore,
-		eventStore:        eventStore,
+		ctx:                cctx,
+		cancel:             cancel,
+		config:             config,
+		metricsStore:       metricsStore,
+		eventStore:         eventStore,
 		componentsRegistry: componentsRegistry,
-		nvmlInstance:      nvmlInstance,
+		nvmlInstance:       nvmlInstance,
 		httpClient: &http.Client{
-			Timeout: config.Timeout,
+			Timeout: config.Timeout.Duration,
 		},
 	}
 }
 
 // Start begins the periodic export process
 func (h *healthExporter) Start() error {
-	if h.config.Interval <= 0 {
+	if h.config.Interval.Duration <= 0 {
 		log.Logger.Debug("health exporter: no interval configured, skipping")
 		return nil
 	}
-	
+
 	log.Logger.Infow("Starting health exporter")
-	
+
 	go func() {
-		ticker := time.NewTicker(h.config.Interval)
+		ticker := time.NewTicker(h.config.Interval.Duration)
 		defer ticker.Stop()
-		
+
 		for {
 			select {
 			case <-h.ctx.Done():
@@ -97,7 +102,7 @@ func (h *healthExporter) Start() error {
 			}
 		}
 	}()
-	
+
 	return nil
 }
 
@@ -113,23 +118,41 @@ func (h *healthExporter) ExportNow(ctx context.Context) error {
 	return h.exportHealthData()
 }
 
+// getMachineID gets machine ID from system (no database dependencies)
+func (h *healthExporter) getMachineID(ctx context.Context) (string, error) {
+	machineID := pkghost.MachineID()
+	if machineID == "" {
+		// Fallback to dynamic lookup if not cached
+		return pkghost.GetMachineID(ctx)
+	}
+	return machineID, nil
+}
+
 // exportHealthData collects and exports health data
 func (h *healthExporter) exportHealthData() error {
 	log.Logger.Infow("healthexporter: Health Exporter: Exporting health data")
-	ctx, cancel := context.WithTimeout(h.ctx, h.config.Timeout)
+	ctx, cancel := context.WithTimeout(h.ctx, h.config.Timeout.Duration)
 	defer cancel()
-	
+
 	// Collect health data
 	healthData, err := h.collectHealthData(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to collect health data: %w", err)
 	}
-	
-	// Send to global health endpoint
-	if err := h.sendHealthData(ctx, healthData); err != nil {
-		return fmt.Errorf("failed to send health data: %w", err)
+
+	// Export data based on mode
+	if h.config.OfflineMode {
+		// Write to file in offline mode
+		if err := h.writeHealthDataToFile(healthData); err != nil {
+			return fmt.Errorf("failed to write health data to file: %w", err)
+		}
+	} else {
+		// Send to global health endpoint in online mode
+		if err := h.sendHealthData(ctx, healthData); err != nil {
+			return fmt.Errorf("failed to send health data: %w", err)
+		}
 	}
-	
+
 	return nil
 }
 
@@ -143,13 +166,21 @@ func generateCollectionID() string {
 // collectHealthData gathers all configured health data
 func (h *healthExporter) collectHealthData(ctx context.Context) (*HealthData, error) {
 	collectionID := generateCollectionID()
+
+	// Get machine ID dynamically
+	machineID, err := h.getMachineID(ctx)
+	if err != nil {
+		log.Logger.Errorw("Failed to get machine ID", "error", err)
+		return nil, fmt.Errorf("failed to get machine ID: %w", err)
+	}
+
 	data := &HealthData{
 		CollectionID: collectionID,
-		MachineID:    h.config.MachineID,
+		MachineID:    machineID,
 		Timestamp:    time.Now().UTC(),
 	}
-	log.Logger.Infow("healthexporter: Starting data collection...", "collection_id", collectionID, "timestamp", data.Timestamp.Format("2006-01-02 15:04:05 PDT"), "machine_id", h.config.MachineID)
-	
+	log.Logger.Infow("healthexporter: Starting data collection...", "collection_id", collectionID, "timestamp", data.Timestamp.Format("2006-01-02 15:04:05 PDT"), "machine_id", machineID)
+
 	// Collect machine info if enabled
 	if h.config.IncludeMachineInfo && h.nvmlInstance != nil {
 		log.Logger.Infow("healthexporter: Collecting machine info...")
@@ -164,19 +195,19 @@ func (h *healthExporter) collectHealthData(ctx context.Context) (*HealthData, er
 		log.Logger.Infow("Machine info collection disabled")
 	}
 	log.Logger.Infow("healthexporter: Machine info collection completed", "machine_info", data.MachineInfo)
-	
+
 	// Collect metrics if enabled
 	if h.config.IncludeMetrics && h.metricsStore != nil {
-		since := time.Now().Add(-h.config.MetricsLookback)
+		since := time.Now().Add(-h.config.MetricsLookback.Duration)
 		log.Logger.Infow("healthexporter: Collecting metrics...", "since", since.Format("15:04:05 PDT"))
-		
+
 		metrics, err := h.metricsStore.Read(ctx, pkgmetrics.WithSince(since))
 		if err != nil {
 			log.Logger.Errorw("Failed to read metrics", "error", err)
 		} else {
 			data.Metrics = metrics
 			log.Logger.Infow("healthexporter: Collected metrics", "count", len(metrics), "metrics", metrics)
-			
+
 			// Show sample metrics
 			if len(metrics) > 0 {
 				for i, metric := range metrics {
@@ -192,12 +223,11 @@ func (h *healthExporter) collectHealthData(ctx context.Context) (*HealthData, er
 		log.Logger.Infow("Metrics collection disabled")
 	}
 
-
 	// Collect events if enabled
 	if h.config.IncludeEvents && h.eventStore != nil && h.componentsRegistry != nil {
-		since := time.Now().Add(-h.config.EventsLookback)
+		since := time.Now().Add(-h.config.EventsLookback.Duration)
 		log.Logger.Infow("healthexporter: Collecting events...", "since", since.Format("15:04:05 PDT"))
-		
+
 		// Collect events from all components (since there's no unified "all" bucket)
 		var allEvents eventstore.Events
 		components := h.componentsRegistry.All()
@@ -206,7 +236,7 @@ func (h *healthExporter) collectHealthData(ctx context.Context) (*HealthData, er
 			log.Logger.Errorw("No components found", "error", "no components found")
 			return nil, fmt.Errorf("no components found")
 		}
-		
+
 		for _, component := range components {
 			componentEvents, err := component.Events(ctx, since)
 			if err != nil {
@@ -222,7 +252,7 @@ func (h *healthExporter) collectHealthData(ctx context.Context) (*HealthData, er
 					if componentName == "" {
 						componentName = component.Name()
 					}
-					
+
 					allEvents = append(allEvents, eventstore.Event{
 						Component: componentName,
 						Time:      event.Time.Time,
@@ -233,10 +263,10 @@ func (h *healthExporter) collectHealthData(ctx context.Context) (*HealthData, er
 				}
 			}
 		}
-		
+
 		data.Events = allEvents
 		log.Logger.Infow("healthexporter: Collected events from all components", "totalEvents", len(allEvents))
-		
+
 		// Show sample events for debugging
 		if len(allEvents) > 0 {
 			for i, event := range allEvents {
@@ -246,18 +276,18 @@ func (h *healthExporter) collectHealthData(ctx context.Context) (*HealthData, er
 				}
 				log.Logger.Infow("healthexporter: Event", "event", event)
 			}
-		}				
+		}
 	} else {
 		log.Logger.Infow("Events collection disabled in config")
 	}
-	
+
 	// Collect component data (actual numbers/metrics) if enabled
 	if h.config.IncludeComponentData && h.componentsRegistry != nil {
 		log.Logger.Infow("healthexporter: Collecting component data...")
 		componentData := h.collectComponentData()
 		data.ComponentData = componentData
 		log.Logger.Infow("healthexporter: Collected component data", "componentCount", len(componentData))
-		
+
 		// Show sample component data
 		if len(componentData) > 0 {
 			count := 0
@@ -273,7 +303,7 @@ func (h *healthExporter) collectHealthData(ctx context.Context) (*HealthData, er
 	} else {
 		log.Logger.Infow("Component data collection disabled")
 	}
-	
+
 	log.Logger.Infow("healthexporter: Data collection completed!")
 	return data, nil
 }
@@ -281,23 +311,23 @@ func (h *healthExporter) collectHealthData(ctx context.Context) (*HealthData, er
 // collectComponentData gathers actual data/numbers from all components plus health states
 func (h *healthExporter) collectComponentData() map[string]interface{} {
 	componentData := make(map[string]interface{})
-	
+
 	components := h.componentsRegistry.All()
-	
+
 	for _, component := range components {
 		componentName := component.Name()
-		
+
 		// We only need health states, not the detailed component data
-		
+
 		// Get health states - use the first one as primary health status
 		healthStates := component.LastHealthStates()
 		log.Logger.Infow("healthexporter: Collecting health states...", "component", componentName, "health_states", healthStates)
 		health := "Unknown"
 		reason := "No health data"
-		
+
 		var timeValue interface{}
 		var extraInfo interface{}
-		
+
 		if len(healthStates) > 0 {
 			// Use the first health state as the primary status
 			firstState := healthStates[0]
@@ -306,7 +336,7 @@ func (h *healthExporter) collectComponentData() map[string]interface{} {
 			timeValue = firstState.Time
 			extraInfo = firstState.ExtraInfo
 		}
-		
+
 		// Store structure with all available fields: componentName, health, reason, time, extra_info
 		componentData[componentName] = map[string]interface{}{
 			"component_name": componentName,
@@ -329,10 +359,10 @@ type OTLPData struct {
 // converts HealthData to OTLP metrics and logs format
 func (h *healthExporter) convertToOTLP(data *HealthData) *OTLPData {
 	log.Logger.Infow("healthexporter: Converting to OTLP format...", "data", data)
-	
+
 	// Create shared resource for both metrics and logs
 	resource := h.createOTLPResource(data)
-	
+
 	// Convert metrics
 	metricsData := &metricsv1.MetricsData{
 		ResourceMetrics: []*metricsv1.ResourceMetrics{
@@ -341,7 +371,7 @@ func (h *healthExporter) convertToOTLP(data *HealthData) *OTLPData {
 				ScopeMetrics: []*metricsv1.ScopeMetrics{
 					{
 						Scope: &commonv1.InstrumentationScope{
-							Name:    "gpud-health-exporter",
+							Name:    "gpuhealth-exporter",
 							Version: "1.0.0",
 						},
 						Metrics: h.convertMetricsToOTLP(data),
@@ -350,7 +380,7 @@ func (h *healthExporter) convertToOTLP(data *HealthData) *OTLPData {
 			},
 		},
 	}
-	
+
 	// Convert logs (events + component data)
 	logsData := &logsv1.LogsData{
 		ResourceLogs: []*logsv1.ResourceLogs{
@@ -359,7 +389,7 @@ func (h *healthExporter) convertToOTLP(data *HealthData) *OTLPData {
 				ScopeLogs: []*logsv1.ScopeLogs{
 					{
 						Scope: &commonv1.InstrumentationScope{
-							Name:    "gpud-health-exporter",
+							Name:    "gpuhealth-exporter",
 							Version: "1.0.0",
 						},
 						LogRecords: h.convertToOTLPLogs(data),
@@ -370,8 +400,8 @@ func (h *healthExporter) convertToOTLP(data *HealthData) *OTLPData {
 	}
 
 	return &OTLPData{
-		Metrics: metricsData,    // machine_info, metrics
-		Logs:    logsData,       // machine_info, events, component data
+		Metrics: metricsData, // machine_info, metrics
+		Logs:    logsData,    // machine_info, events, component data
 	}
 }
 
@@ -384,11 +414,11 @@ func convertStructToOTLPAttributes(v interface{}) []*commonv1.KeyValue {
 // convertStructToOTLPAttributesWithPrefix converts a struct to OTLP attributes with a key prefix
 func convertStructToOTLPAttributesWithPrefix(v interface{}, prefix string) []*commonv1.KeyValue {
 	var attributes []*commonv1.KeyValue
-	
+
 	if v == nil {
 		return attributes
 	}
-	
+
 	val := reflect.ValueOf(v)
 	if val.Kind() == reflect.Ptr {
 		if val.IsNil() {
@@ -396,21 +426,21 @@ func convertStructToOTLPAttributesWithPrefix(v interface{}, prefix string) []*co
 		}
 		val = val.Elem()
 	}
-	
+
 	if val.Kind() != reflect.Struct {
 		return attributes
 	}
-	
+
 	typ := val.Type()
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
 		fieldType := typ.Field(i)
-		
+
 		// Skip unexported fields
 		if !field.CanInterface() {
 			continue
 		}
-		
+
 		// Get JSON tag for field name, fall back to field name
 		jsonTag := fieldType.Tag.Get("json")
 		fieldName := fieldType.Name
@@ -422,13 +452,13 @@ func convertStructToOTLPAttributesWithPrefix(v interface{}, prefix string) []*co
 				fieldName = jsonTag
 			}
 		}
-		
+
 		// Add prefix if provided
 		fullFieldName := fieldName
 		if prefix != "" {
 			fullFieldName = prefix + "." + fieldName
 		}
-		
+
 		// Convert field value to string if it's not empty/nil
 		var stringValue string
 		switch field.Kind() {
@@ -472,7 +502,7 @@ func convertStructToOTLPAttributesWithPrefix(v interface{}, prefix string) []*co
 			// Skip other types
 			continue
 		}
-		
+
 		// Only add non-empty values
 		if stringValue != "" {
 			attributes = append(attributes, &commonv1.KeyValue{
@@ -483,7 +513,7 @@ func convertStructToOTLPAttributesWithPrefix(v interface{}, prefix string) []*co
 			})
 		}
 	}
-	
+
 	return attributes
 }
 
@@ -520,7 +550,7 @@ func (h *healthExporter) createOTLPResource(data *HealthData) *resourcev1.Resour
 func (h *healthExporter) convertMetricsToOTLP(data *HealthData) []*metricsv1.Metric {
 	log.Logger.Infow("healthexporter: Creating OTLP metrics...")
 	var otlpMetrics []*metricsv1.Metric
-	
+
 	// Convert regular metrics if available
 	if len(data.Metrics) > 0 {
 		for _, metric := range data.Metrics {
@@ -608,7 +638,7 @@ func (h *healthExporter) convertLabelsToOTLPAttributes(labels map[string]string)
 func (h *healthExporter) convertToOTLPLogs(data *HealthData) []*logsv1.LogRecord {
 	log.Logger.Infow("healthexporter: Creating OTLP logs...")
 	var logRecords []*logsv1.LogRecord
-	
+
 	// Add events as log records
 	if len(data.Events) > 0 {
 		log.Logger.Infow("healthexporter: Converting events to OTLP logs", "count", len(data.Events))
@@ -658,20 +688,20 @@ func (h *healthExporter) convertToOTLPLogs(data *HealthData) []*logsv1.LogRecord
 	if len(data.ComponentData) > 0 {
 		log.Logger.Infow("healthexporter: Converting component data to OTLP logs", "count", len(data.ComponentData))
 		for componentName, componentResult := range data.ComponentData {
-			
+
 			// Cast to simple map structure
 			componentInfo, ok := componentResult.(map[string]interface{})
 			if !ok {
 				log.Logger.Warnw("Unexpected component data format", "component", componentName)
 				continue
 			}
-			
+
 			// Extract values from health states
 			health := componentInfo["health"]
 			reason := componentInfo["reason"]
 			time := componentInfo["time"]
 			extraInfo := componentInfo["extra_info"]
-			
+
 			// Create attributes with all health state information
 			attributes := []*commonv1.KeyValue{
 				{
@@ -699,7 +729,7 @@ func (h *healthExporter) convertToOTLPLogs(data *HealthData) []*logsv1.LogRecord
 					},
 				},
 			}
-			
+
 			// Add time if available
 			if time != nil {
 				attributes = append(attributes, &commonv1.KeyValue{
@@ -709,7 +739,7 @@ func (h *healthExporter) convertToOTLPLogs(data *HealthData) []*logsv1.LogRecord
 					},
 				})
 			}
-			
+
 			// Add extra_info if available
 			if extraInfo != nil {
 				attributes = append(attributes, &commonv1.KeyValue{
@@ -719,7 +749,7 @@ func (h *healthExporter) convertToOTLPLogs(data *HealthData) []*logsv1.LogRecord
 					},
 				})
 			}
-			
+
 			logRecord := &logsv1.LogRecord{
 				TimeUnixNano:   uint64(data.Timestamp.UnixNano()),
 				SeverityNumber: logsv1.SeverityNumber_SEVERITY_NUMBER_INFO,
@@ -747,7 +777,7 @@ func (h *healthExporter) sendHealthData(ctx context.Context, data *HealthData) e
 	// Convert to OTLP format
 	otlpRequest := h.convertToOTLP(data)
 	log.Logger.Infow("healthexporter: After converting to OTLP protobuf format...", "otlpRequest", otlpRequest)
-	
+
 	// Send combined data (metrics + logs) as separate requests
 	// Send metrics first
 	if otlpRequest.Metrics != nil && len(otlpRequest.Metrics.ResourceMetrics) > 0 {
@@ -756,23 +786,23 @@ func (h *healthExporter) sendHealthData(ctx context.Context, data *HealthData) e
 			log.Logger.Errorw("Failed to marshal OTLP metrics data", "error", err)
 			return err
 		}
-		
+
 		// Send metrics request with retry
 		if err := h.sendOTLPRequestWithRetry(ctx, metricsBytes, "metrics", data.CollectionID); err != nil {
-			log.Logger.Errorw("healthexporter: CRITICAL - Failed to send metrics data after all retries", 
+			log.Logger.Errorw("healthexporter: CRITICAL - Failed to send metrics data after all retries",
 				"collection_id", data.CollectionID,
 				"error", err,
 				"size_bytes", len(metricsBytes),
 				"will_continue_with_logs", true)
 			// Continue to send logs even if metrics fail - this ensures we don't lose event data
 		} else {
-			log.Logger.Infow("healthexporter: Successfully sent metrics data", 
+			log.Logger.Infow("healthexporter: Successfully sent metrics data",
 				"collection_id", data.CollectionID,
 				"size_bytes", len(metricsBytes))
 		}
 
 	}
-	
+
 	// Send logs
 	if otlpRequest.Logs != nil && len(otlpRequest.Logs.ResourceLogs) > 0 {
 		logsBytes, err := proto.Marshal(otlpRequest.Logs)
@@ -780,23 +810,82 @@ func (h *healthExporter) sendHealthData(ctx context.Context, data *HealthData) e
 			log.Logger.Errorw("Failed to marshal OTLP logs data", "error", err)
 			return err
 		}
-		
+
 		// Send logs request with retry
 		if err := h.sendOTLPRequestWithRetry(ctx, logsBytes, "logs", data.CollectionID); err != nil {
-			log.Logger.Errorw("healthexporter: CRITICAL - Failed to send logs data after all retries", 
+			log.Logger.Errorw("healthexporter: CRITICAL - Failed to send logs data after all retries",
 				"collection_id", data.CollectionID,
 				"error", err,
 				"size_bytes", len(logsBytes),
 				"contains_events", true)
 			return fmt.Errorf("failed to send critical logs data (includes events): %w", err)
 		} else {
-			log.Logger.Infow("healthexporter: Successfully sent logs data", 
+			log.Logger.Infow("healthexporter: Successfully sent logs data",
 				"collection_id", data.CollectionID,
 				"size_bytes", len(logsBytes))
 		}
 	}
-	
+
 	log.Logger.Infow("healthexporter: Successfully sent combined OTLP (metrics + logs)")
+	return nil
+}
+
+// writeHealthDataToFile writes standard OTLP JSON files for direct curl usage
+func (h *healthExporter) writeHealthDataToFile(data *HealthData) error {
+	timestamp := data.Timestamp.Format("20060102_150405")
+	otlpRequest := h.convertToOTLP(data)
+
+	log.Logger.Infow("healthexporter: Writing OTLP data to files", "timestamp", timestamp)
+
+	// Write pure OTLP JSON files for direct use with OTEL collectors via curl
+	if otlpRequest.Metrics != nil {
+		metricsFilename := filepath.Join(h.config.OutputPath, fmt.Sprintf("gpuhealth_metrics_%s.json", timestamp))
+		if err := h.writeOTLPJSONFile(metricsFilename, otlpRequest.Metrics); err != nil {
+			return fmt.Errorf("failed to write OTLP metrics file: %w", err)
+		}
+		log.Logger.Infow("healthexporter: Created OTLP metrics file for curl", "filename", metricsFilename)
+	}
+
+	if otlpRequest.Logs != nil {
+		logsFilename := filepath.Join(h.config.OutputPath, fmt.Sprintf("gpuhealth_logs_%s.json", timestamp))
+		if err := h.writeOTLPJSONFile(logsFilename, otlpRequest.Logs); err != nil {
+			return fmt.Errorf("failed to write OTLP logs file: %w", err)
+		}
+		log.Logger.Infow("healthexporter: Created OTLP logs file for curl", "filename", logsFilename)
+	}
+
+	log.Logger.Infow("healthexporter: Successfully wrote OTLP files", "outputPath", h.config.OutputPath)
+	return nil
+}
+
+// writeOTLPJSONFile writes protobuf message as standard OTLP JSON format
+func (h *healthExporter) writeOTLPJSONFile(filename string, message proto.Message) error {
+	log.Logger.Infow("healthexporter: Writing OTLP JSON file", "filename", filename)
+
+	// Use protojson to ensure proper OTLP field naming and format
+	marshaler := protojson.MarshalOptions{
+		Multiline:       true,
+		Indent:          "  ",
+		UseProtoNames:   false, // Use JSON field names (camelCase)
+		EmitUnpopulated: false, // Don't emit empty fields
+	}
+
+	jsonData, err := marshaler.Marshal(message)
+	if err != nil {
+		return fmt.Errorf("failed to marshal OTLP message to JSON: %w", err)
+	}
+
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create file %s: %w", filename, err)
+	}
+	defer file.Close()
+
+	if _, err := file.Write(jsonData); err != nil {
+		return fmt.Errorf("failed to write OTLP JSON to file %s: %w", filename, err)
+	}
+
+	log.Logger.Infow("healthexporter: Successfully wrote OTLP JSON file", "filename", filename)
 	return nil
 }
 
@@ -806,7 +895,7 @@ func (h *healthExporter) sendOTLPRequestWithRetry(ctx context.Context, reqData [
 	if maxAttempts <= 0 {
 		maxAttempts = 1 // At least one attempt
 	}
-	
+
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		// Try to send the request
@@ -814,33 +903,33 @@ func (h *healthExporter) sendOTLPRequestWithRetry(ctx context.Context, reqData [
 		if err == nil {
 			// Success!
 			if attempt > 1 {
-				log.Logger.Infow("healthexporter: Request succeeded after retries", 
-					"data_type", dataType, 
+				log.Logger.Infow("healthexporter: Request succeeded after retries",
+					"data_type", dataType,
 					"collection_id", collectionID,
 					"attempt", attempt,
 					"total_attempts", maxAttempts)
 			}
 			return nil
 		}
-		
+
 		lastErr = err
-		
+
 		// If this was the last attempt, don't wait
 		if attempt >= maxAttempts {
 			break
 		}
-		
+
 		// Simple exponential backoff: 2s, 4s, 8s, capped at 10s
 		delay := defaultRetryDelay
-		
-		log.Logger.Warnw("healthexporter: Request failed, retrying", 
-			"data_type", dataType, 
+
+		log.Logger.Warnw("healthexporter: Request failed, retrying",
+			"data_type", dataType,
 			"collection_id", collectionID,
 			"attempt", attempt,
 			"total_attempts", maxAttempts,
 			"delay_seconds", delay.Seconds(),
 			"error", err)
-		
+
 		// Wait before retrying (with context cancellation support)
 		select {
 		case <-ctx.Done():
@@ -849,36 +938,43 @@ func (h *healthExporter) sendOTLPRequestWithRetry(ctx context.Context, reqData [
 			// Continue to next attempt
 		}
 	}
-	
+
 	// All retries failed
-	log.Logger.Errorw("healthexporter: All retry attempts failed", 
-		"data_type", dataType, 
+	log.Logger.Errorw("healthexporter: All retry attempts failed",
+		"data_type", dataType,
 		"collection_id", collectionID,
 		"total_attempts", maxAttempts,
 		"final_error", lastErr)
-	
+
 	return fmt.Errorf("failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
 // sends a single OTLP request
 func (h *healthExporter) sendOTLPRequest(ctx context.Context, reqData []byte, dataType string, collectionID string) error {
 	contentType := "application/x-protobuf"
-	
+
 	log.Logger.Infow("healthexporter: OTLP request", "type", dataType, "size", len(reqData), "reqData", reqData)
-	
+
+	// Get machine ID dynamically
+	machineID, err := h.getMachineID(ctx)
+	if err != nil {
+		log.Logger.Errorw("Failed to get machine ID for HTTP header", "type", dataType, "error", err)
+		return fmt.Errorf("failed to get machine ID: %w", err)
+	}
+
 	// Create HTTP request
 	req, err := http.NewRequestWithContext(ctx, "POST", h.config.Endpoint, bytes.NewBuffer(reqData))
 	if err != nil {
 		log.Logger.Errorw("Failed to create HTTP request", "type", dataType, "error", err)
 		return fmt.Errorf("failed to send HTTP request: %w", err)
 	}
-	
+
 	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("User-Agent", "gpud-health-exporter")
-	req.Header.Set("X-Machine-ID", h.config.MachineID)
-	req.Header.Set("X-Data-Type", dataType) // Add data type header to help receiver
+	req.Header.Set("User-Agent", "gpuhealth-exporter")
+	req.Header.Set("X-Machine-ID", machineID)
+	req.Header.Set("X-Data-Type", dataType)         // Add data type header to help receiver
 	req.Header.Set("X-Collection-ID", collectionID) // Add collection ID to correlate logs and metrics
-	
+
 	// Send request
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -886,14 +982,14 @@ func (h *healthExporter) sendOTLPRequest(ctx context.Context, reqData []byte, da
 		return fmt.Errorf("failed to send HTTP request: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	// Check response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		log.Logger.Errorw("HTTP request failed", "type", dataType, "status", resp.StatusCode, "status_text", resp.Status)
 		return fmt.Errorf("HTTP request failed: %s (status %d)", resp.Status, resp.StatusCode)
 	}
-	
+
 	log.Logger.Infow("healthexporter: Successfully sent data", "type", dataType, "status", resp.StatusCode, "size", len(reqData))
-	
+
 	return nil
-} 
+}

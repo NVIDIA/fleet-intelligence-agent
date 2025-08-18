@@ -15,8 +15,8 @@ import (
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/leptonai/gpud/components"
 	"github.com/leptonai/gpud/components/all"
@@ -45,10 +45,10 @@ type Server struct {
 	gpudInstance       *components.GPUdInstance
 
 	config *gpuhealthconfig.Config
-	
+
 	// healthExporter is the health exporter instance
 	healthExporter pkghealthexporter.Exporter
-	
+
 	machineID string
 }
 
@@ -99,7 +99,7 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *gpuhealthconf
 	if machineID == "" {
 		machineID = generateMachineID()
 		log.Logger.Infow("generating new machine ID", "machineID", machineID)
-		
+
 		// Store the generated machine ID in database for persistence across reboots
 		if err := pkgmetadata.SetMetadata(ctx, dbRW, pkgmetadata.MetadataKeyMachineID, machineID); err != nil {
 			return nil, fmt.Errorf("failed to store generated machine ID: %w", err)
@@ -108,7 +108,7 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *gpuhealthconf
 	} else {
 		log.Logger.Infow("loaded existing machine ID from database", "machineID", machineID)
 	}
-	
+
 	s.machineID = machineID
 
 	nvmlInstance, err := nvidianvml.NewWithExitOnSuccessfulLoad(ctx)
@@ -182,43 +182,41 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *gpuhealthconf
 	promRecorder := pkgmetricsrecorder.NewPrometheusRecorder(ctx, 15*time.Minute, dbRO)
 	promRecorder.Start()
 
-	// Start mock endpoint
-	// TODO: Remove this once we have a real endpoint
-	mock := pkghealthexporter.NewMockEndpoint(8080)
-	if err := mock.Start(); err != nil {
-		panic(fmt.Sprintf("Failed to start mock endpoint: %v", err))
+	// Start mock endpoint only if not in offline mode
+	var mock *pkghealthexporter.MockEndpoint
+	isOfflineMode := config.HealthExporter != nil && config.HealthExporter.OfflineMode
+	if !isOfflineMode {
+		// Start mock endpoint
+		// TODO: Remove this once we have a real endpoint
+		mock = pkghealthexporter.NewMockEndpoint(8080)
+		if err := mock.Start(); err != nil {
+			panic(fmt.Sprintf("Failed to start mock endpoint: %v", err))
+		}
+		log.Logger.Infow("healthexporter: Mocked global health endpoint URL", "mock", mock.HealthBulkURL())
 	}
-
-	log.Logger.Infow("healthexporter: Mocked global health endpoint URL", "mock", mock.HealthBulkURL())
 
 	// TODO: We require user register agent with  -- datacenter and --node-group, and agent need to send metrics with above metadata information
 	// gpud login --endpoint <health-endpoint> --token <sak-token> --data-center <data-center> --node-group <node-group>
-	
+
 	// Create and start health exporter with all dependencies if enabled
 	if config.HealthExporter != nil && config.HealthExporter.Enabled {
-		healthExporterConfig := &pkghealthexporter.Config{
-			Endpoint:             mock.HealthBulkURL(), // Use the mock endpoint URL for testing
-			Interval:             config.HealthExporter.Interval.Duration,
-			MachineID:            machineID,
-			Timeout:              config.HealthExporter.Timeout.Duration,
-			IncludeMetrics:       config.HealthExporter.IncludeMetrics,
-			IncludeEvents:        config.HealthExporter.IncludeEvents,
-			IncludeMachineInfo:   config.HealthExporter.IncludeMachineInfo,
-			IncludeComponentData: config.HealthExporter.IncludeComponentData,
-			MetricsLookback:      config.HealthExporter.MetricsLookback.Duration,
-			EventsLookback:       config.HealthExporter.EventsLookback.Duration,
-			RetryMaxAttempts:     config.HealthExporter.RetryMaxAttempts,
+		// Set endpoint based on mode and availability of mock
+		if !config.HealthExporter.OfflineMode {
+			if mock != nil {
+				config.HealthExporter.Endpoint = mock.HealthBulkURL()
+			}
+			// If mock is nil, use the endpoint from config (already set)
 		}
-		
+
 		s.healthExporter = pkghealthexporter.New(
 			ctx,
-			healthExporterConfig,
+			config.HealthExporter,
 			metricsSQLiteStore,
 			eventStore,
 			s.componentsRegistry,
 			nvmlInstance,
 		)
-		
+
 		// Start the health exporter
 		if err := s.healthExporter.Start(); err != nil {
 			log.Logger.Errorw("failed to start health exporter", "error", err)
@@ -234,6 +232,11 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *gpuhealthconf
 	go s.startServer(ctx, nvmlInstance)
 
 	return s, nil
+}
+
+// GetHealthExporter returns the health exporter instance (for offline mode access)
+func (s *Server) GetHealthExporter() pkghealthexporter.Exporter {
+	return s.healthExporter
 }
 
 // Stop gracefully stops the server
