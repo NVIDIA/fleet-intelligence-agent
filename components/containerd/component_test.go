@@ -75,6 +75,10 @@ func (m *mockNVMLInstance) GetMemoryErrorManagementCapabilities() nvidianvml.Mem
 	return nvidianvml.MemoryErrorManagementCapabilities{}
 }
 
+func (m *mockNVMLInstance) VBIOSVersion() string {
+	return "94.02.26.00.03"
+}
+
 func (m *mockNVMLInstance) Shutdown() error {
 	return nil
 }
