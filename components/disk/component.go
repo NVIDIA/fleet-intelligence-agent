@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -19,11 +20,14 @@ import (
 
 	apiv1 "github.com/leptonai/gpud/api/v1"
 	"github.com/leptonai/gpud/components"
+	"github.com/leptonai/gpud/components/nfs"
 	"github.com/leptonai/gpud/pkg/disk"
 	"github.com/leptonai/gpud/pkg/eventstore"
 	pkgfile "github.com/leptonai/gpud/pkg/file"
+	pkghost "github.com/leptonai/gpud/pkg/host"
 	"github.com/leptonai/gpud/pkg/kmsg"
 	"github.com/leptonai/gpud/pkg/log"
+	pkgnfschecker "github.com/leptonai/gpud/pkg/nfs-checker"
 )
 
 // Name is the ID of the disk component.
@@ -38,6 +42,10 @@ type component struct {
 	healthCheckInterval time.Duration
 	retryInterval       time.Duration
 
+	getTimeNowFunc func() time.Time
+
+	getGroupConfigsFunc func() pkgnfschecker.Configs
+
 	getBlockDevicesFunc func(ctx context.Context) (disk.BlockDevices, error)
 
 	getExt4PartitionsFunc func(ctx context.Context) (disk.Partitions, error)
@@ -50,14 +58,22 @@ type component struct {
 
 	mountPointsToTrackUsage map[string]struct{}
 
-	eventBucket eventstore.Bucket
-	kmsgSyncer  *kmsg.Syncer
+	rebootEventStore pkghost.RebootEventStore
+	eventBucket      eventstore.Bucket
+	kmsgSyncer       *kmsg.Syncer
+
+	// lookbackPeriod defines how far back to query historical reboot and disk failure events
+	// when evaluating suggested repair actions. Default is 3 days.
+	lookbackPeriod time.Duration
 
 	lastMu          sync.RWMutex
 	lastCheckResult *checkResult
 }
 
-const defaultRetryInterval = 5 * time.Second
+const (
+	defaultRetryInterval  = 5 * time.Second
+	defaultLookbackPeriod = 3 * 24 * time.Hour // 3 days
+)
 
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
@@ -68,13 +84,22 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		healthCheckInterval: gpudInstance.HealthCheckInterval,
 		retryInterval:       defaultRetryInterval,
 
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
+
+		getGroupConfigsFunc: nfs.GetDefaultConfigs,
+
+		rebootEventStore: gpudInstance.RebootEventStore,
+		lookbackPeriod:   defaultLookbackPeriod,
+
 		getExt4PartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
-			return disk.GetPartitions(ctx, disk.WithFstype(disk.DefaultExt4FsTypeFunc))
+			return disk.GetPartitions(ctx, disk.WithFstype(disk.DefaultExt4FsTypeFunc), disk.WithMountPoint(disk.DefaultMountPointFunc))
 		},
 		getNFSPartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
 			// statfs on nfs can incur network I/O or impact disk I/O performance
 			// do not track usage for nfs partitions
-			return disk.GetPartitions(ctx, disk.WithFstype(disk.DefaultNFSFsTypeFunc), disk.WithSkipUsage())
+			return disk.GetPartitions(ctx, disk.WithFstype(disk.DefaultNFSFsTypeFunc), disk.WithMountPoint(disk.DefaultMountPointFunc))
 		},
 
 		findMntFunc: disk.FindMnt,
@@ -90,6 +115,7 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 				ctx,
 				disk.WithFstype(disk.DefaultFsTypeFunc),
 				disk.WithDeviceType(disk.DefaultDeviceTypeFunc),
+				disk.WithMountPoint(disk.DefaultMountPointFunc),
 			)
 		}
 	}
@@ -190,13 +216,226 @@ func (c *component) Check() components.CheckResult {
 	log.Logger.Infow("checking disk")
 
 	cr := &checkResult{
-		ts: time.Now().UTC(),
+		ts: c.getTimeNowFunc(),
+
+		health: apiv1.HealthStateTypeHealthy,
+		reason: "ok",
 	}
 	defer func() {
 		c.lastMu.Lock()
 		c.lastCheckResult = cr
 		c.lastMu.Unlock()
 	}()
+
+	// Check for disk failure events from kmsg (only if event store is available)
+	if c.eventBucket != nil && c.rebootEventStore != nil {
+		// Query recent events to check for disk failures
+		recentEvents, err := c.eventBucket.Get(c.ctx, cr.ts.Add(-c.lookbackPeriod))
+		if err != nil {
+			cr.err = err
+			cr.health = apiv1.HealthStateTypeUnhealthy
+			cr.reason = "failed to get recent events"
+			log.Logger.Warnw(cr.reason, "error", cr.err)
+			return cr
+		}
+
+		// Filter recent events to only include the hardware-related disk failure events
+		// Group events by type for individual evaluation
+		raidFailureEvents := make(eventstore.Events, 0)
+		fsReadOnlyEvents := make(eventstore.Events, 0)
+		nvmePathFailureEvents := make(eventstore.Events, 0)
+		nvmeTimeoutEvents := make(eventstore.Events, 0)
+		nvmeDeviceDisabledEvents := make(eventstore.Events, 0)
+		beyondEndOfDeviceEvents := make(eventstore.Events, 0)
+		bufferIOErrorEvents := make(eventstore.Events, 0)
+		superblockWriteErrorEvents := make(eventstore.Events, 0)
+		failureReasons := make(map[string]string)
+		for _, ev := range recentEvents {
+			switch ev.Name {
+			case eventRAIDArrayFailure:
+				raidFailureEvents = append(raidFailureEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventRAIDArrayFailure] = messageRAIDArrayFailure
+
+			case eventFilesystemReadOnly:
+				fsReadOnlyEvents = append(fsReadOnlyEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventFilesystemReadOnly] = messageFilesystemReadOnly
+
+			case eventNVMePathFailure:
+				nvmePathFailureEvents = append(nvmePathFailureEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventNVMePathFailure] = messageNVMePathFailure
+
+			case eventNVMeTimeout:
+				nvmeTimeoutEvents = append(nvmeTimeoutEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventNVMeTimeout] = messageNVMeTimeout
+
+			case eventNVMeDeviceDisabled:
+				nvmeDeviceDisabledEvents = append(nvmeDeviceDisabledEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventNVMeDeviceDisabled] = messageNVMeDeviceDisabled
+
+			case eventBeyondEndOfDevice:
+				beyondEndOfDeviceEvents = append(beyondEndOfDeviceEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventBeyondEndOfDevice] = messageBeyondEndOfDevice
+
+			case eventBufferIOError:
+				bufferIOErrorEvents = append(bufferIOErrorEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventBufferIOError] = messageBufferIOError
+
+			case eventSuperblockWriteError:
+				superblockWriteErrorEvents = append(superblockWriteErrorEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventSuperblockWriteError] = messageSuperblockWriteError
+			}
+		}
+
+		// Evaluate suggested actions for each event type
+		// this remains null if no failures are detected
+		// especially the case where no failure after reboot is detected
+		var allSuggestedActions []*apiv1.SuggestedActions
+
+		// If we found disk failures, evaluate suggested actions for each type
+		hasFailures := len(raidFailureEvents) > 0 ||
+			len(fsReadOnlyEvents) > 0 ||
+			len(nvmePathFailureEvents) > 0 ||
+			len(nvmeTimeoutEvents) > 0 ||
+			len(nvmeDeviceDisabledEvents) > 0 ||
+			len(beyondEndOfDeviceEvents) > 0 ||
+			len(bufferIOErrorEvents) > 0 ||
+			len(superblockWriteErrorEvents) > 0
+		if hasFailures {
+			// Look up past events to derive the suggested actions
+			rebootEvents, err := c.rebootEventStore.GetRebootEvents(c.ctx, cr.ts.Add(-c.lookbackPeriod))
+			if err != nil {
+				cr.err = err
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				log.Logger.Warnw("failed to get reboot events", "error", cr.err)
+				return cr
+			}
+
+			// Process RAID failure events
+			if len(raidFailureEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, raidFailureEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventRAIDArrayFailure)
+				}
+			}
+
+			// Process filesystem read-only events
+			if len(fsReadOnlyEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, fsReadOnlyEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventFilesystemReadOnly)
+				}
+			}
+
+			// Process NVMe path failure events
+			if len(nvmePathFailureEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, nvmePathFailureEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventNVMePathFailure)
+				}
+			}
+
+			// Process NVME controller timeout events
+			if len(nvmeTimeoutEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, nvmeTimeoutEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventNVMeTimeout)
+				}
+			}
+
+			// Process NVME device disabled events
+			if len(nvmeDeviceDisabledEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, nvmeDeviceDisabledEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventNVMeDeviceDisabled)
+				}
+			}
+
+			// Process I/O beyond device boundaries events
+			if len(beyondEndOfDeviceEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, beyondEndOfDeviceEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventBeyondEndOfDevice)
+				}
+			}
+
+			// Process buffer I/O error events
+			if len(bufferIOErrorEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, bufferIOErrorEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventBufferIOError)
+				}
+			}
+
+			// Process superblock write error events
+			if len(superblockWriteErrorEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, superblockWriteErrorEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventSuperblockWriteError)
+				}
+			}
+
+			// Aggregate suggested actions with HW_INSPECTION priority
+			cr.suggestedActions = eventstore.AggregateSuggestedActions(allSuggestedActions)
+		}
+
+		// Append failure reasons to existing reason if any failures were detected
+		if len(failureReasons) > 0 {
+			// reset since it's not healhty, not "ok" anymore
+			if cr.reason == "ok" {
+				cr.reason = ""
+			}
+
+			// Sort the keys lexicographically
+			var sortedReasons []string
+			for _, reason := range failureReasons {
+				sortedReasons = append(sortedReasons, reason)
+			}
+			sort.Strings(sortedReasons)
+
+			newReason := strings.Join(sortedReasons, ", ")
+			if cr.reason != "" {
+				cr.reason += "; " + newReason
+			} else {
+				cr.reason = newReason
+			}
+		} else if hasFailures {
+			// If we had failures initially but all were resolved after reboot,
+			// reset the health state back to healthy
+			cr.health = apiv1.HealthStateTypeHealthy
+		}
+	}
 
 	if c.getBlockDevicesFunc != nil {
 		if !c.fetchBlockDevices(cr) {
@@ -206,14 +445,16 @@ func (c *component) Check() components.CheckResult {
 	if !c.fetchExt4Partitions(cr) {
 		return cr
 	}
-	if !c.fetchNFSPartitions(cr) {
-		return cr
-	}
 
-	if len(cr.NFSPartitions) == 0 && len(cr.ExtPartitions) == 0 {
-		cr.health = apiv1.HealthStateTypeHealthy
-		cr.reason = "no ext4/nfs partition found"
-		return cr
+	// Check if NFS configs are set before attempting to fetch NFS partitions
+	groupConfigs := c.getGroupConfigsFunc()
+	if len(groupConfigs) == 0 {
+		log.Logger.Infow("skipping NFS partitions check as no NFS configs are set")
+		cr.NFSPartitions = disk.Partitions{}
+	} else {
+		if !c.fetchNFSPartitions(cr) {
+			return cr
+		}
 	}
 
 	devToUsage := make(map[string]disk.Usage)
@@ -329,13 +570,18 @@ func (c *component) Check() components.CheckResult {
 		}
 	}
 
-	cr.health = apiv1.HealthStateTypeHealthy
-	cr.reason = "ok"
-
 	for _, p := range cr.NFSPartitions {
 		if p.StatTimedOut {
-			cr.reason = fmt.Sprintf("%s not mounted and stat timed out", p.MountPoint)
-			cr.health = apiv1.HealthStateTypeDegraded
+			if cr.reason == "ok" {
+				cr.reason = ""
+			}
+			if cr.reason != "" {
+				cr.reason += "; "
+			}
+			cr.reason += fmt.Sprintf("%s stat timed out (possible connection issue)", p.MountPoint)
+			if cr.health == apiv1.HealthStateTypeHealthy {
+				cr.health = apiv1.HealthStateTypeDegraded
+			}
 			break
 		}
 	}
@@ -376,8 +622,20 @@ func (c *component) fetchBlockDevices(cr *checkResult) bool {
 		break
 	}
 	if len(cr.BlockDevices) == 0 {
-		cr.health = apiv1.HealthStateTypeHealthy
-		cr.reason = "no block device found"
+		log.Logger.Warnw("no block device found -- something must be wrong with lsblk command")
+
+		if cr.health == "" {
+			cr.health = apiv1.HealthStateTypeHealthy
+		}
+
+		if cr.reason == "ok" {
+			cr.reason = ""
+		}
+		if cr.reason != "" {
+			cr.reason += "; "
+		}
+		cr.reason += "no block device found"
+
 		return false
 	}
 	return true
@@ -398,6 +656,15 @@ func (c *component) fetchExt4Partitions(cr *checkResult) bool {
 			select {
 			case <-c.ctx.Done():
 				cr.health = apiv1.HealthStateTypeUnhealthy
+
+				if cr.reason == "ok" {
+					cr.reason = ""
+				}
+				if cr.reason != "" {
+					cr.reason += "; "
+				}
+				cr.reason += "failed to get ext4 partitions"
+
 				cr.err = c.ctx.Err()
 				return false
 			case <-time.After(c.retryInterval):
@@ -466,6 +733,8 @@ type checkResult struct {
 
 	// tracks the healthy evaluation result of the last check
 	health apiv1.HealthStateType
+	// tracks the suggested actions for the last check
+	suggestedActions *apiv1.SuggestedActions
 	// tracks the reason of the last check
 	reason string
 }
@@ -554,6 +823,13 @@ func (cr *checkResult) getError() string {
 	return cr.err.Error()
 }
 
+func (cr *checkResult) getSuggestedActions() *apiv1.SuggestedActions {
+	if cr == nil {
+		return nil
+	}
+	return cr.suggestedActions
+}
+
 func (cr *checkResult) HealthStates() apiv1.HealthStates {
 	if cr == nil {
 		return apiv1.HealthStates{
@@ -568,12 +844,13 @@ func (cr *checkResult) HealthStates() apiv1.HealthStates {
 	}
 
 	state := apiv1.HealthState{
-		Time:      metav1.NewTime(cr.ts),
-		Component: Name,
-		Name:      Name,
-		Reason:    cr.reason,
-		Error:     cr.getError(),
-		Health:    cr.health,
+		Time:             metav1.NewTime(cr.ts),
+		Component:        Name,
+		Name:             Name,
+		Reason:           cr.reason,
+		Error:            cr.getError(),
+		Health:           cr.health,
+		SuggestedActions: cr.getSuggestedActions(),
 	}
 
 	if len(cr.ExtPartitions) > 0 && len(cr.BlockDevices) > 0 {

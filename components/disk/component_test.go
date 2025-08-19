@@ -20,6 +20,7 @@ import (
 	"github.com/leptonai/gpud/pkg/eventstore"
 	pkgfile "github.com/leptonai/gpud/pkg/file"
 	"github.com/leptonai/gpud/pkg/kmsg"
+	pkgnfschecker "github.com/leptonai/gpud/pkg/nfs-checker"
 )
 
 // mockEventStore implements a mock for eventstore.Store
@@ -112,7 +113,23 @@ func createTestComponent(ctx context.Context, mountPoints, mountTargets []string
 		ct.statWithTimeoutFunc = pkgfile.StatWithTimeout
 	}
 
+	// Initialize getGroupConfigsFunc to return empty configs by default
+	if ct.getGroupConfigsFunc == nil {
+		ct.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+			return pkgnfschecker.Configs{}
+		}
+	}
+
 	return ct
+}
+
+// createTestComponentWithTime creates a test component with a fixed time function for deterministic testing
+func createTestComponentWithTime(ctx context.Context, mountPoints, mountTargets []string, fixedTime time.Time) *component {
+	c := createTestComponent(ctx, mountPoints, mountTargets)
+	c.getTimeNowFunc = func() time.Time {
+		return fixedTime
+	}
+	return c
 }
 
 func TestComponentName(t *testing.T) {
@@ -148,6 +165,15 @@ func TestNewComponent(t *testing.T) {
 	// Check if mount points are correctly added to the tracking map
 	assert.Contains(t, c.mountPointsToTrackUsage, "/mnt/test1")
 	assert.Contains(t, c.mountPointsToTrackUsage, "/mnt/test2")
+
+	// Verify that getTimeNowFunc is properly initialized
+	assert.NotNil(t, c.getTimeNowFunc)
+
+	// Test that the time function returns a valid time
+	ts1 := c.getTimeNowFunc()
+	time.Sleep(10 * time.Millisecond)
+	ts2 := c.getTimeNowFunc()
+	assert.True(t, ts2.After(ts1), "getTimeNowFunc should return increasing timestamps")
 }
 
 func TestComponentStart(t *testing.T) {
@@ -345,7 +371,7 @@ func TestCheckOnce(t *testing.T) {
 
 		assert.NotNil(t, lastCheckResult)
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, lastCheckResult.health)
-		assert.Equal(t, "no ext4/nfs partition found", lastCheckResult.reason)
+		assert.Equal(t, "ok", lastCheckResult.reason)
 	})
 }
 
@@ -444,7 +470,7 @@ func TestMountTargetUsages(t *testing.T) {
 	}
 
 	t.Run("track mount target", func(t *testing.T) {
-		tmpDir, err := os.MkdirTemp(t.TempDir(), "test")
+		tmpDir, err := os.MkdirTemp(os.TempDir(), "test")
 		require.NoError(t, err)
 		defer os.RemoveAll(tmpDir)
 
@@ -474,7 +500,7 @@ func TestMountTargetUsages(t *testing.T) {
 	})
 
 	t.Run("mount target error handling", func(t *testing.T) {
-		tmpDir, err := os.MkdirTemp(t.TempDir(), "test")
+		tmpDir, err := os.MkdirTemp(os.TempDir(), "test")
 		require.NoError(t, err)
 		defer os.RemoveAll(tmpDir)
 
@@ -591,6 +617,52 @@ func TestCheck(t *testing.T) {
 	assert.Equal(t, apiv1.HealthStateTypeHealthy, rs.HealthStateType())
 
 	fmt.Println(rs.String())
+}
+
+// TestCheckWithFixedTime tests the Check method with a fixed timestamp
+func TestCheckWithFixedTime(t *testing.T) {
+	ctx := context.Background()
+	fixedTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+
+	c := createTestComponentWithTime(ctx, []string{}, []string{}, fixedTime)
+	defer c.Close()
+
+	// Mock the partition functions to return predictable data
+	c.getExt4PartitionsFunc = func(ctx context.Context) (disk.Partitions, error) {
+		return disk.Partitions{
+			{
+				Device:     "/dev/sda1",
+				MountPoint: "/",
+				Usage: &disk.Usage{
+					TotalBytes: 1000,
+					FreeBytes:  500,
+					UsedBytes:  500,
+				},
+			},
+		}, nil
+	}
+
+	c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
+		return disk.BlockDevices{
+			{
+				Name: "sda",
+				Type: "disk",
+			},
+		}, nil
+	}
+
+	// Perform check
+	result := c.Check()
+	cr, ok := result.(*checkResult)
+	require.True(t, ok)
+
+	// Verify the timestamp is correctly set
+	assert.Equal(t, fixedTime, cr.ts)
+
+	// Verify health states use the fixed timestamp
+	healthStates := cr.HealthStates()
+	assert.Len(t, healthStates, 1)
+	assert.Equal(t, fixedTime, healthStates[0].Time.Time)
 }
 
 // TestCheckResultString tests the String method of checkResult
@@ -762,6 +834,12 @@ func TestFindMntRetryLogic(t *testing.T) {
 				cancel:              cancel,
 				findMntFunc:         mockFindMntFunc,
 				statWithTimeoutFunc: pkgfile.StatWithTimeout,
+				getTimeNowFunc: func() time.Time {
+					return time.Now().UTC()
+				},
+				getGroupConfigsFunc: func() pkgnfschecker.Configs {
+					return pkgnfschecker.Configs{}
+				},
 				getExt4PartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
 					return disk.Partitions{
 						{
@@ -831,6 +909,12 @@ func TestMountTargetUsagesInitialization(t *testing.T) {
 		ctx:                 ctx,
 		cancel:              cancel,
 		statWithTimeoutFunc: pkgfile.StatWithTimeout,
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
+		getGroupConfigsFunc: func() pkgnfschecker.Configs {
+			return pkgnfschecker.Configs{}
+		},
 		findMntFunc: func(ctx context.Context, target string) (*disk.FindMntOutput, error) {
 			return &disk.FindMntOutput{
 				Filesystems: []disk.FoundMnt{
@@ -903,6 +987,12 @@ func TestFindMntLogging(t *testing.T) {
 		ctx:                 ctx,
 		cancel:              cancel,
 		statWithTimeoutFunc: pkgfile.StatWithTimeout,
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
+		getGroupConfigsFunc: func() pkgnfschecker.Configs {
+			return pkgnfschecker.Configs{}
+		},
 		findMntFunc: func(ctx context.Context, target string) (*disk.FindMntOutput, error) {
 			callCount++
 			if callCount == 1 {
@@ -981,6 +1071,13 @@ func TestNFSPartitionsRetrieval(t *testing.T) {
 		c := createTestComponent(ctx, []string{"/mnt/nfs"}, []string{})
 		defer c.Close()
 
+		// Provide non-empty configs to enable NFS checking
+		c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+			return pkgnfschecker.Configs{
+				{VolumePath: "/mnt/nfs"},
+			}
+		}
+
 		c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
 			return disk.BlockDevices{mockDevice}, nil
 		}
@@ -1027,7 +1124,45 @@ func TestNFSPartitionsRetrieval(t *testing.T) {
 
 		assert.NotNil(t, lastCheckResult)
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, lastCheckResult.health)
-		assert.Equal(t, "no ext4/nfs partition found", lastCheckResult.reason)
+		assert.Equal(t, "ok", lastCheckResult.reason)
+	})
+
+	t.Run("skip NFS partitions when no configs", func(t *testing.T) {
+		c := createTestComponent(ctx, []string{}, []string{})
+		defer c.Close()
+
+		// Ensure configs are empty (this is default, but explicit for clarity)
+		c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+			return pkgnfschecker.Configs{}
+		}
+
+		// Track if getNFSPartitionsFunc was called
+		nfsPartitionsCalled := false
+		c.getNFSPartitionsFunc = func(ctx context.Context) (disk.Partitions, error) {
+			nfsPartitionsCalled = true
+			return disk.Partitions{mockNFSPartition}, nil
+		}
+
+		c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
+			return disk.BlockDevices{mockDevice}, nil
+		}
+		c.getExt4PartitionsFunc = func(ctx context.Context) (disk.Partitions, error) {
+			return disk.Partitions{}, nil
+		}
+
+		c.Check()
+
+		// Verify getNFSPartitionsFunc was NOT called
+		assert.False(t, nfsPartitionsCalled, "getNFSPartitionsFunc should not be called when configs are empty")
+
+		c.lastMu.RLock()
+		lastCheckResult := c.lastCheckResult
+		c.lastMu.RUnlock()
+
+		assert.NotNil(t, lastCheckResult)
+		assert.Equal(t, apiv1.HealthStateTypeHealthy, lastCheckResult.health)
+		assert.Equal(t, "ok", lastCheckResult.reason)
+		assert.Empty(t, lastCheckResult.NFSPartitions, "NFSPartitions should be empty when configs are empty")
 	})
 }
 
@@ -1054,6 +1189,13 @@ func TestNFSPartitionsErrorRetry(t *testing.T) {
 	t.Run("retry on NFS partition error", func(t *testing.T) {
 		c := createTestComponent(ctx, []string{"/mnt/nfs"}, []string{})
 		defer c.Close()
+
+		// Provide non-empty configs to enable NFS checking
+		c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+			return pkgnfschecker.Configs{
+				{VolumePath: "/mnt/nfs"},
+			}
+		}
 
 		c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
 			return disk.BlockDevices{mockDevice}, nil
@@ -1083,65 +1225,6 @@ func TestNFSPartitionsErrorRetry(t *testing.T) {
 		assert.Equal(t, 2, callCount)
 		assert.Len(t, lastCheckResult.NFSPartitions, 1)
 	})
-
-	t.Run("context cancellation during NFS partitions", func(t *testing.T) {
-		ctxWithCancel, ctxCancel := context.WithCancel(context.Background())
-		c := createTestComponent(ctxWithCancel, []string{"/mnt/nfs"}, []string{})
-		defer c.Close()
-
-		c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
-			return disk.BlockDevices{mockDevice}, nil
-		}
-		c.getExt4PartitionsFunc = func(ctx context.Context) (disk.Partitions, error) {
-			return disk.Partitions{}, nil
-		}
-
-		// Use a channel to ensure proper ordering
-		cancelChan := make(chan struct{})
-		callCount := 0
-		c.getNFSPartitionsFunc = func(ctx context.Context) (disk.Partitions, error) {
-			callCount++
-			// On first call, signal to cancel context
-			if callCount == 1 {
-				close(cancelChan)
-				// Give time for context cancellation to propagate
-				// Use a longer sleep on slow CI machines
-				time.Sleep(50 * time.Millisecond)
-			}
-			// Always return an error to trigger retry logic
-			return nil, assert.AnError
-		}
-
-		// Cancel context after first getNFSPartitionsFunc call
-		go func() {
-			<-cancelChan
-			ctxCancel()
-		}()
-
-		checkDone := make(chan struct{})
-		go func() {
-			c.Check()
-			close(checkDone)
-		}()
-		select {
-		case <-checkDone:
-		case <-time.After(2 * time.Second):
-			assert.Fail(t, "Check() did not complete within timeout")
-		}
-
-		// Ensure getNFSPartitionsFunc was called at least once
-		assert.Greater(t, callCount, 0, "getNFSPartitionsFunc should have been called at least once")
-
-		c.lastMu.RLock()
-		lastCheckResult := c.lastCheckResult
-		c.lastMu.RUnlock()
-
-		assert.NotNil(t, lastCheckResult)
-		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, lastCheckResult.health)
-		if assert.NotNil(t, lastCheckResult.err) {
-			assert.Contains(t, lastCheckResult.err.Error(), "context canceled")
-		}
-	})
 }
 
 // TestNFSMetricsTracking tests metrics tracking for NFS mount points
@@ -1160,6 +1243,13 @@ func TestNFSMetricsTracking(t *testing.T) {
 
 	c := createTestComponent(ctx, []string{"/mnt/nfs"}, []string{})
 	defer c.Close()
+
+	// Provide non-empty configs to enable NFS checking
+	c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+		return pkgnfschecker.Configs{
+			{VolumePath: "/mnt/nfs"},
+		}
+	}
 
 	c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
 		return disk.BlockDevices{
@@ -1224,6 +1314,13 @@ func TestCombinedPartitions(t *testing.T) {
 	c := createTestComponent(ctx, []string{"/mnt/data1", "/mnt/nfs"}, []string{})
 	defer c.Close()
 
+	// Provide non-empty configs to enable NFS checking
+	c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+		return pkgnfschecker.Configs{
+			{VolumePath: "/mnt/nfs"},
+		}
+	}
+
 	c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
 		return disk.BlockDevices{mockDevice}, nil
 	}
@@ -1269,6 +1366,13 @@ func TestDeviceUsagesWithNFS(t *testing.T) {
 
 	c := createTestComponent(ctx, []string{"/mnt/nfs"}, []string{})
 	defer c.Close()
+
+	// Provide non-empty configs to enable NFS checking
+	c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+		return pkgnfschecker.Configs{
+			{VolumePath: "/mnt/nfs"},
+		}
+	}
 
 	c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
 		return disk.BlockDevices{mockDevice}, nil
@@ -1727,8 +1831,14 @@ func TestComponentClose_EventHandling(t *testing.T) {
 			ctx:                 cctx,
 			cancel:              ccancel,
 			statWithTimeoutFunc: pkgfile.StatWithTimeout,
-			eventBucket:         mockBucket,
-			kmsgSyncer:          nil, // Changed from &kmsg.Syncer{} to nil to avoid panic
+			getTimeNowFunc: func() time.Time {
+				return time.Now().UTC()
+			},
+			getGroupConfigsFunc: func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{}
+			},
+			eventBucket: mockBucket,
+			kmsgSyncer:  nil, // Changed from &kmsg.Syncer{} to nil to avoid panic
 		}
 
 		err := c.Close()
@@ -1747,17 +1857,20 @@ func TestComponentClose_EventHandling(t *testing.T) {
 			ctx:                 cctx,
 			cancel:              ccancel,
 			statWithTimeoutFunc: pkgfile.StatWithTimeout,
-			eventBucket:         nil,
-			kmsgSyncer:          nil, // Changed from &kmsg.Syncer{} to nil to avoid panic
+			getTimeNowFunc: func() time.Time {
+				return time.Now().UTC()
+			},
+			getGroupConfigsFunc: func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{}
+			},
+			eventBucket: nil,
+			kmsgSyncer:  nil, // Changed from &kmsg.Syncer{} to nil to avoid panic
 		}
 
 		err := c.Close()
 		assert.NoError(t, err)
 		// No eventBucket.Close() should be called. kmsgSyncer.Close() path also not taken.
 	})
-
-	// The subtest "closeWithBothEventBucketAndKmsgSyncerNil" is identical to the one above.
-	// It can be removed for consolidation.
 }
 
 // TestComponent_StatTimedOut_SetsHealthDegraded tests that the component health state is set to degraded when StatTimedOut=true
@@ -1781,6 +1894,16 @@ func TestComponent_StatTimedOut_SetsHealthDegraded(t *testing.T) {
 	c := createTestComponent(ctx, []string{"/mnt/nfs"}, []string{})
 	defer c.Close()
 
+	// Provide non-empty NFS configs to ensure NFS partitions are checked
+	c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+		return pkgnfschecker.Configs{
+			{
+				VolumePath:   "/mnt/nfs",
+				DirName:      ".gpud-nfs-checker",
+				FileContents: "test",
+			},
+		}
+	}
 	c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
 		return disk.BlockDevices{mockDevice}, nil
 	}
@@ -1799,7 +1922,7 @@ func TestComponent_StatTimedOut_SetsHealthDegraded(t *testing.T) {
 
 	assert.NotNil(t, lastCheckResult)
 	assert.Equal(t, apiv1.HealthStateTypeDegraded, lastCheckResult.health)
-	assert.Contains(t, lastCheckResult.reason, "not mounted and stat timed out")
+	assert.Contains(t, lastCheckResult.reason, "stat timed out (possible connection issue)")
 	assert.Contains(t, lastCheckResult.reason, "/mnt/nfs")
 	assert.Len(t, lastCheckResult.NFSPartitions, 1)
 	assert.True(t, lastCheckResult.NFSPartitions[0].StatTimedOut)
@@ -1839,6 +1962,21 @@ func TestComponent_StatTimedOut_MultiplePartitions(t *testing.T) {
 	c := createTestComponent(ctx, []string{"/mnt/nfs1", "/mnt/nfs2"}, []string{})
 	defer c.Close()
 
+	// Provide non-empty NFS configs to ensure NFS partitions are checked
+	c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+		return pkgnfschecker.Configs{
+			{
+				VolumePath:   "/mnt/nfs1",
+				DirName:      ".gpud-nfs-checker",
+				FileContents: "test",
+			},
+			{
+				VolumePath:   "/mnt/nfs2",
+				DirName:      ".gpud-nfs-checker",
+				FileContents: "test",
+			},
+		}
+	}
 	c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
 		return disk.BlockDevices{mockDevice}, nil
 	}
@@ -1857,7 +1995,7 @@ func TestComponent_StatTimedOut_MultiplePartitions(t *testing.T) {
 
 	assert.NotNil(t, lastCheckResult)
 	assert.Equal(t, apiv1.HealthStateTypeDegraded, lastCheckResult.health)
-	assert.Contains(t, lastCheckResult.reason, "not mounted and stat timed out")
+	assert.Contains(t, lastCheckResult.reason, "stat timed out (possible connection issue)")
 	assert.Contains(t, lastCheckResult.reason, "/mnt/nfs2")
 	assert.Len(t, lastCheckResult.NFSPartitions, 2)
 
@@ -1902,6 +2040,16 @@ func TestComponent_StatTimedOut_False_HealthyState(t *testing.T) {
 	c := createTestComponent(ctx, []string{"/mnt/nfs"}, []string{})
 	defer c.Close()
 
+	// Provide non-empty NFS configs to ensure NFS partitions are checked
+	c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+		return pkgnfschecker.Configs{
+			{
+				VolumePath:   "/mnt/nfs",
+				DirName:      ".gpud-nfs-checker",
+				FileContents: "test",
+			},
+		}
+	}
 	c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
 		return disk.BlockDevices{mockDevice}, nil
 	}
@@ -1960,6 +2108,16 @@ func TestComponent_StatTimedOut_ExtPartitionsIgnored(t *testing.T) {
 	c := createTestComponent(ctx, []string{"/mnt/ext4", "/mnt/nfs"}, []string{})
 	defer c.Close()
 
+	// Provide non-empty NFS configs to ensure NFS partitions are checked
+	c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+		return pkgnfschecker.Configs{
+			{
+				VolumePath:   "/mnt/nfs",
+				DirName:      ".gpud-nfs-checker",
+				FileContents: "test",
+			},
+		}
+	}
 	c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
 		return disk.BlockDevices{mockDevice}, nil
 	}
@@ -2002,17 +2160,17 @@ func TestComponent_StatTimedOut_ReasonMessage(t *testing.T) {
 		{
 			name:        "short mount point",
 			mountPoint:  "/mnt/nfs",
-			expectedMsg: "/mnt/nfs not mounted and stat timed out",
+			expectedMsg: "/mnt/nfs stat timed out (possible connection issue)",
 		},
 		{
 			name:        "long mount point",
 			mountPoint:  "/mnt/very/long/path/to/nfs/mount",
-			expectedMsg: "/mnt/very/long/path/to/nfs/mount not mounted and stat timed out",
+			expectedMsg: "/mnt/very/long/path/to/nfs/mount stat timed out (possible connection issue)",
 		},
 		{
 			name:        "root mount point",
 			mountPoint:  "/",
-			expectedMsg: "/ not mounted and stat timed out",
+			expectedMsg: "/ stat timed out (possible connection issue)",
 		},
 	}
 
@@ -2030,6 +2188,16 @@ func TestComponent_StatTimedOut_ReasonMessage(t *testing.T) {
 			c := createTestComponent(ctx, []string{tt.mountPoint}, []string{})
 			defer c.Close()
 
+			// Provide non-empty NFS configs to ensure NFS partitions are checked
+			c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{
+					{
+						VolumePath:   tt.mountPoint,
+						DirName:      ".gpud-nfs-checker",
+						FileContents: "test",
+					},
+				}
+			}
 			c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
 				return disk.BlockDevices{mockDevice}, nil
 			}
@@ -2154,6 +2322,17 @@ func TestComponent_TimeoutScenarios_CompleteFlow(t *testing.T) {
 			c := createTestComponent(ctx, []string{}, []string{"/mnt/nfs-test"})
 			defer c.Close()
 
+			// Provide non-empty NFS configs to ensure NFS partitions are checked
+			c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{
+					{
+						VolumePath:   "/mnt/nfs-test",
+						DirName:      ".gpud-nfs-checker",
+						FileContents: "test",
+					},
+				}
+			}
+
 			// Mock functions to simulate the timeout scenario
 			c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
 				return disk.BlockDevices{
@@ -2205,7 +2384,7 @@ func TestComponent_TimeoutScenarios_CompleteFlow(t *testing.T) {
 				assert.True(t, nfsPartition.StatTimedOut, "StatTimedOut should be true for scenario: %s", scenario.description)
 				assert.False(t, nfsPartition.Mounted, "Mounted should be false when StatTimedOut is true")
 				assert.Equal(t, apiv1.HealthStateTypeDegraded, cr.health, "Health should be degraded when StatTimedOut is true")
-				assert.Contains(t, cr.reason, "not mounted and stat timed out", "Reason should mention timeout")
+				assert.Contains(t, cr.reason, "stat timed out (possible connection issue)", "Reason should mention timeout")
 				assert.Contains(t, cr.reason, "/mnt/nfs-test", "Reason should mention the mount point")
 			} else {
 				// Verify normal operation
@@ -2248,7 +2427,7 @@ func TestComponent_MountTargetTimeoutHandling(t *testing.T) {
 	// The mount target doesn't exist, so StatWithTimeout should return an error
 	// The component should handle this gracefully and continue (not set health to unhealthy)
 	assert.Equal(t, apiv1.HealthStateTypeHealthy, cr.health, "Health should remain healthy even when mount target stat fails")
-	assert.Equal(t, "no ext4/nfs partition found", cr.reason, "Should indicate no partitions found")
+	assert.Equal(t, "ok", cr.reason, "Should return ok even when mount target stat fails")
 }
 
 // TestComponent_GetPartitionsTimeoutIntegration tests integration with GetPartitions timeout behavior
@@ -2304,6 +2483,90 @@ func TestComponent_GetPartitionsTimeoutIntegration(t *testing.T) {
 	}
 }
 
+// TestComponent_LookbackPeriodUsage tests that the lookback period is used for getting recent events
+func TestComponent_LookbackPeriodUsage(t *testing.T) {
+	ctx := context.Background()
+
+	// Create mock event store and bucket
+	mockEventStore := new(mockEventStore)
+	mockBucket := new(mockEventBucket)
+	mockEventStore.On("Bucket", Name).Return(mockBucket, nil)
+	mockBucket.On("Close").Return()
+
+	// Mock reboot event store (using existing implementation from component_suggested_actions_test.go)
+	mockRebootStore := &mockRebootEventStore{
+		events: eventstore.Events{}, // Empty events for this test
+		err:    nil,
+	}
+
+	// Custom lookback period for testing
+	customLookbackPeriod := 6 * time.Hour
+
+	// Create GPUd instance with mock event store
+	gpudInstance := &components.GPUdInstance{
+		RootCtx:          ctx,
+		EventStore:       mockEventStore,
+		RebootEventStore: mockRebootStore,
+		MountPoints:      []string{},
+		MountTargets:     []string{},
+	}
+
+	comp, err := New(gpudInstance)
+	require.NoError(t, err)
+	defer comp.Close()
+
+	// Get the component and set custom lookback period
+	c := comp.(*component)
+	c.lookbackPeriod = customLookbackPeriod
+
+	// Verify that both eventBucket and rebootEventStore are set
+	assert.NotNil(t, c.eventBucket, "eventBucket should be set")
+	assert.NotNil(t, c.rebootEventStore, "rebootEventStore should be set")
+
+	// Set up mock functions
+	c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
+		return disk.BlockDevices{{Name: "sda", Type: "disk"}}, nil
+	}
+	c.getExt4PartitionsFunc = func(ctx context.Context) (disk.Partitions, error) {
+		return disk.Partitions{
+			{
+				Device:     "/dev/sda1",
+				MountPoint: "/",
+				Usage: &disk.Usage{
+					TotalBytes: 1000,
+					FreeBytes:  500,
+					UsedBytes:  500,
+				},
+			},
+		}, nil
+	}
+	c.getNFSPartitionsFunc = func(ctx context.Context) (disk.Partitions, error) {
+		return disk.Partitions{}, nil
+	}
+
+	// Capture the time parameter passed to Get()
+	var capturedSinceTime time.Time
+	mockBucket.On("Get", mock.Anything, mock.MatchedBy(func(since time.Time) bool {
+		capturedSinceTime = since
+		return true
+	})).Return(eventstore.Events{}, nil)
+
+	// Run Check
+	result := c.Check()
+	cr, ok := result.(*checkResult)
+	require.True(t, ok)
+
+	// Verify that Get was called with the correct lookback period
+	expectedSinceTime := cr.ts.Add(-customLookbackPeriod)
+	timeDiff := capturedSinceTime.Sub(expectedSinceTime)
+	if timeDiff < 0 {
+		timeDiff = -timeDiff
+	}
+	assert.Less(t, timeDiff, time.Second, "Get should be called with lookback period time")
+
+	mockBucket.AssertCalled(t, "Get", mock.Anything, mock.Anything)
+}
+
 // TestComponent_ContextErrorTypes verifies different context error types are handled correctly
 func TestComponent_ContextErrorTypes(t *testing.T) {
 	t.Parallel()
@@ -2338,6 +2601,17 @@ func TestComponent_ContextErrorTypes(t *testing.T) {
 
 			c := createTestComponent(ctx, []string{}, []string{})
 			defer c.Close()
+
+			// Provide non-empty NFS configs to ensure NFS partitions are checked
+			c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{
+					{
+						VolumePath:   "/mnt/test-nfs",
+						DirName:      ".gpud-nfs-checker",
+						FileContents: "test",
+					},
+				}
+			}
 
 			c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
 				return disk.BlockDevices{
@@ -2426,8 +2700,886 @@ func TestComponent_StatWithTimeoutDeadlineExceeded(t *testing.T) {
 	// Verify that component remains healthy despite timeout
 	// (the timeout is logged but doesn't affect overall health)
 	assert.Equal(t, apiv1.HealthStateTypeHealthy, cr.health)
-	assert.Equal(t, "no ext4/nfs partition found", cr.reason)
+	assert.Equal(t, "ok", cr.reason)
 
 	// Verify that MountTargetUsages is empty/nil due to the timeout
 	assert.Nil(t, cr.MountTargetUsages)
+}
+
+// TestComponentWithMountPointFiltering tests that the component properly filters mount points
+func TestComponentWithMountPointFiltering(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("filters provider-specific mount points", func(t *testing.T) {
+		gpudInstance := &components.GPUdInstance{
+			RootCtx: ctx,
+		}
+
+		c, err := New(gpudInstance)
+		require.NoError(t, err)
+		defer c.Close()
+
+		component, ok := c.(*component)
+		require.True(t, ok)
+
+		// Verify partition functions are initialized with mount point filtering
+		assert.NotNil(t, component.getExt4PartitionsFunc)
+		assert.NotNil(t, component.getNFSPartitionsFunc)
+
+		// If running on Linux, also check block devices func
+		if runtime.GOOS == "linux" {
+			assert.NotNil(t, component.getBlockDevicesFunc)
+		}
+	})
+
+	t.Run("check filters empty and provider-specific mount points", func(t *testing.T) {
+		// Create mock partitions with various mount points
+		mockExt4Partitions := disk.Partitions{
+			{
+				Device:     "/dev/sda1",
+				MountPoint: "/",
+				Fstype:     "ext4",
+				Mounted:    true,
+			},
+			{
+				Device:     "/dev/sda2",
+				MountPoint: "/home",
+				Fstype:     "ext4",
+				Mounted:    true,
+			},
+		}
+
+		mockNFSPartitions := disk.Partitions{
+			{
+				Device:     "server:/data",
+				MountPoint: "/mnt/nfs",
+				Fstype:     "nfs4",
+				Mounted:    true,
+			},
+		}
+
+		mockDevice := disk.BlockDevice{
+			Name: "sda",
+			Type: "disk",
+		}
+
+		c := createTestComponent(ctx, []string{"/"}, []string{})
+		defer c.Close()
+
+		// Provide non-empty NFS configs to ensure NFS partitions are checked
+		c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+			return pkgnfschecker.Configs{
+				{
+					VolumePath:   "/mnt/nfs",
+					DirName:      ".gpud-nfs-checker",
+					FileContents: "test",
+				},
+			}
+		}
+		// Override the partition functions to return our mock data
+		c.getExt4PartitionsFunc = func(ctx context.Context) (disk.Partitions, error) {
+			return mockExt4Partitions, nil
+		}
+		c.getNFSPartitionsFunc = func(ctx context.Context) (disk.Partitions, error) {
+			return mockNFSPartitions, nil
+		}
+		c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
+			return disk.BlockDevices{mockDevice}, nil
+		}
+
+		// Run check
+		c.Check()
+
+		c.lastMu.RLock()
+		lastCheckResult := c.lastCheckResult
+		c.lastMu.RUnlock()
+
+		// Verify results - should include all partitions (filtering happens at the disk package level)
+		assert.NotNil(t, lastCheckResult)
+		assert.Equal(t, apiv1.HealthStateTypeHealthy, lastCheckResult.health)
+		assert.Len(t, lastCheckResult.ExtPartitions, 2)
+		assert.Len(t, lastCheckResult.NFSPartitions, 1)
+
+		// Verify none have empty mount points (as they would be filtered by the disk package)
+		for _, p := range lastCheckResult.ExtPartitions {
+			assert.NotEmpty(t, p.MountPoint)
+		}
+		for _, p := range lastCheckResult.NFSPartitions {
+			assert.NotEmpty(t, p.MountPoint)
+		}
+	})
+}
+
+// TestComponent_SuperblockWriteErrorDetection tests detection and health evaluation of superblock write errors
+func TestComponent_SuperblockWriteErrorDetection(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	now := time.Now()
+
+	t.Run("single superblock write error makes component unhealthy", func(t *testing.T) {
+		// Create a test event store
+		eventBucket := &simpleMockEventBucket{}
+
+		// Insert a superblock write error event
+		err := eventBucket.Insert(ctx, eventstore.Event{
+			Component: Name,
+			Time:      now.Add(-30 * time.Minute),
+			Name:      eventSuperblockWriteError,
+			Type:      string(apiv1.EventTypeWarning),
+			Message:   "I/O error while writing superblock",
+		})
+		require.NoError(t, err)
+
+		// Create mock reboot event store
+		mockRebootStore := &mockRebootEventStore{
+			events: eventstore.Events{}, // No reboots
+		}
+
+		// Create component
+		c := &component{
+			ctx:              ctx,
+			rebootEventStore: mockRebootStore,
+			eventBucket:      eventBucket,
+			lookbackPeriod:   time.Hour,
+			getTimeNowFunc: func() time.Time {
+				return now
+			},
+			getGroupConfigsFunc: func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{}
+			},
+			getBlockDevicesFunc: func(ctx context.Context) (disk.BlockDevices, error) {
+				return disk.BlockDevices{{Name: "sda", Type: "disk"}}, nil
+			},
+			getExt4PartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{
+					{
+						Device:     "/dev/sda1",
+						MountPoint: "/",
+						Usage: &disk.Usage{
+							TotalBytes: 1000,
+							FreeBytes:  500,
+							UsedBytes:  500,
+						},
+					},
+				}, nil
+			},
+			getNFSPartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{}, nil
+			},
+		}
+
+		// Run check
+		result := c.Check()
+		cr, ok := result.(*checkResult)
+		require.True(t, ok)
+
+		// Should detect superblock write error and be unhealthy
+		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, cr.health)
+		assert.Equal(t, "I/O error while writing superblock", cr.reason)
+
+		// Should suggest reboot since no previous reboots
+		assert.NotNil(t, cr.suggestedActions)
+		assert.Len(t, cr.suggestedActions.RepairActions, 1)
+		assert.Equal(t, apiv1.RepairActionTypeRebootSystem, cr.suggestedActions.RepairActions[0])
+	})
+
+	t.Run("multiple superblock write error events", func(t *testing.T) {
+		// Create a test event store
+		eventBucket := &simpleMockEventBucket{}
+
+		// Insert multiple superblock write error events
+		events := []time.Time{
+			now.Add(-60 * time.Minute),
+			now.Add(-45 * time.Minute),
+			now.Add(-30 * time.Minute),
+		}
+
+		for _, eventTime := range events {
+			err := eventBucket.Insert(ctx, eventstore.Event{
+				Component: Name,
+				Time:      eventTime,
+				Name:      eventSuperblockWriteError,
+				Type:      string(apiv1.EventTypeWarning),
+				Message:   "I/O error while writing superblock",
+			})
+			require.NoError(t, err)
+		}
+
+		// Create mock reboot event store with one reboot before failures
+		mockRebootStore := &mockRebootEventStore{
+			events: eventstore.Events{
+				{
+					Time:    now.Add(-90 * time.Minute), // Reboot before failures
+					Name:    "reboot",
+					Type:    string(apiv1.EventTypeWarning),
+					Message: "system reboot detected",
+				},
+			},
+		}
+
+		// Create component
+		c := &component{
+			ctx:              ctx,
+			rebootEventStore: mockRebootStore,
+			eventBucket:      eventBucket,
+			lookbackPeriod:   2 * time.Hour,
+			getTimeNowFunc: func() time.Time {
+				return now
+			},
+			getGroupConfigsFunc: func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{}
+			},
+			getBlockDevicesFunc: func(ctx context.Context) (disk.BlockDevices, error) {
+				return disk.BlockDevices{{Name: "sda", Type: "disk"}}, nil
+			},
+			getExt4PartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{
+					{
+						Device:     "/dev/sda1",
+						MountPoint: "/",
+						Usage: &disk.Usage{
+							TotalBytes: 1000,
+							FreeBytes:  500,
+							UsedBytes:  500,
+						},
+					},
+				}, nil
+			},
+			getNFSPartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{}, nil
+			},
+		}
+
+		// Run check
+		result := c.Check()
+		cr, ok := result.(*checkResult)
+		require.True(t, ok)
+
+		// Should detect superblock write errors and be unhealthy
+		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, cr.health)
+		assert.Equal(t, "I/O error while writing superblock", cr.reason)
+
+		// Should suggest reboot since multiple failures after one reboot doesn't meet threshold
+		assert.NotNil(t, cr.suggestedActions)
+		assert.Len(t, cr.suggestedActions.RepairActions, 1)
+		assert.Equal(t, apiv1.RepairActionTypeRebootSystem, cr.suggestedActions.RepairActions[0])
+	})
+
+	t.Run("superblock write errors resolved after reboot", func(t *testing.T) {
+		// Create a test event store
+		eventBucket := &simpleMockEventBucket{}
+
+		// Insert superblock write error before reboot
+		err := eventBucket.Insert(ctx, eventstore.Event{
+			Component: Name,
+			Time:      now.Add(-60 * time.Minute), // Before reboot
+			Name:      eventSuperblockWriteError,
+			Type:      string(apiv1.EventTypeWarning),
+			Message:   "I/O error while writing superblock",
+		})
+		require.NoError(t, err)
+
+		// Create mock reboot event store with reboot after failure
+		mockRebootStore := &mockRebootEventStore{
+			events: eventstore.Events{
+				{
+					Time:    now.Add(-30 * time.Minute), // Reboot after failure
+					Name:    "reboot",
+					Type:    string(apiv1.EventTypeWarning),
+					Message: "system reboot detected",
+				},
+			},
+		}
+
+		// Create component
+		c := &component{
+			ctx:              ctx,
+			rebootEventStore: mockRebootStore,
+			eventBucket:      eventBucket,
+			lookbackPeriod:   2 * time.Hour,
+			getTimeNowFunc: func() time.Time {
+				return now
+			},
+			getGroupConfigsFunc: func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{}
+			},
+			getBlockDevicesFunc: func(ctx context.Context) (disk.BlockDevices, error) {
+				return disk.BlockDevices{{Name: "sda", Type: "disk"}}, nil
+			},
+			getExt4PartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{
+					{
+						Device:     "/dev/sda1",
+						MountPoint: "/",
+						Usage: &disk.Usage{
+							TotalBytes: 1000,
+							FreeBytes:  500,
+							UsedBytes:  500,
+						},
+					},
+				}, nil
+			},
+			getNFSPartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{}, nil
+			},
+		}
+
+		// Run check
+		result := c.Check()
+		cr, ok := result.(*checkResult)
+		require.True(t, ok)
+
+		// Should be healthy since reboot resolved the issue
+		assert.Equal(t, apiv1.HealthStateTypeHealthy, cr.health)
+		assert.Equal(t, "ok", cr.reason)
+		assert.Nil(t, cr.suggestedActions)
+	})
+}
+
+// TestComponent_SuperblockWriteErrorWithMixedEventTypes tests superblock write errors with other error types
+func TestComponent_SuperblockWriteErrorWithMixedEventTypes(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	now := time.Now()
+
+	t.Run("superblock write error with buffer I/O error", func(t *testing.T) {
+		// Create a test event store
+		eventBucket := &simpleMockEventBucket{}
+
+		// Insert superblock write error events
+		err := eventBucket.Insert(ctx, eventstore.Event{
+			Component: Name,
+			Time:      now.Add(-30 * time.Minute),
+			Name:      eventSuperblockWriteError,
+			Type:      string(apiv1.EventTypeWarning),
+			Message:   "I/O error while writing superblock",
+		})
+		require.NoError(t, err)
+
+		// Insert buffer I/O error as well
+		err = eventBucket.Insert(ctx, eventstore.Event{
+			Component: Name,
+			Time:      now.Add(-25 * time.Minute),
+			Name:      eventBufferIOError,
+			Type:      string(apiv1.EventTypeWarning),
+			Message:   "Buffer I/O error detected on device",
+		})
+		require.NoError(t, err)
+
+		// Create mock reboot event store
+		mockRebootStore := &mockRebootEventStore{
+			events: eventstore.Events{}, // No reboots
+		}
+
+		// Create component
+		c := &component{
+			ctx:              ctx,
+			rebootEventStore: mockRebootStore,
+			eventBucket:      eventBucket,
+			lookbackPeriod:   time.Hour,
+			getTimeNowFunc: func() time.Time {
+				return now
+			},
+			getGroupConfigsFunc: func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{}
+			},
+			getBlockDevicesFunc: func(ctx context.Context) (disk.BlockDevices, error) {
+				return disk.BlockDevices{{Name: "sda", Type: "disk"}}, nil
+			},
+			getExt4PartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{
+					{
+						Device:     "/dev/sda1",
+						MountPoint: "/",
+						Usage: &disk.Usage{
+							TotalBytes: 1000,
+							FreeBytes:  500,
+							UsedBytes:  500,
+						},
+					},
+				}, nil
+			},
+			getNFSPartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{}, nil
+			},
+		}
+
+		// Run check
+		result := c.Check()
+		cr, ok := result.(*checkResult)
+		require.True(t, ok)
+
+		// Should be unhealthy with both error types in reason
+		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, cr.health)
+		assert.Contains(t, cr.reason, "I/O error while writing superblock")
+		assert.Contains(t, cr.reason, "Buffer I/O error detected on device")
+
+		// Should suggest reboot since no previous reboots
+		assert.NotNil(t, cr.suggestedActions)
+		assert.Len(t, cr.suggestedActions.RepairActions, 1)
+		assert.Equal(t, apiv1.RepairActionTypeRebootSystem, cr.suggestedActions.RepairActions[0])
+	})
+
+	t.Run("multiple error types sorted lexicographically", func(t *testing.T) {
+		// Create a test event store
+		eventBucket := &simpleMockEventBucket{}
+
+		// Insert various error types including superblock write error
+		events := []struct {
+			name    string
+			message string
+		}{
+			{eventSuperblockWriteError, "I/O error while writing superblock"},
+			{eventBufferIOError, "Buffer I/O error detected on device"},
+			{eventFilesystemReadOnly, "Filesystem remounted read-only"},
+			{eventNVMePathFailure, "NVMe path failure detected"},
+		}
+
+		for i, evt := range events {
+			err := eventBucket.Insert(ctx, eventstore.Event{
+				Component: Name,
+				Time:      now.Add(-time.Duration(10*(i+1)) * time.Minute),
+				Name:      evt.name,
+				Type:      string(apiv1.EventTypeWarning),
+				Message:   evt.message,
+			})
+			require.NoError(t, err)
+		}
+
+		// Create mock reboot event store
+		mockRebootStore := &mockRebootEventStore{
+			events: eventstore.Events{}, // No reboots
+		}
+
+		// Create component
+		c := &component{
+			ctx:              ctx,
+			rebootEventStore: mockRebootStore,
+			eventBucket:      eventBucket,
+			lookbackPeriod:   time.Hour,
+			getTimeNowFunc: func() time.Time {
+				return now
+			},
+			getGroupConfigsFunc: func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{}
+			},
+			getBlockDevicesFunc: func(ctx context.Context) (disk.BlockDevices, error) {
+				return disk.BlockDevices{{Name: "sda", Type: "disk"}}, nil
+			},
+			getExt4PartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{
+					{
+						Device:     "/dev/sda1",
+						MountPoint: "/",
+						Usage: &disk.Usage{
+							TotalBytes: 1000,
+							FreeBytes:  500,
+							UsedBytes:  500,
+						},
+					},
+				}, nil
+			},
+			getNFSPartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{}, nil
+			},
+		}
+
+		// Run check
+		result := c.Check()
+		cr, ok := result.(*checkResult)
+		require.True(t, ok)
+
+		// Should be unhealthy
+		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, cr.health)
+
+		// Verify reasons are sorted lexicographically
+		expectedReason := "Buffer I/O error detected on device, I/O error while writing superblock, NVMe device has no available path, I/O failing, filesystem remounted as read-only due to errors"
+		assert.Equal(t, expectedReason, cr.reason)
+
+		// Should suggest reboot since no previous reboots for multiple error types
+		assert.NotNil(t, cr.suggestedActions)
+		assert.Len(t, cr.suggestedActions.RepairActions, 1)
+		assert.Equal(t, apiv1.RepairActionTypeRebootSystem, cr.suggestedActions.RepairActions[0])
+	})
+}
+
+// TestComponent_SuperblockWriteErrorSuggestedActions tests suggested actions logic specifically for superblock write errors
+func TestComponent_SuperblockWriteErrorSuggestedActions(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	now := time.Now()
+
+	t.Run("persistent superblock write errors trigger HW inspection", func(t *testing.T) {
+		// Create a test event store
+		eventBucket := &simpleMockEventBucket{}
+
+		// Insert superblock write error events that persist after reboots
+		err := eventBucket.Insert(ctx, eventstore.Event{
+			Component: Name,
+			Time:      now.Add(-4 * time.Hour), // First failure
+			Name:      eventSuperblockWriteError,
+			Type:      string(apiv1.EventTypeWarning),
+			Message:   "I/O error while writing superblock",
+		})
+		require.NoError(t, err)
+
+		err = eventBucket.Insert(ctx, eventstore.Event{
+			Component: Name,
+			Time:      now.Add(-1 * time.Hour), // Second failure after reboot
+			Name:      eventSuperblockWriteError,
+			Type:      string(apiv1.EventTypeWarning),
+			Message:   "I/O error while writing superblock",
+		})
+		require.NoError(t, err)
+
+		// Create mock reboot event store with two reboots
+		mockRebootStore := &mockRebootEventStore{
+			events: eventstore.Events{
+				{
+					Time:    now.Add(-5 * time.Hour), // First reboot
+					Name:    "reboot",
+					Type:    string(apiv1.EventTypeWarning),
+					Message: "system reboot detected",
+				},
+				{
+					Time:    now.Add(-2 * time.Hour), // Second reboot after first failure
+					Name:    "reboot",
+					Type:    string(apiv1.EventTypeWarning),
+					Message: "system reboot detected",
+				},
+			},
+		}
+
+		// Create component
+		c := &component{
+			ctx:              ctx,
+			rebootEventStore: mockRebootStore,
+			eventBucket:      eventBucket,
+			lookbackPeriod:   6 * time.Hour,
+			getTimeNowFunc: func() time.Time {
+				return now
+			},
+			getGroupConfigsFunc: func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{}
+			},
+			getBlockDevicesFunc: func(ctx context.Context) (disk.BlockDevices, error) {
+				return disk.BlockDevices{{Name: "sda", Type: "disk"}}, nil
+			},
+			getExt4PartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{
+					{
+						Device:     "/dev/sda1",
+						MountPoint: "/",
+						Usage: &disk.Usage{
+							TotalBytes: 1000,
+							FreeBytes:  500,
+							UsedBytes:  500,
+						},
+					},
+				}, nil
+			},
+			getNFSPartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{}, nil
+			},
+		}
+
+		// Run check
+		result := c.Check()
+		cr, ok := result.(*checkResult)
+		require.True(t, ok)
+
+		// Should be unhealthy
+		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, cr.health)
+		assert.Equal(t, "I/O error while writing superblock", cr.reason)
+
+		// Should suggest hardware inspection since failures persist after reboots
+		assert.NotNil(t, cr.suggestedActions)
+		assert.Len(t, cr.suggestedActions.RepairActions, 1)
+		assert.Equal(t, apiv1.RepairActionTypeHardwareInspection, cr.suggestedActions.RepairActions[0])
+	})
+
+	t.Run("no suggested actions when event store fails", func(t *testing.T) {
+		// Create a component with eventBucket but no rebootEventStore to simulate error
+		c := &component{
+			ctx:              ctx,
+			rebootEventStore: nil, // This will cause an error in the Check method
+			eventBucket:      &simpleMockEventBucket{},
+			lookbackPeriod:   time.Hour,
+			getTimeNowFunc: func() time.Time {
+				return now
+			},
+			getGroupConfigsFunc: func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{}
+			},
+			getBlockDevicesFunc: func(ctx context.Context) (disk.BlockDevices, error) {
+				return disk.BlockDevices{{Name: "sda", Type: "disk"}}, nil
+			},
+			getExt4PartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{
+					{
+						Device:     "/dev/sda1",
+						MountPoint: "/",
+						Usage: &disk.Usage{
+							TotalBytes: 1000,
+							FreeBytes:  500,
+							UsedBytes:  500,
+						},
+					},
+				}, nil
+			},
+			getNFSPartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{}, nil
+			},
+		}
+
+		// Run check
+		result := c.Check()
+		cr, ok := result.(*checkResult)
+		require.True(t, ok)
+
+		// Should be healthy since no events can be processed
+		assert.Equal(t, apiv1.HealthStateTypeHealthy, cr.health)
+		assert.Equal(t, "ok", cr.reason)
+		assert.Nil(t, cr.suggestedActions)
+	})
+}
+
+// TestComponent_SuperblockWriteErrorEventStoreErrors tests error handling in event store operations
+func TestComponent_SuperblockWriteErrorEventStoreErrors(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	now := time.Now()
+
+	t.Run("event bucket get error", func(t *testing.T) {
+		// Create a mock event bucket that returns an error
+		mockBucket := new(mockEventBucket)
+		expectedErr := errors.New("event bucket get error")
+		mockBucket.On("Get", mock.Anything, mock.Anything).Return(nil, expectedErr)
+		mockBucket.On("Close").Return().Maybe()
+
+		// Create mock reboot event store
+		mockRebootStore := &mockRebootEventStore{
+			events: eventstore.Events{}, // No reboots
+		}
+
+		// Create component
+		c := &component{
+			ctx:              ctx,
+			rebootEventStore: mockRebootStore,
+			eventBucket:      mockBucket,
+			lookbackPeriod:   time.Hour,
+			getTimeNowFunc: func() time.Time {
+				return now
+			},
+			getGroupConfigsFunc: func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{}
+			},
+			getBlockDevicesFunc: func(ctx context.Context) (disk.BlockDevices, error) {
+				return disk.BlockDevices{{Name: "sda", Type: "disk"}}, nil
+			},
+			getExt4PartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{
+					{
+						Device:     "/dev/sda1",
+						MountPoint: "/",
+						Usage: &disk.Usage{
+							TotalBytes: 1000,
+							FreeBytes:  500,
+							UsedBytes:  500,
+						},
+					},
+				}, nil
+			},
+			getNFSPartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{}, nil
+			},
+		}
+
+		// Run check
+		result := c.Check()
+		cr, ok := result.(*checkResult)
+		require.True(t, ok)
+
+		// Should be unhealthy due to event store error
+		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, cr.health)
+		assert.Equal(t, "failed to get recent events", cr.reason)
+		assert.Equal(t, expectedErr, cr.err)
+		assert.Nil(t, cr.suggestedActions)
+
+		mockBucket.AssertCalled(t, "Get", mock.Anything, mock.Anything)
+	})
+
+	t.Run("reboot event store error", func(t *testing.T) {
+		// Create a test event store with superblock write error
+		eventBucket := &simpleMockEventBucket{}
+		err := eventBucket.Insert(ctx, eventstore.Event{
+			Component: Name,
+			Time:      time.Now().Add(-30 * time.Minute),
+			Name:      eventSuperblockWriteError,
+			Type:      string(apiv1.EventTypeWarning),
+			Message:   "I/O error while writing superblock",
+		})
+		require.NoError(t, err)
+
+		// Create mock reboot event store that returns an error
+		expectedErr := errors.New("reboot event store error")
+		mockRebootStore := &mockRebootEventStore{
+			err: expectedErr,
+		}
+
+		// Create component
+		c := &component{
+			ctx:              ctx,
+			rebootEventStore: mockRebootStore,
+			eventBucket:      eventBucket,
+			lookbackPeriod:   time.Hour,
+			getTimeNowFunc: func() time.Time {
+				return now
+			},
+			getGroupConfigsFunc: func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{}
+			},
+			getBlockDevicesFunc: func(ctx context.Context) (disk.BlockDevices, error) {
+				return disk.BlockDevices{{Name: "sda", Type: "disk"}}, nil
+			},
+			getExt4PartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{
+					{
+						Device:     "/dev/sda1",
+						MountPoint: "/",
+						Usage: &disk.Usage{
+							TotalBytes: 1000,
+							FreeBytes:  500,
+							UsedBytes:  500,
+						},
+					},
+				}, nil
+			},
+			getNFSPartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{}, nil
+			},
+		}
+
+		// Run check
+		result := c.Check()
+		cr, ok := result.(*checkResult)
+		require.True(t, ok)
+
+		// Should be unhealthy due to reboot event store error
+		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, cr.health)
+		assert.Equal(t, expectedErr, cr.err)
+		assert.Nil(t, cr.suggestedActions)
+	})
+}
+
+// TestComponent_SuperblockWriteErrorIntegration tests end-to-end integration with real examples
+func TestComponent_SuperblockWriteErrorIntegration(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	now := time.Now()
+
+	t.Run("real-world scenario with buffer I/O and superblock errors", func(t *testing.T) {
+		// Create a test event store
+		eventBucket := &simpleMockEventBucket{}
+
+		// Insert events similar to the user's real examples
+		// [83028.888615] Buffer I/O error on dev dm-0, logical block 0, lost sync page write
+		// [83028.888618] EXT4-fs (dm-0): I/O error while writing superblock
+		err := eventBucket.Insert(ctx, eventstore.Event{
+			Component: Name,
+			Time:      now.Add(-30 * time.Minute),
+			Name:      eventBufferIOError,
+			Type:      string(apiv1.EventTypeWarning),
+			Message:   "Buffer I/O error detected on device",
+		})
+		require.NoError(t, err)
+
+		err = eventBucket.Insert(ctx, eventstore.Event{
+			Component: Name,
+			Time:      now.Add(-29 * time.Minute), // 3 seconds later, like in real logs
+			Name:      eventSuperblockWriteError,
+			Type:      string(apiv1.EventTypeWarning),
+			Message:   "I/O error while writing superblock",
+		})
+		require.NoError(t, err)
+
+		// Multiple occurrences like in real logs
+		err = eventBucket.Insert(ctx, eventstore.Event{
+			Component: Name,
+			Time:      now.Add(-25 * time.Minute),
+			Name:      eventBufferIOError,
+			Type:      string(apiv1.EventTypeWarning),
+			Message:   "Buffer I/O error detected on device",
+		})
+		require.NoError(t, err)
+
+		err = eventBucket.Insert(ctx, eventstore.Event{
+			Component: Name,
+			Time:      now.Add(-24 * time.Minute),
+			Name:      eventSuperblockWriteError,
+			Type:      string(apiv1.EventTypeWarning),
+			Message:   "I/O error while writing superblock",
+		})
+		require.NoError(t, err)
+
+		// Create mock reboot event store
+		mockRebootStore := &mockRebootEventStore{
+			events: eventstore.Events{}, // No reboots
+		}
+
+		// Create component
+		c := &component{
+			ctx:              ctx,
+			rebootEventStore: mockRebootStore,
+			eventBucket:      eventBucket,
+			lookbackPeriod:   time.Hour,
+			getTimeNowFunc: func() time.Time {
+				return now
+			},
+			getGroupConfigsFunc: func() pkgnfschecker.Configs {
+				return pkgnfschecker.Configs{}
+			},
+			getBlockDevicesFunc: func(ctx context.Context) (disk.BlockDevices, error) {
+				return disk.BlockDevices{{Name: "dm-0", Type: "dm"}}, nil
+			},
+			getExt4PartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{
+					{
+						Device:     "/dev/dm-0",
+						MountPoint: "/",
+						Usage: &disk.Usage{
+							TotalBytes: 1000,
+							FreeBytes:  500,
+							UsedBytes:  500,
+						},
+					},
+				}, nil
+			},
+			getNFSPartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+				return disk.Partitions{}, nil
+			},
+		}
+
+		// Run check
+		result := c.Check()
+		cr, ok := result.(*checkResult)
+		require.True(t, ok)
+
+		// Should be unhealthy with both error types
+		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, cr.health)
+
+		// Should contain both error messages in sorted order
+		expectedReason := "Buffer I/O error detected on device, I/O error while writing superblock"
+		assert.Equal(t, expectedReason, cr.reason)
+
+		// Should suggest reboot for initial occurrence
+		assert.NotNil(t, cr.suggestedActions)
+		assert.Len(t, cr.suggestedActions.RepairActions, 1)
+		assert.Equal(t, apiv1.RepairActionTypeRebootSystem, cr.suggestedActions.RepairActions[0])
+	})
 }

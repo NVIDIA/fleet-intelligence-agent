@@ -105,16 +105,20 @@ func (m *mockRebootEventStore) GetRebootEvents(ctx context.Context, since time.T
 
 // mockEventBucket implements eventstore.Bucket for testing
 type mockEventBucket struct {
-	name         string
-	events       []eventstore.Event
-	insertErr    error
-	findErr      error
-	getErr       error
-	latestErr    error
-	foundEvent   *eventstore.Event
-	latestEvent  *eventstore.Event
-	insertCalled bool
-	findCalled   bool
+	name                 string
+	events               []eventstore.Event
+	insertErr            error
+	findErr              error
+	getErr               error
+	latestErr            error
+	purgeErr             error
+	foundEvent           *eventstore.Event
+	latestEvent          *eventstore.Event
+	insertCalled         bool
+	findCalled           bool
+	purgeCalled          bool
+	purgeBeforeTimestamp int64
+	purgeReturnCount     int
 }
 
 func (m *mockEventBucket) Name() string {
@@ -160,7 +164,12 @@ func (m *mockEventBucket) Latest(ctx context.Context) (*eventstore.Event, error)
 }
 
 func (m *mockEventBucket) Purge(ctx context.Context, beforeTimestamp int64) (int, error) {
-	return 0, nil
+	m.purgeCalled = true
+	m.purgeBeforeTimestamp = beforeTimestamp
+	if m.purgeErr != nil {
+		return 0, m.purgeErr
+	}
+	return m.purgeReturnCount, nil
 }
 
 func (m *mockEventBucket) Close() {}
@@ -299,6 +308,9 @@ func TestComponent_Start(t *testing.T) {
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: 0}
 		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	err := c.Start()
@@ -349,6 +361,42 @@ func TestComponent_Events(t *testing.T) {
 	assert.Nil(t, events)
 }
 
+// TestComponent_Events_Simple tests the Events method with different time values
+func TestComponent_Events_Simple(t *testing.T) {
+	tests := []struct {
+		name  string
+		since time.Time
+	}{
+		{
+			name:  "events since 1 hour ago",
+			since: time.Now().Add(-time.Hour),
+		},
+		{
+			name:  "events since 1 day ago",
+			since: time.Now().Add(-24 * time.Hour),
+		},
+		{
+			name:  "events since epoch",
+			since: time.Unix(0, 0),
+		},
+		{
+			name:  "events since future time",
+			since: time.Now().Add(time.Hour),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			c := &component{}
+
+			events, err := c.Events(ctx, tt.since)
+			assert.NoError(t, err)
+			assert.Nil(t, events)
+		})
+	}
+}
+
 // TestComponent_Close tests the Close method
 func TestComponent_Close(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -369,6 +417,9 @@ func TestComponent_Check_NilNVML(t *testing.T) {
 		nvmlInstance: nil,
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: 1}
+		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
 		},
 	}
 
@@ -392,6 +443,9 @@ func TestComponent_Check_NVMLNotLoaded(t *testing.T) {
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: 1}
 		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	result := c.Check()
@@ -414,6 +468,9 @@ func TestComponent_Check_EmptyProductName(t *testing.T) {
 		},
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: 1}
+		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
 		},
 	}
 
@@ -447,6 +504,9 @@ func TestComponent_Check_Success(t *testing.T) {
 		},
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: 2}
+		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
 		},
 	}
 
@@ -488,6 +548,9 @@ func TestComponent_Check_LspciError(t *testing.T) {
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: 1}
 		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	result := c.Check()
@@ -524,6 +587,9 @@ func TestComponent_Check_ThresholdNotSet(t *testing.T) {
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: 0} // Zero threshold
 		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	result := c.Check()
@@ -555,6 +621,9 @@ func TestComponent_Check_LspciCountMismatch(t *testing.T) {
 		},
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: 2} // Expecting 2 GPUs
+		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
 		},
 	}
 
@@ -592,6 +661,9 @@ func TestComponent_Check_NVMLCountMismatch(t *testing.T) {
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: 2} // Expecting 2 GPUs
 		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	result := c.Check()
@@ -621,6 +693,9 @@ func TestComponent_Check_NVMLZeroDevices(t *testing.T) {
 		},
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: 2} // Expecting 2 GPUs
+		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
 		},
 	}
 
@@ -898,6 +973,9 @@ func TestComponent_ConcurrentAccess(t *testing.T) {
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: 1}
 		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	// Run multiple checks concurrently
@@ -936,6 +1014,9 @@ func TestComponent_Check_NilLspciFunc(t *testing.T) {
 		getCountLspci: nil, // Explicitly set to nil
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: 1}
+		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
 		},
 	}
 
@@ -976,6 +1057,9 @@ func TestComponent_Check_ContextCancellation(t *testing.T) {
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: 1}
 		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	result := c.Check()
@@ -1014,6 +1098,9 @@ func TestComponent_Check_LargeGPUCount(t *testing.T) {
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: 16}
 		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	result := c.Check()
@@ -1048,6 +1135,9 @@ func TestComponent_Check_NegativeThreshold(t *testing.T) {
 		},
 		getThresholdsFunc: func() ExpectedGPUCounts {
 			return ExpectedGPUCounts{Count: -5} // Negative threshold
+		},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
 		},
 	}
 
@@ -1104,6 +1194,9 @@ func TestComponent_Check_ProductNameEdgeCases(t *testing.T) {
 				},
 				getThresholdsFunc: func() ExpectedGPUCounts {
 					return ExpectedGPUCounts{Count: 1}
+				},
+				getTimeNowFunc: func() time.Time {
+					return time.Now().UTC()
 				},
 			}
 
@@ -1178,6 +1271,9 @@ func TestComponent_Check_BoundaryValues(t *testing.T) {
 				getThresholdsFunc: func() ExpectedGPUCounts {
 					return ExpectedGPUCounts{Count: tc.thresholdCount}
 				},
+				getTimeNowFunc: func() time.Time {
+					return time.Now().UTC()
+				},
 			}
 
 			result := c.Check()
@@ -1216,6 +1312,9 @@ func TestComponent_Check_ErrorMessageValidation(t *testing.T) {
 			getThresholdsFunc: func() ExpectedGPUCounts {
 				return ExpectedGPUCounts{Count: 8} // NVML count (3) != threshold (8)
 			},
+			getTimeNowFunc: func() time.Time {
+				return time.Now().UTC()
+			},
 		}
 
 		result := c.Check()
@@ -1248,6 +1347,9 @@ func TestComponent_Check_ErrorMessageValidation(t *testing.T) {
 			},
 			getThresholdsFunc: func() ExpectedGPUCounts {
 				return ExpectedGPUCounts{Count: 8} // NVML count (3) != threshold (8)
+			},
+			getTimeNowFunc: func() time.Time {
+				return time.Now().UTC()
 			},
 		}
 
@@ -1285,6 +1387,9 @@ func TestComponent_Check_LspciLoggingBehavior(t *testing.T) {
 			getThresholdsFunc: func() ExpectedGPUCounts {
 				return ExpectedGPUCounts{Count: 1} // NVML count (1) matches threshold (1)
 			},
+			getTimeNowFunc: func() time.Time {
+				return time.Now().UTC()
+			},
 		}
 
 		result := c.Check()
@@ -1317,6 +1422,9 @@ func TestComponent_Check_LspciLoggingBehavior(t *testing.T) {
 			getThresholdsFunc: func() ExpectedGPUCounts {
 				return ExpectedGPUCounts{Count: 1} // NVML count (1) matches threshold (1)
 			},
+			getTimeNowFunc: func() time.Time {
+				return time.Now().UTC()
+			},
 		}
 
 		result := c.Check()
@@ -1329,6 +1437,73 @@ func TestComponent_Check_LspciLoggingBehavior(t *testing.T) {
 		assert.Equal(t, 0, cr.CountLspci) // lspci count is 0 due to error
 		assert.Equal(t, 1, cr.CountNVML)  // NVML count matches threshold
 		assert.Nil(t, cr.err)             // No error stored in checkResult
+	})
+}
+
+// TestComponent_GetTimeNowFunc tests the getTimeNowFunc functionality
+func TestComponent_GetTimeNowFunc(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("default time function", func(t *testing.T) {
+		mockDevices := map[string]device.Device{
+			"test-uuid": testutil.NewMockDevice(&mock.Device{}, "test-arch", "test-brand", "1.0", "0000:00:00.0"),
+		}
+		mockInstance := &mockNVMLInstance{
+			devices:     mockDevices,
+			nvmlExists:  true,
+			productName: "test-product",
+		}
+
+		gpudInstance := &components.GPUdInstance{
+			RootCtx:      ctx,
+			NVMLInstance: mockInstance,
+		}
+
+		comp, err := New(gpudInstance)
+		require.NoError(t, err)
+
+		c, ok := comp.(*component)
+		require.True(t, ok)
+
+		// Test the default time function
+		before := time.Now().UTC()
+		actualTime := c.getTimeNowFunc()
+		after := time.Now().UTC()
+
+		assert.True(t, actualTime.After(before) || actualTime.Equal(before))
+		assert.True(t, actualTime.Before(after) || actualTime.Equal(after))
+	})
+
+	t.Run("custom time function", func(t *testing.T) {
+		fixedTime := time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)
+
+		mockDevices := map[string]device.Device{
+			"test-uuid": testutil.NewMockDevice(&mock.Device{}, "test-arch", "test-brand", "1.0", "0000:00:00.0"),
+		}
+
+		c := &component{
+			ctx: ctx,
+			nvmlInstance: &mockNVMLInstance{
+				devices:     mockDevices,
+				nvmlExists:  true,
+				productName: "test-product",
+			},
+			getCountLspci: func(ctx context.Context) (int, error) {
+				return 1, nil
+			},
+			getThresholdsFunc: func() ExpectedGPUCounts {
+				return ExpectedGPUCounts{Count: 1}
+			},
+			getTimeNowFunc: func() time.Time {
+				return fixedTime
+			},
+		}
+
+		result := c.Check()
+		cr, ok := result.(*checkResult)
+		require.True(t, ok)
+
+		assert.Equal(t, fixedTime, cr.ts)
 	})
 }
 
@@ -1406,6 +1581,9 @@ func TestComponent_Check_OnlyNVMLMatters(t *testing.T) {
 				getThresholdsFunc: func() ExpectedGPUCounts {
 					return ExpectedGPUCounts{Count: tc.thresholdCount}
 				},
+				getTimeNowFunc: func() time.Time {
+					return time.Now().UTC()
+				},
 			}
 
 			result := c.Check()
@@ -1464,6 +1642,9 @@ func TestComponent_Check_SuggestedActions_NoReboot(t *testing.T) {
 		rebootEventStore: mockRebootStore,
 		eventBucket:      mockBucket,
 		lookbackPeriod:   72 * time.Hour, // 3 days
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	result := c.Check()
@@ -1533,6 +1714,9 @@ func TestComponent_Check_SuggestedActions_OneSequence(t *testing.T) {
 		rebootEventStore: mockRebootStore,
 		eventBucket:      mockBucket,
 		lookbackPeriod:   72 * time.Hour, // 3 days
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	result := c.Check()
@@ -1582,6 +1766,9 @@ func TestComponent_Check_SuggestedActions_RebootEventsError(t *testing.T) {
 		rebootEventStore: mockRebootStore,
 		eventBucket:      mockBucket,
 		lookbackPeriod:   72 * time.Hour, // 3 days
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	result := c.Check()
@@ -1638,6 +1825,9 @@ func TestComponent_Check_SuggestedActions_GPUMismatchEventsError(t *testing.T) {
 		rebootEventStore: mockRebootStore,
 		eventBucket:      mockBucket,
 		lookbackPeriod:   72 * time.Hour, // 3 days
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	result := c.Check()
@@ -1672,6 +1862,9 @@ func TestComponent_Check_SuggestedActions_NoEventBucket(t *testing.T) {
 			return ExpectedGPUCounts{Count: 2}
 		},
 		eventBucket: nil, // No event bucket
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	result := c.Check()
@@ -1872,6 +2065,9 @@ func TestComponent_Check_SuggestedActions_TwoSequences(t *testing.T) {
 		rebootEventStore: mockRebootStore,
 		eventBucket:      mockBucket,
 		lookbackPeriod:   96 * time.Hour, // 4 days to cover all events
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	result := c.Check()
@@ -1937,6 +2133,9 @@ func TestComponent_Check_SuggestedActions_NoActionAfterReboot(t *testing.T) {
 		rebootEventStore: mockRebootStore,
 		eventBucket:      mockBucket,
 		lookbackPeriod:   72 * time.Hour, // 3 days
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 
 	result := c.Check()
@@ -1949,367 +2148,170 @@ func TestComponent_Check_SuggestedActions_NoActionAfterReboot(t *testing.T) {
 	assert.Contains(t, cr.suggestedActions.RepairActions, apiv1.RepairActionTypeRebootSystem)
 }
 
-// TestEvaluateSuggestedActions tests the evaluateSuggestedActions function directly
-func TestEvaluateSuggestedActions(t *testing.T) {
-	now := time.Now()
+// Note: The evaluateSuggestedActions function has been moved to pkg/eventstore package
+// These tests have been migrated to pkg/eventstore/suggested_actions_test.go
 
-	t.Run("no gpu mismatch events", func(t *testing.T) {
-		cr := &checkResult{
-			ts: now,
+// TestComponent_GetTimeNowFunc_Integration tests that getTimeNowFunc is used correctly throughout the component
+func TestComponent_GetTimeNowFunc_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("Check method uses getTimeNowFunc for timestamp", func(t *testing.T) {
+		fixedTime := time.Date(2024, 12, 25, 15, 30, 45, 0, time.UTC)
+
+		mockDevices := map[string]device.Device{
+			"test-uuid": testutil.NewMockDevice(&mock.Device{}, "test-arch", "test-brand", "1.0", "0000:00:00.0"),
 		}
-		rebootEvents := eventstore.Events{}
-		gpuMismatchEvents := eventstore.Events{} // Empty
 
-		evaluateSuggestedActions(cr, rebootEvents, gpuMismatchEvents)
+		mockBucket := &mockEventBucket{
+			name:       Name,
+			foundEvent: nil, // Event not found
+		}
 
-		assert.NotNil(t, cr.err)
-		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, cr.health)
-		assert.Equal(t, "no gpu count mismatch event found after insert", cr.reason)
-		assert.Contains(t, cr.err.Error(), "no gpu count mismatch event found after insert")
-		assert.Nil(t, cr.suggestedActions)
+		mockRebootStore := &mockRebootEventStore{
+			events: eventstore.Events{},
+			err:    nil,
+		}
+
+		c := &component{
+			ctx: ctx,
+			nvmlInstance: &mockNVMLInstance{
+				devices:     mockDevices,
+				nvmlExists:  true,
+				productName: "test-product",
+			},
+			getCountLspci: func(ctx context.Context) (int, error) {
+				return 2, nil
+			},
+			getThresholdsFunc: func() ExpectedGPUCounts {
+				return ExpectedGPUCounts{Count: 2} // Mismatch to trigger event recording
+			},
+			eventBucket:      mockBucket,
+			rebootEventStore: mockRebootStore,
+			lookbackPeriod:   72 * time.Hour,
+			getTimeNowFunc: func() time.Time {
+				return fixedTime
+			},
+		}
+
+		result := c.Check()
+		cr, ok := result.(*checkResult)
+		require.True(t, ok)
+
+		// Verify the timestamp is the fixed time
+		assert.Equal(t, fixedTime, cr.ts)
+
+		// Check that the event was created with the correct timestamp
+		assert.True(t, mockBucket.insertCalled)
+		assert.Len(t, mockBucket.events, 1)
+		assert.Equal(t, fixedTime, mockBucket.events[0].Time)
 	})
 
-	t.Run("case 1 - no reboot events", func(t *testing.T) {
-		cr := &checkResult{
-			ts: now,
+	t.Run("SetHealthy uses getTimeNowFunc for purge timestamp", func(t *testing.T) {
+		fixedTime := time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC)
+
+		mockBucket := &mockEventBucket{
+			name:             Name,
+			purgeReturnCount: 3,
 		}
-		rebootEvents := eventstore.Events{} // No reboots
-		gpuMismatchEvents := eventstore.Events{
-			{
-				Component: Name,
-				Time:      now.Add(-1 * time.Hour),
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
+
+		c := &component{
+			ctx:         ctx,
+			eventBucket: mockBucket,
+			getTimeNowFunc: func() time.Time {
+				return fixedTime
 			},
 		}
 
-		evaluateSuggestedActions(cr, rebootEvents, gpuMismatchEvents)
+		err := c.SetHealthy()
+		assert.NoError(t, err)
 
-		assert.Nil(t, cr.err)
-		assert.NotNil(t, cr.suggestedActions)
-		assert.Len(t, cr.suggestedActions.RepairActions, 1)
-		assert.Equal(t, apiv1.RepairActionTypeRebootSystem, cr.suggestedActions.RepairActions[0])
+		// Verify purge was called with the correct timestamp
+		assert.True(t, mockBucket.purgeCalled)
+		assert.Equal(t, fixedTime.Unix(), mockBucket.purgeBeforeTimestamp)
 	})
 
-	t.Run("edge case - reboot after mismatch", func(t *testing.T) {
+	t.Run("recordMismatchEvent uses timestamp from checkResult", func(t *testing.T) {
+		eventTime := time.Date(2024, 3, 10, 8, 45, 30, 0, time.UTC)
+
+		mockBucket := &mockEventBucket{
+			name:       Name,
+			foundEvent: nil, // Event not found
+		}
+
+		c := &component{
+			ctx:         ctx,
+			eventBucket: mockBucket,
+		}
+
 		cr := &checkResult{
-			ts: now,
-		}
-		rebootEvents := eventstore.Events{
-			{
-				Time:    now.Add(-30 * time.Minute), // Reboot happened recently
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
-			},
-		}
-		gpuMismatchEvents := eventstore.Events{
-			{
-				Component: Name,
-				Time:      now.Add(-1 * time.Hour), // Mismatch happened before reboot
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
+			ts:     eventTime,
+			reason: "test mismatch reason",
 		}
 
-		evaluateSuggestedActions(cr, rebootEvents, gpuMismatchEvents)
+		err := c.recordMismatchEvent(cr)
+		assert.NoError(t, err)
 
-		assert.Nil(t, cr.err)
-		assert.Nil(t, cr.suggestedActions) // No action when reboot happened after mismatch
+		// Verify the event was recorded with the checkResult's timestamp
+		assert.True(t, mockBucket.insertCalled)
+		assert.Len(t, mockBucket.events, 1)
+		assert.Equal(t, eventTime, mockBucket.events[0].Time)
+		assert.Equal(t, "test mismatch reason", mockBucket.events[0].Message)
 	})
 
-	t.Run("case 2a - one reboot one mismatch", func(t *testing.T) {
-		cr := &checkResult{
-			ts: now,
+	t.Run("concurrent Check calls use independent timestamps", func(t *testing.T) {
+		var timestamps []time.Time
+		var mu sync.Mutex
+
+		mockDevices := map[string]device.Device{
+			"test-uuid": testutil.NewMockDevice(&mock.Device{}, "test-arch", "test-brand", "1.0", "0000:00:00.0"),
 		}
-		rebootEvents := eventstore.Events{
-			{
-				Time:    now.Add(-2 * time.Hour), // Reboot happened first
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
+
+		timeCounter := 0
+		c := &component{
+			ctx: ctx,
+			nvmlInstance: &mockNVMLInstance{
+				devices:     mockDevices,
+				nvmlExists:  true,
+				productName: "test-product",
 			},
-		}
-		gpuMismatchEvents := eventstore.Events{
-			{
-				Component: Name,
-				Time:      now.Add(-1 * time.Hour), // Mismatch after reboot
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
+			getCountLspci: func(ctx context.Context) (int, error) {
+				return 1, nil
+			},
+			getThresholdsFunc: func() ExpectedGPUCounts {
+				return ExpectedGPUCounts{Count: 1}
+			},
+			getTimeNowFunc: func() time.Time {
+				mu.Lock()
+				defer mu.Unlock()
+				timeCounter++
+				// Return different times for each call
+				return time.Date(2024, 1, 1, 0, 0, timeCounter, 0, time.UTC)
 			},
 		}
 
-		evaluateSuggestedActions(cr, rebootEvents, gpuMismatchEvents)
-
-		assert.Nil(t, cr.err)
-		assert.NotNil(t, cr.suggestedActions)
-		assert.Len(t, cr.suggestedActions.RepairActions, 1)
-		assert.Equal(t, apiv1.RepairActionTypeRebootSystem, cr.suggestedActions.RepairActions[0])
-	})
-
-	t.Run("case 2b - multiple reboots one mismatch", func(t *testing.T) {
-		cr := &checkResult{
-			ts: now,
+		// Run multiple checks concurrently
+		var wg sync.WaitGroup
+		for i := 0; i < 5; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				result := c.Check()
+				cr, ok := result.(*checkResult)
+				if ok {
+					mu.Lock()
+					timestamps = append(timestamps, cr.ts)
+					mu.Unlock()
+				}
+			}()
 		}
-		rebootEvents := eventstore.Events{
-			{
-				Time:    now.Add(-3 * time.Hour),
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
-			},
-			{
-				Time:    now.Add(-2 * time.Hour),
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
-			},
-		}
-		gpuMismatchEvents := eventstore.Events{
-			{
-				Component: Name,
-				Time:      now.Add(-1 * time.Hour), // Only one mismatch
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
-		}
+		wg.Wait()
 
-		evaluateSuggestedActions(cr, rebootEvents, gpuMismatchEvents)
-
-		assert.Nil(t, cr.err)
-		assert.NotNil(t, cr.suggestedActions)
-		assert.Len(t, cr.suggestedActions.RepairActions, 1)
-		assert.Equal(t, apiv1.RepairActionTypeRebootSystem, cr.suggestedActions.RepairActions[0])
-	})
-
-	t.Run("case 3 - multiple sequences of mismatch then reboot", func(t *testing.T) {
-		cr := &checkResult{
-			ts: now,
+		// Verify all timestamps are different
+		assert.Len(t, timestamps, 5)
+		uniqueTimestamps := make(map[time.Time]bool)
+		for _, ts := range timestamps {
+			uniqueTimestamps[ts] = true
 		}
-		// Create a scenario where first reboot is before all mismatches
-		rebootEvents := eventstore.Events{
-			{
-				Time:    now.Add(-72 * time.Hour), // Initial reboot (oldest)
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
-			},
-			{
-				Time:    now.Add(-48 * time.Hour), // Second reboot
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
-			},
-			{
-				Time:    now.Add(-24 * time.Hour), // Third reboot
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
-			},
-		}
-		gpuMismatchEvents := eventstore.Events{
-			{
-				Component: Name,
-				Time:      now.Add(-60 * time.Hour), // First mismatch after initial reboot
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
-			{
-				Component: Name,
-				Time:      now.Add(-36 * time.Hour), // Second mismatch after second reboot
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
-			{
-				Component: Name,
-				Time:      now.Add(-12 * time.Hour), // Third mismatch after third reboot
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
-			{
-				Component: Name,
-				Time:      now.Add(-1 * time.Hour), // Current mismatch
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
-		}
-
-		evaluateSuggestedActions(cr, rebootEvents, gpuMismatchEvents)
-
-		assert.Nil(t, cr.err)
-		assert.NotNil(t, cr.suggestedActions)
-		assert.Len(t, cr.suggestedActions.RepairActions, 1)
-		assert.Equal(t, apiv1.RepairActionTypeHardwareInspection, cr.suggestedActions.RepairActions[0])
-	})
-
-	t.Run("edge case - multiple mismatches but only one sequence", func(t *testing.T) {
-		cr := &checkResult{
-			ts: now,
-		}
-		// Initial reboot before all mismatches
-		rebootEvents := eventstore.Events{
-			{
-				Time:    now.Add(-48 * time.Hour), // Initial reboot
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
-			},
-			{
-				Time:    now.Add(-24 * time.Hour), // Second reboot
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
-			},
-		}
-		gpuMismatchEvents := eventstore.Events{
-			{
-				Component: Name,
-				Time:      now.Add(-36 * time.Hour), // After initial reboot, before second reboot
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
-			{
-				Component: Name,
-				Time:      now.Add(-30 * time.Hour), // Still before second reboot
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
-			{
-				Component: Name,
-				Time:      now.Add(-12 * time.Hour), // After second reboot
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
-		}
-
-		evaluateSuggestedActions(cr, rebootEvents, gpuMismatchEvents)
-
-		assert.Nil(t, cr.err)
-		assert.NotNil(t, cr.suggestedActions)
-		assert.Len(t, cr.suggestedActions.RepairActions, 1)
-		// Should suggest hardware inspection since we have 2 mismatch->reboot mappings
-		assert.Equal(t, apiv1.RepairActionTypeHardwareInspection, cr.suggestedActions.RepairActions[0])
-	})
-
-	t.Run("complex case - multiple reboots and mismatches", func(t *testing.T) {
-		cr := &checkResult{
-			ts: now,
-		}
-		// Start with a reboot before all mismatches
-		rebootEvents := eventstore.Events{
-			{
-				Time:    now.Add(-80 * time.Hour), // Initial reboot (oldest)
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
-			},
-			{
-				Time:    now.Add(-60 * time.Hour),
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
-			},
-			{
-				Time:    now.Add(-40 * time.Hour),
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
-			},
-			{
-				Time:    now.Add(-20 * time.Hour),
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
-			},
-		}
-		gpuMismatchEvents := eventstore.Events{
-			{
-				Component: Name,
-				Time:      now.Add(-70 * time.Hour), // After initial reboot
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
-			{
-				Component: Name,
-				Time:      now.Add(-50 * time.Hour), // After second reboot
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
-			{
-				Component: Name,
-				Time:      now.Add(-30 * time.Hour), // After third reboot
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
-			{
-				Component: Name,
-				Time:      now.Add(-10 * time.Hour), // After fourth reboot
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
-		}
-
-		evaluateSuggestedActions(cr, rebootEvents, gpuMismatchEvents)
-
-		assert.Nil(t, cr.err)
-		assert.NotNil(t, cr.suggestedActions)
-		assert.Len(t, cr.suggestedActions.RepairActions, 1)
-		assert.Equal(t, apiv1.RepairActionTypeHardwareInspection, cr.suggestedActions.RepairActions[0])
-	})
-
-	t.Run("edge case - all mismatches before all reboots", func(t *testing.T) {
-		cr := &checkResult{
-			ts: now,
-		}
-		rebootEvents := eventstore.Events{
-			{
-				Time:    now.Add(-20 * time.Hour),
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
-			},
-			{
-				Time:    now.Add(-10 * time.Hour),
-				Name:    "reboot",
-				Type:    string(apiv1.EventTypeWarning),
-				Message: "system reboot detected",
-			},
-		}
-		gpuMismatchEvents := eventstore.Events{
-			{
-				Component: Name,
-				Time:      now.Add(-40 * time.Hour), // Before all reboots
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
-			{
-				Component: Name,
-				Time:      now.Add(-30 * time.Hour), // Still before all reboots
-				Name:      EventNameMisMatch,
-				Type:      string(apiv1.EventTypeWarning),
-				Message:   "nvidia gpu count mismatch",
-			},
-		}
-
-		evaluateSuggestedActions(cr, rebootEvents, gpuMismatchEvents)
-
-		assert.Nil(t, cr.err)
-		assert.Nil(t, cr.suggestedActions) // No action when all mismatches are before reboots
+		assert.Len(t, uniqueTimestamps, 5, "All timestamps should be unique")
 	})
 }

@@ -38,7 +38,7 @@ curl -fsSL https://pkg.gpud.dev/install.sh | sh
 To specify a version
 
 ```bash
-curl -fsSL https://pkg.gpud.dev/install.sh | sh -s v0.5.0
+curl -fsSL https://pkg.gpud.dev/install.sh | sh -s v0.6.0
 ```
 
 Note that the install script doesn't support other architectures (arm64) and OSes (macos), yet.
@@ -70,11 +70,17 @@ You can also start with the standalone mode and later switch to the managed opti
 ```bash
 # when the token is ready, run the following command
 sudo gpud login --token <LEPTON_AI_TOKEN>
+
+# to logout
+sudo gpud logout
+
+# to logout and reset the state file
+sudo gpud logout --reset-state
 ```
 
 #### Run GPUd with Kubernetes
 
-See [gpud helm chart](./charts/gpud/README.md) to deploy GPUd in your Kubernetes cluster.
+The recommended way to deploy GPUd on Kubernetes is with our official [Helm chart](./deployments/helm/gpud/README.md).
 
 #### If your system doesn't have systemd
 
@@ -131,3 +137,7 @@ When GPUd is registered with the Lepton platform, the platform will automaticall
 - [Install GPUd](./docs/INSTALL.md)
 - [GPUd components](./docs/COMPONENTS.md)
 - [GPUd architecture](./docs/ARCHITECTURE.md)
+
+## Contributing
+
+Please see the [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute to this project.

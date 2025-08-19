@@ -474,7 +474,7 @@ func TestCheckWithNewCheckerError(t *testing.T) {
 	cr := result.(*checkResult)
 
 	assert.Equal(t, apiv1.HealthStateTypeDegraded, result.HealthStateType())
-	assert.Contains(t, result.Summary(), "failed to find mount target device")
+	assert.Contains(t, result.Summary(), "invalid nfs group configs")
 	assert.NotNil(t, cr.err)
 }
 
@@ -700,7 +700,7 @@ func TestCheckWithNonNFSMount(t *testing.T) {
 	cr := result.(*checkResult)
 
 	assert.Equal(t, apiv1.HealthStateTypeDegraded, result.HealthStateType())
-	assert.Equal(t, fmt.Sprintf("volume path %s mounted on /dev/sda1, but not nfs", tmpDir), result.Summary())
+	assert.Equal(t, fmt.Sprintf("The user applied path %q as NFS volume, but in fact the file system type is not NFS.", tmpDir), result.Summary())
 	assert.Nil(t, cr.err) // This case doesn't set an error, just health state
 }
 

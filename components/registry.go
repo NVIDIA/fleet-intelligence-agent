@@ -46,6 +46,15 @@ type GPUdInstance struct {
 	// HealthCheckInterval is the unified interval for all component health checks
 	// Components should use this interval instead of hard-coded values
 	HealthCheckInterval time.Duration
+	FailureInjector     *FailureInjector
+}
+
+type FailureInjector struct {
+	GPUUUIDsWithRowRemappingPending  []string
+	GPUUUIDsWithRowRemappingFailed   []string
+	GPUUUIDsWithHWSlowdown           []string
+	GPUUUIDsWithHWSlowdownThermal    []string
+	GPUUUIDsWithHWSlowdownPowerBrake []string
 }
 
 // InitFunc is the function that initializes a component.

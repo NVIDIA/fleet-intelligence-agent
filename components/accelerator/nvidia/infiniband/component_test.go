@@ -98,25 +98,69 @@ func TestComponentEvents(t *testing.T) {
 
 	now := time.Now().UTC()
 
-	// Insert test event using eventstore.Event
-	testEvent := eventstore.Event{
-		Time:    now.Add(-5 * time.Second),
-		Name:    "test_event",
+	// Insert various test events
+	// 1. PCI power insufficient event (should be included)
+	pciPowerEvent := eventstore.Event{
+		Time:    now.Add(-8 * time.Second),
+		Name:    eventPCIPowerInsufficient,
 		Type:    string(apiv1.EventTypeWarning),
-		Message: "test message",
+		Message: "Insufficient power on MLX5 PCIe slot",
 	}
-	err := mockBucket.Insert(ctx, testEvent)
+	err := mockBucket.Insert(ctx, pciPowerEvent)
 	require.NoError(t, err)
 
-	// Test Events method
+	// 2. Port module high temperature event (should be included)
+	tempEvent := eventstore.Event{
+		Time:    now.Add(-6 * time.Second),
+		Name:    eventPortModuleHighTemperature,
+		Type:    string(apiv1.EventTypeWarning),
+		Message: "Overheated MLX5 adapter",
+	}
+	err = mockBucket.Insert(ctx, tempEvent)
+	require.NoError(t, err)
+
+	// 3. Other event (should be filtered out)
+	otherEvent := eventstore.Event{
+		Time:      now.Add(-5 * time.Second),
+		Name:      "test_event",
+		Type:      string(apiv1.EventTypeWarning),
+		Message:   "test message",
+		Component: Name, // Even with component set, should be filtered
+	}
+	err = mockBucket.Insert(ctx, otherEvent)
+	require.NoError(t, err)
+
+	// 4. IB port event (should be filtered out)
+	ibPortEvent := eventstore.Event{
+		Time:      now.Add(-4 * time.Second),
+		Name:      infinibandstore.EventTypeIbPortFlap,
+		Type:      string(apiv1.EventTypeWarning),
+		Message:   "IB port flap",
+		Component: Name,
+	}
+	err = mockBucket.Insert(ctx, ibPortEvent)
+	require.NoError(t, err)
+
+	// Test Events method - should only return the two kmsg events
 	events, err := c.Events(ctx, now.Add(-10*time.Second))
 	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, testEvent.Name, events[0].Name)
-	assert.Equal(t, testEvent.Message, events[0].Message)   // Check message too
-	assert.Equal(t, testEvent.Type, string(events[0].Type)) // Check type too (cast to string)
+	require.Len(t, events, 2, "Should only return PCI power and temperature events")
+
+	// Verify the events are the correct ones
+	eventNames := make(map[string]bool)
+	for _, ev := range events {
+		eventNames[ev.Name] = true
+	}
+	assert.True(t, eventNames[eventPCIPowerInsufficient], "Should include PCI power event")
+	assert.True(t, eventNames[eventPortModuleHighTemperature], "Should include temperature event")
 
 	// Test with more recent time filter
+	events, err = c.Events(ctx, now.Add(-7*time.Second))
+	require.NoError(t, err)
+	assert.Len(t, events, 1, "Should only return temperature event")
+	assert.Equal(t, eventPortModuleHighTemperature, events[0].Name)
+
+	// Test with time filter that excludes all events
 	events, err = c.Events(ctx, now)
 	require.NoError(t, err)
 	assert.Empty(t, events)
@@ -128,6 +172,77 @@ func TestComponentEvents(t *testing.T) {
 	events, err = c.Events(canceledCtx, now)
 	assert.Error(t, err)
 	assert.Nil(t, events)
+}
+
+func TestComponentEventsFiltersKmsgEvents(t *testing.T) {
+	t.Parallel()
+
+	// Setup test event bucket
+	mockBucket := createMockEventBucket()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	c := &component{
+		ctx:         ctx,
+		cancel:      cancel,
+		eventBucket: mockBucket,
+	}
+
+	now := time.Now().UTC()
+
+	// Insert kmsg events without Component field (as kmsg syncer would)
+	kmsgPciPowerEvent := eventstore.Event{
+		Time:    now.Add(-5 * time.Second),
+		Name:    eventPCIPowerInsufficient,
+		Type:    string(apiv1.EventTypeWarning),
+		Message: "Detected insufficient power on the PCIe slot (27W)",
+		// Component field is intentionally not set, as kmsg syncer doesn't set it
+	}
+	err := mockBucket.Insert(ctx, kmsgPciPowerEvent)
+	require.NoError(t, err)
+
+	kmsgTempEvent := eventstore.Event{
+		Time:    now.Add(-3 * time.Second),
+		Name:    eventPortModuleHighTemperature,
+		Type:    string(apiv1.EventTypeWarning),
+		Message: "Port module event[error]: module 0, Cable error, High Temperature",
+		// Component field is intentionally not set
+	}
+	err = mockBucket.Insert(ctx, kmsgTempEvent)
+	require.NoError(t, err)
+
+	// Insert other kmsg event that should be filtered out
+	otherKmsgEvent := eventstore.Event{
+		Time:    now.Add(-2 * time.Second),
+		Name:    "some_other_kmsg_event",
+		Type:    string(apiv1.EventTypeWarning),
+		Message: "Some other kernel message",
+		// Component field not set
+	}
+	err = mockBucket.Insert(ctx, otherKmsgEvent)
+	require.NoError(t, err)
+
+	// Test Events method - should return only the specific kmsg events
+	events, err := c.Events(ctx, now.Add(-10*time.Second))
+	require.NoError(t, err)
+	require.Len(t, events, 2, "Should return exactly 2 kmsg events")
+
+	// Verify both events are present and in the correct order
+	foundPciPower := false
+	foundTemp := false
+	for _, ev := range events {
+		if ev.Name == eventPCIPowerInsufficient {
+			foundPciPower = true
+			assert.Contains(t, ev.Message, "insufficient power")
+		}
+		if ev.Name == eventPortModuleHighTemperature {
+			foundTemp = true
+			assert.Contains(t, ev.Message, "High Temperature")
+		}
+	}
+	assert.True(t, foundPciPower, "Should find PCI power event")
+	assert.True(t, foundTemp, "Should find temperature event")
 }
 
 func TestComponentClose(t *testing.T) {
@@ -755,21 +870,6 @@ func TestNewWithCustomToolOverwrites(t *testing.T) {
 
 	// Clean up
 	err = comp.Close()
-	assert.NoError(t, err)
-}
-
-func TestSetHealthy(t *testing.T) {
-	t.Parallel()
-
-	cctx, ccancel := context.WithCancel(context.Background())
-	defer ccancel()
-
-	c := &component{
-		ctx:    cctx,
-		cancel: ccancel,
-	}
-
-	err := c.SetHealthy()
 	assert.NoError(t, err)
 }
 
@@ -1484,10 +1584,11 @@ func TestComponentCheckWithLastEventsError(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, data)
 
-	// Should still complete successfully despite LastEvents error
-	// The error is logged but doesn't fail the check
-	assert.Equal(t, apiv1.HealthStateTypeHealthy, data.health)
-	assert.Equal(t, reasonNoIbPortIssue, data.reason)
+	// Should be unhealthy when LastEvents fails
+	assert.Equal(t, apiv1.HealthStateTypeUnhealthy, data.health)
+	assert.Equal(t, "error getting ib flap/drop events", data.reason)
+	assert.NotNil(t, data.err)
+	assert.Equal(t, "database connection failed", data.err.Error())
 }
 
 func TestComponentCheckWithNilIBPortsStore(t *testing.T) {
@@ -1644,13 +1745,10 @@ func TestComponentCheckWithMultipleEventTypes(t *testing.T) {
 	assert.Contains(t, data.reason, "device(s) down too long: mlx5_1")
 	assert.Contains(t, data.reason, "; ")
 
-	// Verify both events were inserted
+	// Verify no IB port drop/flap events were inserted into gpud event store
+	// These events are handled through health state evaluation instead
 	events := mockBucket.GetAPIEvents()
-	assert.Len(t, events, 2)
-
-	// Events should be sorted by time
-	assert.Equal(t, infinibandstore.EventTypeIbPortFlap, events[0].Name)
-	assert.Equal(t, infinibandstore.EventTypeIbPortDrop, events[1].Name)
+	assert.Len(t, events, 0)
 }
 
 func TestComponentCheckWithEmptyEvents(t *testing.T) {
@@ -1718,7 +1816,8 @@ func TestComponentCheckWithEmptyEvents(t *testing.T) {
 	assert.Len(t, events, 0)
 }
 
-// Tests for event insertion logic with Find/Insert pattern
+// Tests that IB port events are still processed through health state evaluation
+// even when event bucket operations fail
 func TestComponentCheckWithEventFindError(t *testing.T) {
 	t.Parallel()
 
@@ -1806,13 +1905,120 @@ func TestComponentCheckWithEventFindError(t *testing.T) {
 	assert.Equal(t, apiv1.HealthStateTypeUnhealthy, data.health)
 	assert.Contains(t, data.reason, "device(s) flapping between ACTIVE<>DOWN: mlx5_0")
 
-	// Find error should be logged but not prevent processing
-	// No events should be inserted due to Find error
+	// No IB port drop/flap events should be inserted into gpud event store
+	// These events are handled through health state evaluation instead
 	events := mockBucket.GetAPIEvents()
 	assert.Len(t, events, 0)
 }
 
 // Tests for different event types (Drop/Flap)
+func TestComponentCheckHealthyPortsWithHistoricalEvents(t *testing.T) {
+	t.Parallel()
+
+	// Test case: All ports are currently healthy (meeting thresholds)
+	// BUT there are historical flap/drop events that haven't been cleared
+	// Expected: Component should be unhealthy due to historical events
+	cctx, ccancel := context.WithCancel(context.Background())
+	defer ccancel()
+
+	mockBucket := createMockEventBucket()
+
+	// Create a mock store with historical events
+	mockStore := &testIBPortsStore{
+		events: []infinibandstore.Event{
+			{
+				Time: time.Now().UTC().Add(-time.Hour), // Event from 1 hour ago
+				Port: infiniband.IBPort{
+					Device: "mlx5_0",
+					Port:   1,
+				},
+				EventType:   infinibandstore.EventTypeIbPortFlap,
+				EventReason: "mlx5_0 port 1 flap event from 1 hour ago",
+			},
+			{
+				Time: time.Now().UTC().Add(-30 * time.Minute), // Event from 30 min ago
+				Port: infiniband.IBPort{
+					Device: "mlx5_1",
+					Port:   1,
+				},
+				EventType:   infinibandstore.EventTypeIbPortDrop,
+				EventReason: "mlx5_1 port 1 drop event from 30 minutes ago",
+			},
+		},
+	}
+
+	c := &component{
+		ctx:            cctx,
+		cancel:         ccancel,
+		eventBucket:    mockBucket,
+		ibPortsStore:   mockStore,
+		requestTimeout: 5 * time.Second,
+		nvmlInstance:   &mockNVMLInstance{exists: true, productName: "Tesla V100"},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
+		getThresholdsFunc: func() infiniband.ExpectedPortStates {
+			return infiniband.ExpectedPortStates{
+				AtLeastPorts: 2,   // We have 2 healthy ports
+				AtLeastRate:  400, // Both ports meet this rate
+			}
+		},
+		getClassDevicesFunc: func() (infinibandclass.Devices, error) {
+			// Return all healthy ports that meet thresholds
+			return infinibandclass.Devices{
+				{
+					Name: "mlx5_0",
+					Ports: []infinibandclass.Port{
+						{
+							Port:      1,
+							Name:      "1",
+							State:     "Active",
+							PhysState: "LinkUp",
+							RateGBSec: 400,
+							LinkLayer: "Infiniband",
+							Counters: infinibandclass.Counters{
+								LinkDowned: new(uint64),
+							},
+						},
+					},
+				},
+				{
+					Name: "mlx5_1",
+					Ports: []infinibandclass.Port{
+						{
+							Port:      1,
+							Name:      "1",
+							State:     "Active",
+							PhysState: "LinkUp",
+							RateGBSec: 400,
+							LinkLayer: "Infiniband",
+							Counters: infinibandclass.Counters{
+								LinkDowned: new(uint64),
+							},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	result := c.Check()
+	data, ok := result.(*checkResult)
+	require.True(t, ok)
+	require.NotNil(t, data)
+
+	// Should be unhealthy due to historical flap event, even though current ports are healthy
+	// Drop events should NOT be processed since there are no unhealthy IB ports
+	assert.Equal(t, apiv1.HealthStateTypeUnhealthy, data.health)
+	assert.Contains(t, data.reason, "device(s) flapping between ACTIVE<>DOWN: mlx5_0")
+	// Drop event should NOT be processed since len(cr.unhealthyIBPorts) == 0
+	assert.NotContains(t, data.reason, "device(s) down too long: mlx5_1")
+
+	// Suggested actions should include hardware inspection
+	assert.NotNil(t, data.suggestedActions)
+	assert.Contains(t, data.suggestedActions.RepairActions, apiv1.RepairActionTypeHardwareInspection)
+}
+
 func TestComponentCheckWithUnknownEventTypeDefaultCase(t *testing.T) {
 	t.Parallel()
 
@@ -1884,6 +2090,206 @@ func TestComponentCheckWithUnknownEventTypeDefaultCase(t *testing.T) {
 	assert.Equal(t, reasonNoIbPortIssue, data.reason)
 
 	// Unknown event type should not be inserted
+	events := mockBucket.GetAPIEvents()
+	assert.Len(t, events, 0)
+}
+
+func TestComponentCheckDropEventsIgnoredWhenHealthy(t *testing.T) {
+	t.Parallel()
+
+	// Test case: All ports are healthy but there are drop events
+	// Expected: Drop events should be ignored, component should be healthy
+	cctx, ccancel := context.WithCancel(context.Background())
+	defer ccancel()
+
+	mockBucket := createMockEventBucket()
+
+	// Create a mock store with drop events only
+	mockStore := &testIBPortsStore{
+		events: []infinibandstore.Event{
+			{
+				Time: time.Now().UTC().Add(-time.Hour),
+				Port: infiniband.IBPort{
+					Device: "mlx5_0",
+					Port:   1,
+				},
+				EventType:   infinibandstore.EventTypeIbPortDrop,
+				EventReason: "mlx5_0 port 1 drop event",
+			},
+			{
+				Time: time.Now().UTC().Add(-30 * time.Minute),
+				Port: infiniband.IBPort{
+					Device: "mlx5_1",
+					Port:   1,
+				},
+				EventType:   infinibandstore.EventTypeIbPortDrop,
+				EventReason: "mlx5_1 port 1 drop event",
+			},
+		},
+	}
+
+	c := &component{
+		ctx:            cctx,
+		cancel:         ccancel,
+		eventBucket:    mockBucket,
+		ibPortsStore:   mockStore,
+		requestTimeout: 5 * time.Second,
+		nvmlInstance:   &mockNVMLInstance{exists: true, productName: "Tesla V100"},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
+		getThresholdsFunc: func() infiniband.ExpectedPortStates {
+			return infiniband.ExpectedPortStates{
+				AtLeastPorts: 2,
+				AtLeastRate:  400,
+			}
+		},
+		getClassDevicesFunc: func() (infinibandclass.Devices, error) {
+			// Return all healthy ports
+			return infinibandclass.Devices{
+				{
+					Name: "mlx5_0",
+					Ports: []infinibandclass.Port{
+						{
+							Port:      1,
+							Name:      "1",
+							State:     "Active",
+							PhysState: "LinkUp",
+							RateGBSec: 400,
+							LinkLayer: "Infiniband",
+							Counters: infinibandclass.Counters{
+								LinkDowned: new(uint64),
+							},
+						},
+					},
+				},
+				{
+					Name: "mlx5_1",
+					Ports: []infinibandclass.Port{
+						{
+							Port:      1,
+							Name:      "1",
+							State:     "Active",
+							PhysState: "LinkUp",
+							RateGBSec: 400,
+							LinkLayer: "Infiniband",
+							Counters: infinibandclass.Counters{
+								LinkDowned: new(uint64),
+							},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	result := c.Check()
+	data, ok := result.(*checkResult)
+	require.True(t, ok)
+	require.NotNil(t, data)
+
+	// Should be healthy since drop events are ignored when no unhealthy ports
+	assert.Equal(t, apiv1.HealthStateTypeHealthy, data.health)
+	assert.Equal(t, reasonNoIbPortIssue, data.reason)
+	assert.NotContains(t, data.reason, "device(s) down too long")
+
+	// No events should be inserted since drop events are ignored
+	events := mockBucket.GetAPIEvents()
+	assert.Len(t, events, 0)
+}
+
+func TestComponentCheckDropEventsProcessedWhenUnhealthy(t *testing.T) {
+	t.Parallel()
+
+	// Test case: Some ports are unhealthy AND there are drop events
+	// Expected: Drop events should be processed, component should be unhealthy
+	cctx, ccancel := context.WithCancel(context.Background())
+	defer ccancel()
+
+	mockBucket := createMockEventBucket()
+
+	// Create a mock store with drop events
+	mockStore := &testIBPortsStore{
+		events: []infinibandstore.Event{
+			{
+				Time: time.Now().UTC().Add(-time.Hour),
+				Port: infiniband.IBPort{
+					Device: "mlx5_0",
+					Port:   1,
+				},
+				EventType:   infinibandstore.EventTypeIbPortDrop,
+				EventReason: "mlx5_0 port 1 drop event",
+			},
+		},
+	}
+
+	c := &component{
+		ctx:            cctx,
+		cancel:         ccancel,
+		eventBucket:    mockBucket,
+		ibPortsStore:   mockStore,
+		requestTimeout: 5 * time.Second,
+		nvmlInstance:   &mockNVMLInstance{exists: true, productName: "Tesla V100"},
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
+		getThresholdsFunc: func() infiniband.ExpectedPortStates {
+			return infiniband.ExpectedPortStates{
+				AtLeastPorts: 2,
+				AtLeastRate:  400,
+			}
+		},
+		getClassDevicesFunc: func() (infinibandclass.Devices, error) {
+			// Return one healthy and one unhealthy port
+			return infinibandclass.Devices{
+				{
+					Name: "mlx5_0",
+					Ports: []infinibandclass.Port{
+						{
+							Port:      1,
+							Name:      "1",
+							State:     "Down",     // Unhealthy
+							PhysState: "Disabled", // Unhealthy
+							RateGBSec: 0,
+							LinkLayer: "Infiniband",
+							Counters: infinibandclass.Counters{
+								LinkDowned: new(uint64),
+							},
+						},
+					},
+				},
+				{
+					Name: "mlx5_1",
+					Ports: []infinibandclass.Port{
+						{
+							Port:      1,
+							Name:      "1",
+							State:     "Active",
+							PhysState: "LinkUp",
+							RateGBSec: 400,
+							LinkLayer: "Infiniband",
+							Counters: infinibandclass.Counters{
+								LinkDowned: new(uint64),
+							},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	result := c.Check()
+	data, ok := result.(*checkResult)
+	require.True(t, ok)
+	require.NotNil(t, data)
+
+	// Should be unhealthy due to threshold breach and drop events
+	assert.Equal(t, apiv1.HealthStateTypeUnhealthy, data.health)
+	assert.Contains(t, data.reason, "only 1 port(s) are active")
+	assert.Contains(t, data.reason, "device(s) down too long: mlx5_0")
+
+	// No IB port drop/flap events should be inserted into gpud event store
+	// These events are handled through health state evaluation instead
 	events := mockBucket.GetAPIEvents()
 	assert.Len(t, events, 0)
 }

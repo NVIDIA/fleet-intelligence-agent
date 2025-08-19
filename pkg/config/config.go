@@ -9,6 +9,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/leptonai/gpud/components"
 	pkgconfigcommon "github.com/leptonai/gpud/pkg/config/common"
 )
 
@@ -41,6 +42,10 @@ type Config struct {
 	// Set -1 to disable the auto update by exit code.
 	AutoUpdateExitCode int `json:"auto_update_exit_code"`
 
+	// VersionFile is the file that contains the target version.
+	// If empty, the version file is not used.
+	VersionFile string `json:"version_file"`
+
 	// A list of nvidia tool command paths to overwrite the default paths.
 	NvidiaToolOverwrites pkgconfigcommon.ToolOverwrites `json:"nvidia_tool_overwrites"`
 
@@ -53,6 +58,9 @@ type Config struct {
 	Components         []string       `json:"components"`
 	selectedComponents map[string]any `json:"-"`
 	disabledComponents map[string]any `json:"-"`
+
+	// FailureInjector is the failure injector.
+	FailureInjector *components.FailureInjector `json:"failure_injector,omitempty"`
 }
 
 func (config *Config) Validate() error {

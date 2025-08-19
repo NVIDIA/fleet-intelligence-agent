@@ -25,6 +25,7 @@ import (
 	cmdupdate "github.com/leptonai/gpud/cmd/gpud/update"
 	pkgconfig "github.com/leptonai/gpud/pkg/config"
 	pkgcustomplugins "github.com/leptonai/gpud/pkg/custom-plugins"
+	pkgupdate "github.com/leptonai/gpud/pkg/update"
 	"github.com/leptonai/gpud/version"
 )
 
@@ -161,6 +162,11 @@ sudo rm /etc/systemd/system/gpud.service
 					Usage: "specifies the exit code to exit with when auto updating (set -1 to disable exit code)",
 				},
 				cli.StringFlag{
+					Name:  "version-file",
+					Usage: "specifies the version file to use for auto update (leave empty to disable auto update)",
+					Value: pkgupdate.DefaultVersionFile,
+				},
+				cli.StringFlag{
 					Name:  "plugin-specs-file",
 					Usage: "sets the plugin specs file (leave empty for default) -- if the file does not exist, gpud does not install/run any plugin, and updated configuration requires an gpud restart)",
 					Value: pkgcustomplugins.DefaultPluginSpecsFile,
@@ -189,6 +195,31 @@ sudo rm /etc/systemd/system/gpud.service
 					Name:   "infiniband-class-root-dir",
 					Usage:  "sets the infiniband class root directory (leave empty for default)",
 					Value:  "",
+					Hidden: true, // only for testing
+				},
+				cli.StringFlag{
+					Name:   "gpu-uuids-with-row-remapping-pending",
+					Usage:  "set the comma-separated gpu uuids with row remapping pending",
+					Hidden: true, // only for testing
+				},
+				cli.StringFlag{
+					Name:   "gpu-uuids-with-row-remapping-failed",
+					Usage:  "set the comma-separated gpu uuids with row remapping failed",
+					Hidden: true, // only for testing
+				},
+				cli.StringFlag{
+					Name:   "gpu-uuids-with-hw-slowdown",
+					Usage:  "set the comma-separated gpu uuids with hw slowdown",
+					Hidden: true, // only for testing
+				},
+				cli.StringFlag{
+					Name:   "gpu-uuids-with-hw-slowdown-thermal",
+					Usage:  "set the comma-separated gpu uuids with hw slowdown thermal",
+					Hidden: true, // only for testing
+				},
+				cli.StringFlag{
+					Name:   "gpu-uuids-with-hw-slowdown-power-brake",
+					Usage:  "set the comma-separated gpu uuids with hw slowdown power brake",
 					Hidden: true, // only for testing
 				},
 			},
@@ -437,6 +468,31 @@ sudo rm /etc/systemd/system/gpud.service
 					Value:  "",
 					Hidden: true, // only for testing
 				},
+				cli.StringFlag{
+					Name:   "gpu-uuids-with-row-remapping-pending",
+					Usage:  "set the comma-separated gpu uuids with row remapping pending",
+					Hidden: true, // only for testing
+				},
+				cli.StringFlag{
+					Name:   "gpu-uuids-with-row-remapping-failed",
+					Usage:  "set the comma-separated gpu uuids with row remapping failed",
+					Hidden: true, // only for testing
+				},
+				cli.StringFlag{
+					Name:   "gpu-uuids-with-hw-slowdown",
+					Usage:  "set the comma-separated gpu uuids with hw slowdown",
+					Hidden: true, // only for testing
+				},
+				cli.StringFlag{
+					Name:   "gpu-uuids-with-hw-slowdown-thermal",
+					Usage:  "set the comma-separated gpu uuids with hw slowdown thermal",
+					Hidden: true, // only for testing
+				},
+				cli.StringFlag{
+					Name:   "gpu-uuids-with-hw-slowdown-power-brake",
+					Usage:  "set the comma-separated gpu uuids with hw slowdown power brake",
+					Hidden: true, // only for testing
+				},
 			},
 		},
 		{
@@ -556,6 +612,10 @@ sudo rm /etc/systemd/system/gpud.service
 				&cli.StringFlag{
 					Name:  "log-level,l",
 					Usage: "set the logging level [debug, info, warn, error, fatal, panic, dpanic]",
+				},
+				&cli.BoolFlag{
+					Name:  "reset-state",
+					Usage: "reset the state file (otherwise, re-login may contain stale health data)",
 				},
 			},
 		},

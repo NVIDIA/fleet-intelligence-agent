@@ -10,9 +10,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/olekukonko/tablewriter"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/shirou/gopsutil/v4/disk"
 
 	pkgfile "github.com/leptonai/gpud/pkg/file"
@@ -34,7 +36,11 @@ func GetPartitions(ctx context.Context, opts ...OpOption) (Partitions, error) {
 	deviceToPartitions := make(map[string]Partitions)
 	for _, p := range partitions {
 		if !op.matchFuncFstype(p.Fstype) {
-			log.Logger.Debugw("skipping partition", "fstype", p.Fstype, "device", p.Device, "mountPoint", p.Mountpoint)
+			log.Logger.Debugw("skipping partition due to mismatch fstype", "fstype", p.Fstype, "device", p.Device, "mountPoint", p.Mountpoint)
+			continue
+		}
+		if !op.matchFuncMountPoint(p.Mountpoint) {
+			log.Logger.Debugw("skipping partition due to missing mount point", "fstype", p.Fstype, "device", p.Device, "mountPoint", p.Mountpoint)
 			continue
 		}
 
@@ -64,7 +70,12 @@ func GetPartitions(ctx context.Context, opts ...OpOption) (Partitions, error) {
 		}
 
 		if part.Mounted && !op.skipUsage {
+			now := time.Now()
 			part.Usage, err = GetUsage(ctx, p.Mountpoint)
+			took := time.Since(now)
+			metricGetUsageSeconds.With(prometheus.Labels{"mount_point": p.Mountpoint}).Observe(took.Seconds())
+			log.Logger.Debugw("get usage", "mountPoint", p.Mountpoint, "took", took)
+
 			if err != nil {
 				// mount point is gone
 				// e.g., "no such file or directory"

@@ -16,6 +16,8 @@ import (
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/leptonai/gpud/cmd/gpud/common"
+	gpudcomponents "github.com/leptonai/gpud/components"
 	componentsnvidiagpucounts "github.com/leptonai/gpud/components/accelerator/nvidia/gpu-counts"
 	componentsinfiniband "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband"
 	componentsnfs "github.com/leptonai/gpud/components/nfs"
@@ -56,6 +58,7 @@ func Command(cliContext *cli.Context) error {
 	retentionPeriod := cliContext.Duration("retention-period")
 	enableAutoUpdate := cliContext.Bool("enable-auto-update")
 	autoUpdateExitCode := cliContext.Int("auto-update-exit-code")
+	versionFile := cliContext.String("version-file")
 	pluginSpecsFile := cliContext.String("plugin-specs-file")
 
 	ibClassRootDir := cliContext.String("infiniband-class-root-dir")
@@ -93,8 +96,30 @@ func Command(cliContext *cli.Context) error {
 		log.Logger.Infow("set nfs checker group configs", "groupConfigs", groupConfigs)
 	}
 
+	gpuUUIDsWithRowRemappingPendingRaw := cliContext.String("gpu-uuids-with-row-remapping-pending")
+	gpuUUIDsWithRowRemappingPending := common.ParseGPUUUIDs(gpuUUIDsWithRowRemappingPendingRaw)
+
+	gpuUUIDsWithRowRemappingFailedRaw := cliContext.String("gpu-uuids-with-row-remapping-failed")
+	gpuUUIDsWithRowRemappingFailed := common.ParseGPUUUIDs(gpuUUIDsWithRowRemappingFailedRaw)
+
+	gpuUUIDsWithHWSlowdownRaw := cliContext.String("gpu-uuids-with-hw-slowdown")
+	gpuUUIDsWithHWSlowdown := common.ParseGPUUUIDs(gpuUUIDsWithHWSlowdownRaw)
+
+	gpuUUIDsWithHWSlowdownThermalRaw := cliContext.String("gpu-uuids-with-hw-slowdown-thermal")
+	gpuUUIDsWithHWSlowdownThermal := common.ParseGPUUUIDs(gpuUUIDsWithHWSlowdownThermalRaw)
+
+	gpuUUIDsWithHWSlowdownPowerBrakeRaw := cliContext.String("gpu-uuids-with-hw-slowdown-power-brake")
+	gpuUUIDsWithHWSlowdownPowerBrake := common.ParseGPUUUIDs(gpuUUIDsWithHWSlowdownPowerBrakeRaw)
+
 	configOpts := []config.OpOption{
 		config.WithInfinibandClassRootDir(ibClassRootDir),
+		config.WithFailureInjector(&gpudcomponents.FailureInjector{
+			GPUUUIDsWithRowRemappingPending:  gpuUUIDsWithRowRemappingPending,
+			GPUUUIDsWithRowRemappingFailed:   gpuUUIDsWithRowRemappingFailed,
+			GPUUUIDsWithHWSlowdown:           gpuUUIDsWithHWSlowdown,
+			GPUUUIDsWithHWSlowdownThermal:    gpuUUIDsWithHWSlowdownThermal,
+			GPUUUIDsWithHWSlowdownPowerBrake: gpuUUIDsWithHWSlowdownPowerBrake,
+		}),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -118,6 +143,7 @@ func Command(cliContext *cli.Context) error {
 
 	cfg.EnableAutoUpdate = enableAutoUpdate
 	cfg.AutoUpdateExitCode = autoUpdateExitCode
+	cfg.VersionFile = versionFile
 
 	cfg.PluginSpecsFile = pluginSpecsFile
 

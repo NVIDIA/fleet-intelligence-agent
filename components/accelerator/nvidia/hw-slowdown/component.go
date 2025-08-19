@@ -49,6 +49,10 @@ type component struct {
 	parseDriverVersionFunc        func(driverVersion string) (int, int, int, error)
 	checkClockEventsSupportedFunc func(major int) bool
 
+	gpuUUIDsWithHWSlowdown           map[string]any
+	gpuUUIDsWithHWSlowdownThermal    map[string]any
+	gpuUUIDsWithHWSlowdownPowerBrake map[string]any
+
 	eventBucket eventstore.Bucket
 
 	evaluationWindow time.Duration
@@ -66,9 +70,12 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		healthCheckInterval: gpudInstance.HealthCheckInterval,
 		cancel: ccancel,
 
-		nvmlInstance:                gpudInstance.NVMLInstance,
-		getClockEventsSupportedFunc: nvidianvml.ClockEventsSupportedByDevice,
-		getClockEventsFunc:          nvidianvml.GetClockEvents,
+		nvmlInstance:                     gpudInstance.NVMLInstance,
+		getClockEventsSupportedFunc:      nvidianvml.ClockEventsSupportedByDevice,
+		getClockEventsFunc:               nvidianvml.GetClockEvents,
+		gpuUUIDsWithHWSlowdown:           make(map[string]any),
+		gpuUUIDsWithHWSlowdownThermal:    make(map[string]any),
+		gpuUUIDsWithHWSlowdownPowerBrake: make(map[string]any),
 
 		evaluationWindow: DefaultStateHWSlowdownEvaluationWindow,
 		threshold:        DefaultStateHWSlowdownEventsThresholdFrequencyPerMinute,
@@ -88,6 +95,18 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		if err != nil {
 			ccancel()
 			return nil, err
+		}
+	}
+
+	if gpudInstance != nil && gpudInstance.FailureInjector != nil {
+		for _, uuid := range gpudInstance.FailureInjector.GPUUUIDsWithHWSlowdown {
+			c.gpuUUIDsWithHWSlowdown[uuid] = nil
+		}
+		for _, uuid := range gpudInstance.FailureInjector.GPUUUIDsWithHWSlowdownThermal {
+			c.gpuUUIDsWithHWSlowdownThermal[uuid] = nil
+		}
+		for _, uuid := range gpudInstance.FailureInjector.GPUUUIDsWithHWSlowdownPowerBrake {
+			c.gpuUUIDsWithHWSlowdownPowerBrake[uuid] = nil
 		}
 	}
 
@@ -138,14 +157,10 @@ func (c *component) LastHealthStates() apiv1.HealthStates {
 }
 
 func (c *component) Events(ctx context.Context, since time.Time) (apiv1.Events, error) {
-	if c.eventBucket == nil {
-		return nil, nil
-	}
-	evs, err := c.eventBucket.Get(ctx, since)
-	if err != nil {
-		return nil, err
-	}
-	return evs.Events(), nil
+	// hw slowdown events are ONLY used internally within this package
+	// solely to evaluate the suggested actions
+	// so we don't need to return any events externally
+	return nil, nil
 }
 
 func (c *component) Close() error {
@@ -233,6 +248,25 @@ func (c *component) Check() components.CheckResult {
 			cr.reason = "error getting clock events"
 			log.Logger.Warnw(cr.reason, "error", cr.err)
 			return cr
+		}
+
+		// Check for injected HW slowdown failures
+		if _, ok := c.gpuUUIDsWithHWSlowdown[uuid]; ok {
+			log.Logger.Warnw("marking HW slowdown to inject failures", "uuid", uuid)
+			clockEvents.HWSlowdown = true
+			clockEvents.HWSlowdownReasons = append(clockEvents.HWSlowdownReasons, "HW slowdown injected for testing")
+		}
+
+		if _, ok := c.gpuUUIDsWithHWSlowdownThermal[uuid]; ok {
+			log.Logger.Warnw("marking HW slowdown thermal to inject failures", "uuid", uuid)
+			clockEvents.HWSlowdownThermal = true
+			clockEvents.HWSlowdownReasons = append(clockEvents.HWSlowdownReasons, "HW slowdown thermal injected for testing")
+		}
+
+		if _, ok := c.gpuUUIDsWithHWSlowdownPowerBrake[uuid]; ok {
+			log.Logger.Warnw("marking HW slowdown power brake to inject failures", "uuid", uuid)
+			clockEvents.HWSlowdownPowerBrake = true
+			clockEvents.HWSlowdownReasons = append(clockEvents.HWSlowdownReasons, "HW slowdown power brake injected for testing")
 		}
 
 		if clockEvents.HWSlowdown {
@@ -385,7 +419,7 @@ func (cr *checkResult) String() string {
 	table.SetAlignment(tablewriter.ALIGN_CENTER)
 	table.SetHeader([]string{"GPU UUID", "HW Slowdown", "HW Slowdown Thermal", "HW Slowdown Power Brake", "Reasons"})
 	for _, event := range cr.ClockEvents {
-		table.Append([]string{event.UUID, fmt.Sprintf("%t", event.HWSlowdown), fmt.Sprintf("%t", event.HWSlowdownThermal), fmt.Sprintf("%t", event.HWSlowdownPowerBrake), strings.Join(event.Reasons, ", ")})
+		table.Append([]string{event.UUID, fmt.Sprintf("%t", event.HWSlowdown), fmt.Sprintf("%t", event.HWSlowdownThermal), fmt.Sprintf("%t", event.HWSlowdownPowerBrake), strings.Join(event.HWSlowdownReasons, ", ")})
 	}
 	table.Render()
 

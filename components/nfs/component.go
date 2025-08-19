@@ -151,25 +151,6 @@ func (c *component) Check() components.CheckResult {
 		return cr
 	}
 
-	// verify the volume path is an nfs mount point
-	for _, groupConfig := range groupConfigs {
-		dev, fsType, err := c.findMntTargetDevice(groupConfig.VolumePath)
-		if dev == "" || err != nil {
-			cr.err = err
-			cr.health = apiv1.HealthStateTypeDegraded
-			cr.reason = "failed to find mount target device for " + groupConfig.VolumePath
-			log.Logger.Warnw(cr.reason, "error", err)
-			return cr
-		}
-		if !c.isNFSFSType(fsType) {
-			cr.health = apiv1.HealthStateTypeDegraded
-			cr.reason = fmt.Sprintf("volume path %s mounted on %s, but not nfs", groupConfig.VolumePath, dev)
-			log.Logger.Warnw(cr.reason)
-			return cr
-		}
-		log.Logger.Infow("nfs mount point found", "volume_path", groupConfig.VolumePath, "device", dev, "fs_type", fsType)
-	}
-
 	memberConfigs := groupConfigs.GetMemberConfigs(c.machineID)
 	timeoutCtx, cancel := context.WithTimeout(c.ctx, 5*time.Second)
 	err := c.validateMemberConfigs(timeoutCtx, memberConfigs)
@@ -185,6 +166,25 @@ func (c *component) Check() components.CheckResult {
 		}
 		log.Logger.Warnw(cr.reason, "error", err)
 		return cr
+	}
+
+	// verify the volume path is an nfs mount point
+	for _, groupConfig := range groupConfigs {
+		dev, fsType, err := c.findMntTargetDevice(groupConfig.VolumePath)
+		if dev == "" || err != nil {
+			cr.err = err
+			cr.health = apiv1.HealthStateTypeDegraded
+			cr.reason = "failed to find mount target device for " + groupConfig.VolumePath
+			log.Logger.Warnw(cr.reason, "error", err)
+			return cr
+		}
+		if !c.isNFSFSType(fsType) {
+			cr.health = apiv1.HealthStateTypeDegraded
+			cr.reason = fmt.Sprintf("The user applied path %q as NFS volume, but in fact the file system type is not NFS.", groupConfig.VolumePath)
+			log.Logger.Warnw(cr.reason)
+			return cr
+		}
+		log.Logger.Infow("nfs mount point found", "volume_path", groupConfig.VolumePath, "device", dev, "fs_type", fsType)
 	}
 
 	msg := make([]string, 0, len(memberConfigs))
