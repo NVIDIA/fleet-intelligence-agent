@@ -5,7 +5,7 @@ After=network.target local-fs.target
 [Service]
 EnvironmentFile=/etc/default/gpuhealth
 
-ExecStart=/usr/bin/gpuhealth run $FLAGS
+ExecStart=/usr/bin/gpuhealth run $GPUHEALTH_FLAGS
 ExecReload=/bin/kill -HUP $MAINPID
 
 Restart=always
