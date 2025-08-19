@@ -193,10 +193,10 @@ func Command(cliContext *cli.Context) error {
 			IncludeMachineInfo:   true,
 			IncludeComponentData: true,
 			// Set reasonable intervals for data collection
-			Interval:        metav1.Duration{Duration: 30 * time.Second},
+			Interval:        metav1.Duration{Duration: 1 * time.Minute},
 			Timeout:         metav1.Duration{Duration: 2 * time.Minute},
-			MetricsLookback: metav1.Duration{Duration: 30 * time.Second},
-			EventsLookback:  metav1.Duration{Duration: 30 * time.Second},
+			MetricsLookback: metav1.Duration{Duration: 1 * time.Minute},
+			EventsLookback:  metav1.Duration{Duration: 1 * time.Minute},
 		}
 	}
 
