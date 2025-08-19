@@ -62,132 +62,6 @@ func parseDuration(durationStr string) (time.Duration, error) {
 	return totalDuration, nil
 }
 
-// configureHealthExporterFromEnv reads environment variables and applies them to the health exporter configuration
-func configureHealthExporterFromEnv(cfg *gpuhealthconfig.Config) error {
-	// Ensure HealthExporter config exists
-	if cfg.HealthExporter == nil {
-		return fmt.Errorf("health exporter config is nil")
-	}
-
-	// ENABLED - Enable/disable health exporter
-	if enabled := os.Getenv("ENABLED"); enabled != "" {
-		if val, err := strconv.ParseBool(enabled); err == nil {
-			cfg.HealthExporter.Enabled = val
-			log.Logger.Infow("set health exporter enabled from env", "enabled", val)
-		} else {
-			return fmt.Errorf("invalid ENABLED value: %v", enabled)
-		}
-	}
-
-	// ENDPOINT - Health endpoint URL
-	if endpoint := os.Getenv("ENDPOINT"); endpoint != "" {
-		cfg.HealthExporter.Endpoint = endpoint
-		log.Logger.Infow("set health exporter endpoint from env", "endpoint", endpoint)
-	}
-
-	// INCLUDE_METRICS - Include metrics in export
-	if includeMetrics := os.Getenv("INCLUDE_METRICS"); includeMetrics != "" {
-		if val, err := strconv.ParseBool(includeMetrics); err == nil {
-			cfg.HealthExporter.IncludeMetrics = val
-			log.Logger.Infow("set health exporter include metrics from env", "include_metrics", val)
-		} else {
-			return fmt.Errorf("invalid INCLUDE_METRICS value: %v", includeMetrics)
-		}
-	}
-
-	// INCLUDE_EVENTS - Include events in export
-	if includeEvents := os.Getenv("INCLUDE_EVENTS"); includeEvents != "" {
-		if val, err := strconv.ParseBool(includeEvents); err == nil {
-			cfg.HealthExporter.IncludeEvents = val
-			log.Logger.Infow("set health exporter include events from env", "include_events", val)
-		} else {
-			return fmt.Errorf("invalid INCLUDE_EVENTS value: %v", includeEvents)
-		}
-	}
-
-	// INCLUDE_MACHINE_INFO - Include machine info in export
-	if includeMachineInfo := os.Getenv("INCLUDE_MACHINE_INFO"); includeMachineInfo != "" {
-		if val, err := strconv.ParseBool(includeMachineInfo); err == nil {
-			cfg.HealthExporter.IncludeMachineInfo = val
-			log.Logger.Infow("set health exporter include machine info from env", "include_machine_info", val)
-		} else {
-			return fmt.Errorf("invalid INCLUDE_MACHINE_INFO value: %v", includeMachineInfo)
-		}
-	}
-
-	// INCLUDE_COMPONENT_DATA - Include component data in export
-	if includeComponentData := os.Getenv("INCLUDE_COMPONENT_DATA"); includeComponentData != "" {
-		if val, err := strconv.ParseBool(includeComponentData); err == nil {
-			cfg.HealthExporter.IncludeComponentData = val
-			log.Logger.Infow("set health exporter include component data from env", "include_component_data", val)
-		} else {
-			return fmt.Errorf("invalid INCLUDE_COMPONENT_DATA value: %v", includeComponentData)
-		}
-	}
-
-	// INTERVAL - Export interval
-	if interval := os.Getenv("INTERVAL"); interval != "" {
-		if duration, err := time.ParseDuration(interval); err == nil {
-			cfg.HealthExporter.Interval = metav1.Duration{Duration: duration}
-			log.Logger.Infow("set health exporter interval from env", "interval", duration)
-		} else {
-			return fmt.Errorf("invalid INTERVAL value: %v", interval)
-		}
-	}
-
-	// METRICS_LOOKBACK - Metrics lookback duration
-	if metricsLookback := os.Getenv("METRICS_LOOKBACK"); metricsLookback != "" {
-		if duration, err := time.ParseDuration(metricsLookback); err == nil {
-			cfg.HealthExporter.MetricsLookback = metav1.Duration{Duration: duration}
-			log.Logger.Infow("set health exporter metrics lookback from env", "metrics_lookback", duration)
-		} else {
-			return fmt.Errorf("invalid METRICS_LOOKBACK value: %v", metricsLookback)
-		}
-	}
-
-	// EVENTS_LOOKBACK - Events lookback duration
-	if eventsLookback := os.Getenv("EVENTS_LOOKBACK"); eventsLookback != "" {
-		if duration, err := time.ParseDuration(eventsLookback); err == nil {
-			cfg.HealthExporter.EventsLookback = metav1.Duration{Duration: duration}
-			log.Logger.Infow("set health exporter events lookback from env", "events_lookback", duration)
-		} else {
-			return fmt.Errorf("invalid EVENTS_LOOKBACK value: %v", eventsLookback)
-		}
-	}
-
-	// HEALTH_CHECK_INTERVAL - Component health check interval
-	if healthCheckInterval := os.Getenv("HEALTH_CHECK_INTERVAL"); healthCheckInterval != "" {
-		if duration, err := time.ParseDuration(healthCheckInterval); err == nil {
-			// Validate the interval range (1 second to 24 hours)
-			if duration < time.Second {
-				return fmt.Errorf("HEALTH_CHECK_INTERVAL must be at least 1 second, got %v", duration)
-			}
-			if duration > 24*time.Hour {
-				return fmt.Errorf("HEALTH_CHECK_INTERVAL must be at most 24 hours, got %v", duration)
-			}
-			cfg.HealthExporter.HealthCheckInterval = metav1.Duration{Duration: duration}
-			log.Logger.Infow("set health exporter health check interval from env", "health_check_interval", duration)
-		} else {
-			return fmt.Errorf("invalid HEALTH_CHECK_INTERVAL value: %v", healthCheckInterval)
-		}
-	}
-
-	// RETRY_MAX_ATTEMPTS - Maximum retry attempts
-	if retryMaxAttempts := os.Getenv("RETRY_MAX_ATTEMPTS"); retryMaxAttempts != "" {
-		if val, err := strconv.Atoi(retryMaxAttempts); err == nil {
-			if val < 0 {
-				return fmt.Errorf("RETRY_MAX_ATTEMPTS must be non-negative, got %v", val)
-			}
-			cfg.HealthExporter.RetryMaxAttempts = val
-			log.Logger.Infow("set health exporter retry max attempts from env", "retry_max_attempts", val)
-		} else {
-			return fmt.Errorf("invalid RETRY_MAX_ATTEMPTS value: %v", retryMaxAttempts)
-		}
-	}
-
-	return nil
-}
-
 func Command(cliContext *cli.Context) error {
 	logLevel := cliContext.String("log-level")
 	logFile := cliContext.String("log-file")
@@ -282,12 +156,6 @@ func Command(cliContext *cli.Context) error {
 		return err
 	}
 
-	// Apply environment variable overrides to health exporter configuration
-	if err := configureHealthExporterFromEnv(cfg); err != nil {
-		return fmt.Errorf("failed to configure health exporter from environment variables: %w", err)
-	}
-	log.Logger.Infow("health exporter configuration", "cfg", cfg.HealthExporter)
-
 	if listenAddress != "" {
 		cfg.Address = listenAddress
 	}
@@ -316,19 +184,19 @@ func Command(cliContext *cli.Context) error {
 
 		// Create health exporter configuration for offline mode
 		cfg.HealthExporter = &gpuhealthconfig.HealthExporterConfig{
-			Enabled:              cfg.HealthExporter.Enabled,
+			Enabled:              true,
 			OfflineMode:          true,
 			OutputPath:           offlineModePath,
 			Duration:             offlineModeDuration,
-			IncludeMetrics:       cfg.HealthExporter.IncludeMetrics,
-			IncludeEvents:        cfg.HealthExporter.IncludeEvents,
-			IncludeMachineInfo:   cfg.HealthExporter.IncludeMachineInfo,
-			IncludeComponentData: cfg.HealthExporter.IncludeComponentData,
-			Interval:             cfg.HealthExporter.Interval,
-			Timeout:              cfg.HealthExporter.Timeout,
-			MetricsLookback:      cfg.HealthExporter.MetricsLookback,
-			EventsLookback:       cfg.HealthExporter.EventsLookback,
-			HealthCheckInterval:  cfg.HealthExporter.HealthCheckInterval,
+			IncludeMetrics:       true,
+			IncludeEvents:        true,
+			IncludeMachineInfo:   true,
+			IncludeComponentData: true,
+			// Set reasonable intervals for data collection
+			Interval:        metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:         metav1.Duration{Duration: 2 * time.Minute},
+			MetricsLookback: metav1.Duration{Duration: 1 * time.Minute},
+			EventsLookback:  metav1.Duration{Duration: 1 * time.Minute},
 		}
 	}
 
