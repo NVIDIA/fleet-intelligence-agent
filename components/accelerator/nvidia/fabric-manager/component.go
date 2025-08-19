@@ -28,6 +28,8 @@ type component struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	healthCheckInterval time.Duration
+
 	nvmlInstance nvidianvml.Instance
 
 	checkNVSwitchExistsFunc func() bool
@@ -46,6 +48,8 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
 	c := &component{
 		ctx:    cctx,
+
+		healthCheckInterval: gpudInstance.HealthCheckInterval,
 		cancel: ccancel,
 
 		nvmlInstance: gpudInstance.NVMLInstance,
@@ -114,7 +118,7 @@ func (c *component) IsSupported() bool {
 
 func (c *component) Start() error {
 	go func() {
-		ticker := time.NewTicker(time.Minute)
+		ticker := time.NewTicker(c.healthCheckInterval)
 		defer ticker.Stop()
 
 		for {

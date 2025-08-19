@@ -70,6 +70,8 @@ type component struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	healthCheckInterval time.Duration
+
 	nvmlInstance nvidianvml.Instance
 
 	libraries   map[string][]string
@@ -83,10 +85,11 @@ type component struct {
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(context.Background())
 	c := &component{
-		ctx:          cctx,
-		cancel:       ccancel,
-		nvmlInstance: gpudInstance.NVMLInstance,
-		findLibrary:  file.FindLibrary,
+		ctx:                 cctx,
+		cancel:              ccancel,
+		healthCheckInterval: gpudInstance.HealthCheckInterval,
+		nvmlInstance:        gpudInstance.NVMLInstance,
+		findLibrary:         file.FindLibrary,
 	}
 
 	searchDirs := make(map[string]any)
@@ -120,7 +123,7 @@ func (c *component) IsSupported() bool {
 
 func (c *component) Start() error {
 	go func() {
-		ticker := time.NewTicker(time.Minute)
+		ticker := time.NewTicker(c.healthCheckInterval)
 		defer ticker.Stop()
 
 		for {

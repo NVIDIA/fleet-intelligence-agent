@@ -209,6 +209,9 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *lepconfig.Con
 
 		MountPoints:  []string{"/"},
 		MountTargets: []string{"/var/lib/kubelet"},
+
+		// Use default 1 minute interval for regular server (no health exporter config)
+		HealthCheckInterval: time.Minute,
 	}
 	if s.gpudInstance.MachineID == "" {
 		s.gpudInstance.MachineID = pkghost.MachineID()

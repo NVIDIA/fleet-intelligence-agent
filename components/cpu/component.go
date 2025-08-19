@@ -33,6 +33,8 @@ type component struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	healthCheckInterval time.Duration
+
 	getTimeStatFunc    func(ctx context.Context) (cpu.TimesStat, error)
 	getUsedPctFunc     func(ctx context.Context) (float64, error)
 	getLoadAvgStatFunc func(ctx context.Context) (*load.AvgStat, error)
@@ -52,6 +54,8 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	c := &component{
 		ctx:    cctx,
 		cancel: ccancel,
+
+		healthCheckInterval: gpudInstance.HealthCheckInterval,
 
 		getTimeStatFunc:    getTimeStatForAllCPUs,
 		getUsedPctFunc:     getUsedPercentForAllCPUs,
@@ -95,7 +99,7 @@ func (c *component) IsSupported() bool {
 
 func (c *component) Start() error {
 	go func() {
-		ticker := time.NewTicker(time.Minute)
+		ticker := time.NewTicker(c.healthCheckInterval)
 		defer ticker.Stop()
 
 		for {

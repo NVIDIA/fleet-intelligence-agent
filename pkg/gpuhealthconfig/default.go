@@ -47,8 +47,8 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 		},
 		// Health exporter is enabled by default
 		HealthExporter: &HealthExporterConfig{
-			Enabled:              true, // Enabled by default
-			Endpoint:             "http://localhost:8080/api/v1/health/bulk",    // TODO: change to the actual endpoint when we have it
+			Enabled:              true,                                       // Enabled by default
+			Endpoint:             "http://localhost:8080/api/v1/health/bulk", // TODO: change to the actual endpoint when we have it
 			Interval:             metav1.Duration{Duration: 1 * time.Minute},
 			Timeout:              metav1.Duration{Duration: 30 * time.Second},
 			IncludeMetrics:       true,
@@ -57,7 +57,8 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 			IncludeComponentData: true,
 			MetricsLookback:      metav1.Duration{Duration: 1 * time.Minute},
 			EventsLookback:       metav1.Duration{Duration: 1 * time.Minute},
-			RetryMaxAttempts:     3,                                              // Retry up to 3 times
+			HealthCheckInterval:  metav1.Duration{Duration: 1 * time.Minute}, // Default 1 minute for component health checks
+			RetryMaxAttempts:     3,                                          // Retry up to 3 times
 		},
 	}
 

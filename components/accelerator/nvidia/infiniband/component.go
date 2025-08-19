@@ -63,7 +63,7 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		ctx:    cctx,
 		cancel: ccancel,
 
-		checkInterval:  defaultCheckInterval,
+		checkInterval:  gpudInstance.HealthCheckInterval,
 		requestTimeout: defaultRequestTimeout,
 
 		nvmlInstance:   gpudInstance.NVMLInstance,

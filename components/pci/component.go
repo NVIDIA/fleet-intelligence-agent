@@ -31,6 +31,8 @@ type component struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	healthCheckInterval time.Duration
+
 	currentVirtEnv                pkghost.VirtualizationEnvironment
 	getPCIDevicesFunc             func(ctx context.Context) (pci.Devices, error)
 	findACSEnabledDeviceUUIDsFunc func(devs []pci.Device) []string
@@ -46,6 +48,8 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	c := &component{
 		ctx:    cctx,
 		cancel: ccancel,
+
+		healthCheckInterval: gpudInstance.HealthCheckInterval,
 
 		currentVirtEnv:                pkghost.VirtualizationEnv(),
 		getPCIDevicesFunc:             pci.List,
@@ -78,7 +82,7 @@ func (c *component) IsSupported() bool {
 
 func (c *component) Start() error {
 	go func() {
-		ticker := time.NewTicker(time.Minute)
+		ticker := time.NewTicker(c.healthCheckInterval)
 		defer ticker.Stop()
 
 		for {

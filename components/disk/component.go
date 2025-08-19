@@ -35,7 +35,8 @@ type component struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	retryInterval time.Duration
+	healthCheckInterval time.Duration
+	retryInterval       time.Duration
 
 	getBlockDevicesFunc func(ctx context.Context) (disk.BlockDevices, error)
 
@@ -64,7 +65,8 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		ctx:    cctx,
 		cancel: ccancel,
 
-		retryInterval: defaultRetryInterval,
+		healthCheckInterval: gpudInstance.HealthCheckInterval,
+		retryInterval:       defaultRetryInterval,
 
 		getExt4PartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
 			return disk.GetPartitions(ctx, disk.WithFstype(disk.DefaultExt4FsTypeFunc))
@@ -135,7 +137,7 @@ func (c *component) IsSupported() bool {
 
 func (c *component) Start() error {
 	go func() {
-		ticker := time.NewTicker(time.Minute)
+		ticker := time.NewTicker(c.healthCheckInterval)
 		defer ticker.Stop()
 
 		for {

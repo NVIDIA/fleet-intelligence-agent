@@ -28,6 +28,8 @@ type component struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	healthCheckInterval time.Duration
+
 	nvmlInstance           nvidianvml.Instance
 	getPersistenceModeFunc func(uuid string, dev device.Device) (nvidianvml.PersistenceMode, error)
 
@@ -40,6 +42,7 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	c := &component{
 		ctx:                    cctx,
 		cancel:                 ccancel,
+		healthCheckInterval:    gpudInstance.HealthCheckInterval,
 		nvmlInstance:           gpudInstance.NVMLInstance,
 		getPersistenceModeFunc: nvidianvml.GetPersistenceMode,
 	}
@@ -66,7 +69,7 @@ func (c *component) IsSupported() bool {
 
 func (c *component) Start() error {
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(c.healthCheckInterval)
 		defer ticker.Stop()
 
 		for {

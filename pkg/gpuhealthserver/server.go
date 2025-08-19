@@ -130,16 +130,23 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *gpuhealthconf
 		log.Logger.Errorw("failed to record reboot", "error", err)
 	}
 
+	// Determine health check interval from config, with fallback to default
+	healthCheckInterval := time.Minute // default
+	if config.HealthExporter != nil && config.HealthExporter.HealthCheckInterval.Duration > 0 {
+		healthCheckInterval = config.HealthExporter.HealthCheckInterval.Duration
+	}
+
 	s.gpudInstance = &components.GPUdInstance{
-		RootCtx:          ctx,
-		MachineID:        machineID,
-		NVMLInstance:     nvmlInstance,
-		DBRW:             dbRW,
-		DBRO:             dbRO,
-		EventStore:       eventStore,
-		RebootEventStore: rebootEventStore,
-		MountPoints:      []string{"/"},
-		MountTargets:     []string{"/var/lib/kubelet"},
+		RootCtx:             ctx,
+		MachineID:           machineID,
+		NVMLInstance:        nvmlInstance,
+		DBRW:                dbRW,
+		DBRO:                dbRO,
+		EventStore:          eventStore,
+		RebootEventStore:    rebootEventStore,
+		MountPoints:         []string{"/"},
+		MountTargets:        []string{"/var/lib/kubelet"},
+		HealthCheckInterval: healthCheckInterval,
 	}
 
 	// Register only enabled components for health monitoring

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
 	nvidiacommon "github.com/leptonai/gpud/pkg/config/common"
 	"github.com/leptonai/gpud/pkg/eventstore"
@@ -41,6 +42,10 @@ type GPUdInstance struct {
 
 	MountPoints  []string
 	MountTargets []string
+
+	// HealthCheckInterval is the unified interval for all component health checks
+	// Components should use this interval instead of hard-coded values
+	HealthCheckInterval time.Duration
 }
 
 // InitFunc is the function that initializes a component.

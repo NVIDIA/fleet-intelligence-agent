@@ -28,6 +28,8 @@ type component struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	healthCheckInterval time.Duration
+
 	checkDependencyInstalledFunc func() bool
 	checkServiceActiveFunc       func() (bool, error)
 	checkDockerRunningFunc       func(context.Context) bool
@@ -46,6 +48,8 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	c := &component{
 		ctx:    cctx,
 		cancel: ccancel,
+
+		healthCheckInterval: gpudInstance.HealthCheckInterval,
 
 		checkDependencyInstalledFunc: pkgdocker.CheckDockerInstalled,
 		checkServiceActiveFunc: func() (bool, error) {
@@ -75,7 +79,7 @@ func (c *component) IsSupported() bool {
 
 func (c *component) Start() error {
 	go func() {
-		ticker := time.NewTicker(time.Minute)
+		ticker := time.NewTicker(c.healthCheckInterval)
 		defer ticker.Stop()
 
 		for {

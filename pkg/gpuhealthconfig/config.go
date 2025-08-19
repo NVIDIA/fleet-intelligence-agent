@@ -82,6 +82,10 @@ type HealthExporterConfig struct {
 	// EventsLookback determines how far back to look for events data
 	EventsLookback metav1.Duration `json:"events_lookback"`
 
+	// HealthCheckInterval determines how often individual components perform their health checks
+	// Valid range: 1 second (minimum) to 24 hours (maximum), default is 1 minute
+	HealthCheckInterval metav1.Duration `json:"health_check_interval"`
+
 	// RetryMaxAttempts is the maximum number of retry attempts for failed requests
 	RetryMaxAttempts int `json:"retry_max_attempts"`
 
@@ -110,13 +114,26 @@ func (config *Config) Validate() error {
 		return fmt.Errorf("retention_period must be at least 1 minute, got %v", config.RetentionPeriod.Duration)
 	}
 
-	// Validate offline mode configuration if present
-	if config.HealthExporter != nil && config.HealthExporter.OfflineMode {
-		if config.HealthExporter.OutputPath == "" {
-			return errors.New("offline mode: output_path is required")
+	// Validate health exporter configuration if present
+	if config.HealthExporter != nil {
+		// Validate health check interval
+		if config.HealthExporter.HealthCheckInterval.Duration != 0 {
+			if config.HealthExporter.HealthCheckInterval.Duration < time.Second {
+				return fmt.Errorf("health_check_interval must be at least 1 second, got %v", config.HealthExporter.HealthCheckInterval.Duration)
+			}
+			if config.HealthExporter.HealthCheckInterval.Duration > 24*time.Hour {
+				return fmt.Errorf("health_check_interval must be at most 24 hours, got %v", config.HealthExporter.HealthCheckInterval.Duration)
+			}
 		}
-		if config.HealthExporter.Duration <= 0 {
-			return errors.New("offline mode: duration is required")
+
+		// Validate offline mode configuration if present
+		if config.HealthExporter.OfflineMode {
+			if config.HealthExporter.OutputPath == "" {
+				return errors.New("offline mode: output_path is required")
+			}
+			if config.HealthExporter.Duration <= 0 {
+				return errors.New("offline mode: duration is required")
+			}
 		}
 	}
 
