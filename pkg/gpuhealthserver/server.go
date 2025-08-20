@@ -211,14 +211,18 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *gpuhealthconf
 			// If mock is nil, use the endpoint from config (already set)
 		}
 
-		s.healthExporter = pkghealthexporter.New(
+		var err error
+		s.healthExporter, err = pkghealthexporter.New(
 			ctx,
-			config.HealthExporter,
-			metricsSQLiteStore,
-			eventStore,
-			s.componentsRegistry,
-			nvmlInstance,
+			pkghealthexporter.WithConfig(config.HealthExporter),
+			pkghealthexporter.WithMetricsStore(metricsSQLiteStore),
+			pkghealthexporter.WithEventStore(eventStore),
+			pkghealthexporter.WithComponentsRegistry(s.componentsRegistry),
+			pkghealthexporter.WithNVMLInstance(nvmlInstance),
 		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create health exporter: %w", err)
+		}
 
 		// Start the health exporter
 		if err := s.healthExporter.Start(); err != nil {

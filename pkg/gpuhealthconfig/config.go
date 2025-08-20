@@ -93,6 +93,9 @@ type HealthExporterConfig struct {
 	// OutputPath is the directory path where files will be written (required when OfflineMode is true)
 	OutputPath string `json:"output_path"`
 
+	// OutputFormat specifies the format for offline mode output files: "json" (default) or "csv"
+	OutputFormat string `json:"output_format"`
+
 	// Duration is how long to collect telemetry data in offline mode
 	Duration time.Duration `json:"duration"`
 }
@@ -130,6 +133,12 @@ func (config *Config) Validate() error {
 			}
 			if config.HealthExporter.Duration <= 0 {
 				return errors.New("offline mode: duration is required")
+			}
+			// Validate output format
+			if config.HealthExporter.OutputFormat != "" {
+				if config.HealthExporter.OutputFormat != "json" && config.HealthExporter.OutputFormat != "csv" {
+					return fmt.Errorf("offline mode: output_format must be 'json' or 'csv', got '%s'", config.HealthExporter.OutputFormat)
+				}
 			}
 		}
 	}

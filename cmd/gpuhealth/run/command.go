@@ -215,6 +215,7 @@ func Command(cliContext *cli.Context) error {
 	offlineMode := cliContext.Bool("offline-mode")
 	offlineModePath := cliContext.String("path")
 	offlineModeDurationStr := cliContext.String("duration")
+	offlineModeOutputFormat := cliContext.String("format")
 
 	var offlineModeDuration time.Duration
 
@@ -309,6 +310,7 @@ func Command(cliContext *cli.Context) error {
 			OfflineMode:          true,
 			OutputPath:           offlineModePath,
 			Duration:             offlineModeDuration,
+			OutputFormat:         offlineModeOutputFormat,
 			IncludeMetrics:       cfg.HealthExporter.IncludeMetrics,
 			IncludeEvents:        cfg.HealthExporter.IncludeEvents,
 			IncludeMachineInfo:   cfg.HealthExporter.IncludeMachineInfo,

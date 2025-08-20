@@ -122,6 +122,11 @@ func App() *cli.App {
 					Name:  "duration",
 					Usage: "duration for offline mode run in HH:MM:SS format (required when --offline-mode is used)",
 				},
+				&cli.StringFlag{
+					Name:  "format",
+					Usage: "output format for offline mode [json|csv]",
+					Value: "json",
+				},
 			},
 		},
 		{

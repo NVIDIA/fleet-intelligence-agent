@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -96,6 +97,7 @@ func evolveHealthyState(events eventstore.Events) (ret apiv1.HealthState) {
 		Health:           translateToStateHealth(lastHealth),
 		Reason:           reason,
 		SuggestedActions: lastSuggestedAction,
+		Time:             metav1.NewTime(time.Now().UTC()),
 	}
 }
 

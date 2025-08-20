@@ -100,6 +100,7 @@ func (c *component) LastHealthStates() apiv1.HealthStates {
 			Component: Name,
 			Health:    apiv1.HealthStateTypeHealthy,
 			Reason:    "no issue",
+			Time:      metav1.NewTime(time.Now().UTC()),
 		},
 	}
 }
