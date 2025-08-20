@@ -306,7 +306,6 @@ func Command(cliContext *cli.Context) error {
 
 		// Create health exporter configuration for offline mode
 		cfg.HealthExporter = &gpuhealthconfig.HealthExporterConfig{
-			Enabled:              true,
 			OfflineMode:          true,
 			OutputPath:           offlineModePath,
 			Duration:             offlineModeDuration,

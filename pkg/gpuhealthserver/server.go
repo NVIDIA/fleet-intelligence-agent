@@ -202,7 +202,7 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *gpuhealthconf
 	// gpud login --endpoint <health-endpoint> --token <sak-token> --data-center <data-center> --node-group <node-group>
 
 	// Create and start health exporter with all dependencies if enabled
-	if config.HealthExporter != nil && config.HealthExporter.Enabled {
+	if config.HealthExporter != nil {
 		// Set endpoint based on mode and availability of mock
 		if !config.HealthExporter.OfflineMode {
 			if mock != nil {

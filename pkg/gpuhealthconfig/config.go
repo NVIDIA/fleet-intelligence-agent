@@ -52,9 +52,6 @@ type Config struct {
 
 // HealthExporterConfig holds configuration for the health data exporter
 type HealthExporterConfig struct {
-	// Enabled controls whether the health exporter is active
-	Enabled bool `json:"enabled"`
-
 	// Endpoint is the global health endpoint URL where data will be sent
 	Endpoint string `json:"endpoint"`
 

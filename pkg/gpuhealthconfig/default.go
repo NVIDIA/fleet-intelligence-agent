@@ -47,7 +47,6 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 		},
 		// Health exporter is enabled by default
 		HealthExporter: &HealthExporterConfig{
-			Enabled:              true,                                       // Enabled by default
 			Endpoint:             "http://localhost:8080/api/v1/health/bulk", // TODO: change to the actual endpoint when we have it
 			Interval:             metav1.Duration{Duration: 1 * time.Minute},
 			Timeout:              metav1.Duration{Duration: 30 * time.Second},
