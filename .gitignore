@@ -35,9 +35,9 @@ GEMINI.md
 CODEX.md
 
 # Debian packaging build artifacts
-deployment/packages/debian/.debhelper/
-deployment/packages/debian/debhelper-build-stamp
-deployment/packages/debian/*.substvars
-deployment/packages/debian/files
-deployment/packages/debian/gpuhealth/
+deployments/packages/debian/.debhelper/
+deployments/packages/debian/debhelper-build-stamp
+deployments/packages/debian/*.substvars
+deployments/packages/debian/files
+deployments/packages/debian/gpuhealth/
 *.deb
