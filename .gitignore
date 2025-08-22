@@ -40,4 +40,11 @@ deployments/packages/debian/debhelper-build-stamp
 deployments/packages/debian/*.substvars
 deployments/packages/debian/files
 deployments/packages/debian/gpuhealth/
+deployments/packages/rpm/*.tar.gz
+deployments/packages/rpm/SOURCES/
+deployments/packages/rpm/SPECS/
+deployments/packages/rpm/RPMS/
+deployments/packages/rpm/BUILD/
+deployments/packages/rpm/BUILDROOT/
+deployments/packages/rpm/SRPMS/
 *.deb
