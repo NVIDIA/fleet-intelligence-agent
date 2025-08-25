@@ -48,3 +48,5 @@ deployments/packages/rpm/BUILD/
 deployments/packages/rpm/BUILDROOT/
 deployments/packages/rpm/SRPMS/
 *.deb
+
+dist/

@@ -2,7 +2,7 @@
 set -e
 
 case "$1" in
-    remove)
+    remove|0)
         echo "Removing GPU Health Agent..."
         
         if [ -d /run/systemd/system ]; then
@@ -22,7 +22,7 @@ case "$1" in
         echo "GPU Health Agent service stopped and disabled"
         ;;
         
-    upgrade)
+    upgrade|1|2)
         echo "Preparing GPU Health Agent for upgrade..."
         # Don't stop service during upgrade
         ;;
@@ -33,4 +33,6 @@ case "$1" in
             systemctl stop gpuhealthd.service || true
         fi
         ;;
-esac 
+esac
+
+

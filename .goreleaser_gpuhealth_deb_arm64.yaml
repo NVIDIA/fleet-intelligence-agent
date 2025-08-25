@@ -1,0 +1,59 @@
+version: 2
+
+builds:
+  - id: gpuhealth
+    binary: gpuhealth
+    main: ./cmd/gpuhealth
+    env: [CGO_ENABLED=1]
+    flags: [-v]
+    ldflags:
+      - -s -w
+      - -X github.com/leptonai/gpud/version.BuildTimestamp={{.CommitTimestamp}}
+      - -X github.com/leptonai/gpud/version.Revision={{.Commit}}
+      - -X github.com/leptonai/gpud/version.Version=v{{.Version}}
+    goos: [linux]
+    goarch: [arm64]
+
+nfpms:
+  - id: gpuhealth-deb-arm64
+    package_name: gpuhealth
+    ids: [gpuhealth]
+    formats: [deb]
+    bindir: /usr/bin
+    maintainer: "GPU Health Team <gpuhealth@exchange.nvidia.com>"
+    license: Apache-2.0
+    homepage: https://github.com/leptonai/gpud
+    description: GPU Health monitoring agent for datacenter environments
+    dependencies: [systemd, curl]
+    recommends: [nvidia-driver]
+    contents:
+      - src: deployments/packages/gpuhealth/systemd/gpuhealthd.service
+        dst: /lib/systemd/system/gpuhealthd.service
+        file_info: { mode: 0644 }
+      - src: deployments/packages/gpuhealth/systemd/gpuhealth.env
+        dst: /etc/default/gpuhealth
+        type: config
+        file_info: { mode: 0644 }
+      - src: deployments/packages/gpuhealth/doc/README.md
+        dst: /usr/share/doc/gpuhealth/README.md
+        file_info: { mode: 0644 }
+      - dst: /var/lib/gpuhealth
+        type: dir
+        file_info: { mode: 0755 }
+    scripts:
+      preinstall: deployments/packages/gpuhealth/scripts/preinst
+      postinstall: deployments/packages/gpuhealth/scripts/postinst
+      preremove: deployments/packages/gpuhealth/scripts/prerm
+      postremove: deployments/packages/gpuhealth/scripts/postrm
+
+changelog: { use: github-native }
+release:
+  draft: false
+  replace_existing_draft: true
+  make_latest: true
+  mode: replace
+  github: { owner: leptonai, name: gpud }
+  name_template: "gpuhealth-v{{.Version}}"
+checksum: { disable: true }
+
+
