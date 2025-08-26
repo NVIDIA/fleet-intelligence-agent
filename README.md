@@ -2,7 +2,7 @@
 
 ## Overview
 
-**GPUHealth** is a streamlined GPU health monitoring and reporting tool designed to ensure GPU reliability by actively monitoring GPU status and exporting health metrics for analysis. **GPUHealth** is based on the upstream [leptonai/gpud](https://github.com/leptonai/gpud) project but focuses specifically on GPU health monitoring without management overhead.
+`gpuhealth` is a streamlined GPU health monitoring and reporting agent designed to ensure GPU reliability by actively monitoring GPU status and exporting health metrics for analysis. `gpuhealth` is based on the upstream [leptonai/gpud](https://github.com/leptonai/gpud) project but focuses specifically on GPU health monitoring without management overhead.
 
 ### Key Characteristics
 
