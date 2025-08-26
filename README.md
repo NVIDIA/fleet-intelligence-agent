@@ -33,23 +33,37 @@ Choose between **package installation** (recommended for production) or **buildi
 
 **Includes systemd integration and auto-start capability**
 
-**Debian/Ubuntu:**
+**Ubuntu (22.04, 24.04):**
 ```bash
-# Download and install .deb package
-wget https://github.com/NVIDIA/gpuhealth/releases/latest/download/gpuhealth_amd64.deb
-sudo dpkg -i gpuhealth_amd64.deb
+# Download the appropriate package from releases page:
+# https://github.com/NVIDIA/gpuhealth/releases
 
-# Check the gpuhealthd service status
+# For x86_64/amd64
+wget https://github.com/NVIDIA/gpuhealth/releases/latest/download/gpuhealth_*_amd64.deb
+sudo dpkg -i gpuhealth_*_amd64.deb
+
+# For ARM64/aarch64  
+wget https://github.com/NVIDIA/gpuhealth/releases/latest/download/gpuhealth_*_arm64.deb
+sudo dpkg -i gpuhealth_*_arm64.deb
+
+# Verify installation and service status
 systemctl status gpuhealthd
 ```
 
-**RHEL/CentOS:**
+**RHEL, Rocky Linux, AlmaLinux (8, 9, 10) & Amazon Linux 2023:**
 ```bash
-# Download and install .rpm package  
-wget https://github.com/NVIDIA/gpuhealth/releases/latest/download/gpuhealth-x86_64.rpm
-sudo rpm -i gpuhealth-x86_64.rpm
+# Download the appropriate package from releases page:
+# https://github.com/NVIDIA/gpuhealth/releases
 
-# Check the gpuhealthd service status
+# For x86_64
+wget https://github.com/NVIDIA/gpuhealth/releases/latest/download/gpuhealth-*-1.x86_64.rpm
+sudo rpm -i gpuhealth-*-1.x86_64.rpm
+
+# For ARM64/aarch64
+wget https://github.com/NVIDIA/gpuhealth/releases/latest/download/gpuhealth-*-1.aarch64.rpm  
+sudo rpm -i gpuhealth-*-1.aarch64.rpm
+
+# Verify installation and service status
 systemctl status gpuhealthd
 ```
 
@@ -223,12 +237,30 @@ For package installations (deb/rpm), use your system's package manager to update
 
 ### What are the system requirements?
 
-- **OS**: Linux (primary support), basic support for other Unix-like systems
-- **Architecture**: x86_64 (amd64), ARM64 (aarch64)  
+#### Supported Operating Systems
+
+| OS Distribution | Version | x86_64 (amd64) | ARM64 (aarch64) |
+|-----------------|---------|:--------------:|:---------------:|
+| **Ubuntu**      | 22.04   | ✅             | ✅              |
+| **Ubuntu**      | 24.04   | ✅             | ✅              |
+| **RHEL/Rocky Linux/AlmaLinux** | 8 | ✅ | ✅              |
+| **RHEL/Rocky Linux/AlmaLinux** | 9 | ✅ | ✅              |
+| **RHEL/Rocky Linux/AlmaLinux** | 10 | ✅ | ✅              |
+| **Amazon Linux** | 2023    | ✅             | ✅              |
+
+#### System Resources
+
 - **NVIDIA Driver**: Version 535+ recommended (not required for basic system monitoring)
-- **Memory**: ~10-50MB RAM usage
+- **Memory**: <100MB RAM usage
 - **CPU**: Minimal overhead, typically <1% CPU usage
 - **Storage**: ~100MB for binary and logs
+- **Network**: HTTP/HTTPS access for centralized reporting (optional)
+
+#### Additional Requirements
+
+- **systemd**: Version 230+ (for package installations)
+- **curl**: Required for installation scripts and HTTP exports
+- **Root privileges**: Required for full system monitoring capabilities
 
 ### Can I run GPUHealth without NVIDIA drivers?
 
