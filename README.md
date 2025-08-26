@@ -1,16 +1,8 @@
-# GPUHealth
-
-[![Go Report Card](https://goreportcard.com/badge/github.com/NVIDIA/gpuhealth)](https://goreportcard.com/report/github.com/NVIDIA/gpuhealth)
-![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/NVIDIA/gpuhealth?sort=semver)
-[![Go Reference](https://pkg.go.dev/badge/github.com/NVIDIA/gpuhealth.svg)](https://pkg.go.dev/github.com/NVIDIA/gpuhealth)
+# NVIDIA GPU Health Monitoring and Reporting Agent
 
 ## Overview
 
-**GPUHealth** is a streamlined GPU health monitoring and reporting tool designed to ensure GPU reliability by actively monitoring GPU status and exporting health metrics for analysis.
-
-## About GPUHealth
-
-GPUHealth is based on the upstream [leptonai/gpud](https://github.com/leptonai/gpud) project but focuses specifically on GPU health monitoring without management overhead. It is built on years of experience operating large-scale GPU clusters and is carefully designed to be self-contained with seamless integration into existing monitoring infrastructure.
+**GPUHealth** is a streamlined GPU health monitoring and reporting tool designed to ensure GPU reliability by actively monitoring GPU status and exporting health metrics for analysis. **GPUHealth** is based on the upstream [leptonai/gpud](https://github.com/leptonai/gpud) project but focuses specifically on GPU health monitoring without management overhead.
 
 ### Key Characteristics
 
@@ -26,56 +18,68 @@ GPUHealth operates as a standalone monitoring agent that:
 - Collects GPU health metrics and status information
 - Detects hardware issues and performance anomalies  
 - Exports data in standard formats (JSON, CSV)
-- Supports both online (HTTP endpoint) and offline (file-based) modes
+- Supports multiple deployment modes:
+  - **Local API**: HTTP endpoints for on-demand access
+  - **Offline Collection**: File-based batch data export  
+  - **Centralized Reporting**: Optional push-mode to control planes (configurable)
 
 ## Get Started
 
-### Quick Start
-
-To quickly check your GPU health status:
-
-```bash
-# Download and run a quick scan
-gpuhealth scan
-```
-
 ### Installation
 
-#### From GitHub Releases
+Choose between **package installation** (recommended for production) or **building from source** (for development/customization):
 
-Download the latest release for your platform from [GitHub Releases](https://github.com/NVIDIA/gpuhealth/releases):
+#### Package Installation (Recommended)
 
-```bash
-# Example for Linux x86_64
-wget https://github.com/NVIDIA/gpuhealth/releases/latest/download/gpuhealth_linux_amd64.tar.gz
-tar -xzf gpuhealth_linux_amd64.tar.gz
-sudo mv gpuhealth /usr/local/bin/
-```
-
-#### Package Installation
+**Includes systemd integration and auto-start capability**
 
 **Debian/Ubuntu:**
 ```bash
-# Download .deb package
+# Download and install .deb package
 wget https://github.com/NVIDIA/gpuhealth/releases/latest/download/gpuhealth_amd64.deb
 sudo dpkg -i gpuhealth_amd64.deb
+
+# Check the gpuhealthd service status
+systemctl status gpuhealthd
 ```
 
 **RHEL/CentOS:**
 ```bash
-# Download .rpm package  
+# Download and install .rpm package  
 wget https://github.com/NVIDIA/gpuhealth/releases/latest/download/gpuhealth-x86_64.rpm
 sudo rpm -i gpuhealth-x86_64.rpm
+
+# Check the gpuhealthd service status
+systemctl status gpuhealthd
 ```
 
+**Package installation provides:**
+- ✅ **Systemd integration**: Service management with `systemctl`
+- ✅ **Auto-start**: Automatically starts on system boot
+- ✅ **Service configuration**: Pre-configured service files and environment
+- ✅ **Standard paths**: Binary, logs, and data stored in standard system locations
+
 #### Build from Source
+
+**For development, customization, or manual deployment**
 
 ```bash
 git clone https://github.com/NVIDIA/gpuhealth.git
 cd gpuhealth
 make gpuhealth
 sudo mv bin/gpuhealth /usr/local/bin/
+
+# Manual setup required:
+# - No systemd integration (run manually or create your own service)  
+# - No auto-start capability
+# - Manual configuration of paths and permissions
 ```
+
+**Source installation provides:**
+- ✅ **Latest code**: Access to newest features and bug fixes
+- ✅ **Customization**: Modify source code as needed
+- ✅ **Minimal installation**: Just the binary, no additional system integration
+- ❌ **Manual setup**: You handle service management, auto-start, and configuration
 
 ### Usage
 
@@ -146,7 +150,9 @@ curl http://localhost:15133/v1/states
 - **Multiple Formats**: JSON and CSV output formats
 - **HTTP API**: RESTful endpoints for real-time data access
 - **Offline Mode**: File-based data collection for batch processing
-- **Configurable Intervals**: Customizable health check frequencies
+- **Centralized Reporting**: Optional push-mode data export to control planes
+- **Configurable Intervals**: Customizable health check and export frequencies
+- **Flexible Endpoints**: Support for custom monitoring infrastructure integration
 
 ### Production Features
 - **Low Overhead**: Minimal CPU and memory footprint
@@ -160,14 +166,21 @@ Check out [*components*](./docs/COMPONENTS.md) for a detailed list of monitoring
 
 ### Does GPUHealth send data externally?
 
-**No.** GPUHealth operates in a fully self-contained mode and does not send any data to external services by default. All health monitoring data is:
+**By default, no.** GPUHealth operates in a fully self-contained mode and does not send any data to external services by default. However, it **can be configured** to send health data to a centralized control plane for further analysis if desired.
 
+**Default behavior:**
 - Stored locally on your system
 - Accessed only through the local HTTP API (if enabled)  
 - Exported to local files in offline mode
-- **Never transmitted** to external services without explicit configuration
+- **No external data transmission** without explicit configuration
 
-GPUHealth is designed for environments where data privacy and security are paramount.
+**Optional centralized reporting:**
+- Can be configured to send health data to a centralized monitoring platform
+- Configurable endpoints, intervals, and data filtering
+- All data transmission is **opt-in** and under your control
+- Supports secure channels for data transmission
+
+GPUHealth is designed for environments where data privacy and security are paramount, giving you full control over where and how your GPU health data is used.
 
 ### How do I integrate GPUHealth with my monitoring system?
 
@@ -188,8 +201,16 @@ curl http://localhost:15133/v1/states
 gpuhealth run --offline-mode --path=/monitoring/data --duration=24h
 ```
 
+**Centralized Control Plane Integration:**
+```bash
+# Configure centralized reporting (optional)
+gpuhealth run --health-exporter-endpoint=https://monitoring.company.com/gpu-health \
+              --health-exporter-interval=5m \
+              --include-metrics=true
+```
+
 **Custom Endpoints:**
-Configure your monitoring system to scrape the GPUHealth API endpoints at your desired interval.
+Configure your monitoring system to scrape the GPUHealth API endpoints at your desired interval, or set up centralized reporting to push data to your monitoring infrastructure.
 
 ### How do I update GPUHealth?
 
