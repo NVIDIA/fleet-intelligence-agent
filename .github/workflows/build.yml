@@ -1,4 +1,4 @@
-name: Build and Store gpud binary
+name: Build and Store gpuhealth binary
 
 on:
   push:
@@ -22,10 +22,10 @@ jobs:
 
       - name: Build project
         run: |
-          make
+          make gpuhealth
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gpud
-          path: bin/gpud
+          name: gpuhealth
+          path: bin/gpuhealth

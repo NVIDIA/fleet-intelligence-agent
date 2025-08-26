@@ -8,9 +8,9 @@ builds:
     flags: [-v]
     ldflags:
       - -s -w
-      - -X github.com/leptonai/gpud/version.BuildTimestamp={{.CommitTimestamp}}
-      - -X github.com/leptonai/gpud/version.Revision={{.Commit}}
-      - -X github.com/leptonai/gpud/version.Version=v{{.Version}}
+      - -X github.com/NVIDIA/gpuhealth/version.BuildTimestamp={{.CommitTimestamp}}
+      - -X github.com/NVIDIA/gpuhealth/version.Revision={{.Commit}}
+      - -X github.com/NVIDIA/gpuhealth/version.Version=v{{.Version}}
     goos: [linux]
     goarch: [arm64]
 
@@ -24,7 +24,7 @@ nfpms:
     file_name_template: '{{ .PackageName }}-{{ .Version }}-{{ .Release }}.{{ if eq .Arch "amd64" }}x86_64{{ else if eq .Arch "arm64" }}aarch64{{ else }}{{ .Arch }}{{ end }}'
     maintainer: "GPU Health Team <gpuhealth@exchange.nvidia.com>"
     license: Apache-2.0
-    homepage: https://github.com/leptonai/gpud
+    homepage: https://github.com/NVIDIA/gpuhealth
     description: GPU Health monitoring agent for datacenter environments
     dependencies: [systemd, curl]
     recommends: [nvidia-driver]
@@ -56,7 +56,7 @@ release:
   replace_existing_draft: true
   make_latest: true
   mode: replace
-  github: { owner: leptonai, name: gpud }
+  github: { owner: NVIDIA, name: gpuhealth }
   name_template: "gpuhealth-v{{.Version}}"
 checksum: { disable: true }
 

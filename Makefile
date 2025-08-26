@@ -7,7 +7,7 @@ ROOTDIR=$(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 BUILD_TIMESTAMP ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 VERSION ?= $(shell git describe --match 'v[0-9]*' --dirty='.m' --always)
 REVISION=$(shell git rev-parse HEAD)$(shell if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi)
-PACKAGE=github.com/leptonai/gpud
+PACKAGE=github.com/NVIDIA/gpuhealth
 
 ifneq "$(strip $(shell command -v $(GO) 2>/dev/null))" ""
 	GOOS ?= $(shell $(GO) env GOOS)
@@ -49,9 +49,9 @@ endif
 WHALE = "🇩"
 ONI = "👹"
 
-RELEASE=gpud-$(VERSION:v%=%)-${GOOS}-${GOARCH}
+RELEASE=gpuhealth-$(VERSION:v%=%)-${GOOS}-${GOARCH}
 
-COMMANDS=gpud swagger
+COMMANDS=gpuhealth
 
 GO_BUILD_FLAGS=-ldflags '-s -X $(PACKAGE)/version.BuildTimestamp=$(BUILD_TIMESTAMP) -X $(PACKAGE)/version.Version=$(VERSION) -X $(PACKAGE)/version.Revision=$(REVISION) -X $(PACKAGE)/version.Package=$(PACKAGE)'
 
@@ -71,7 +71,7 @@ GOPATHS=$(shell echo ${GOPATH} | tr ":" "\n" | tr ";" "\n")
 
 BINARIES=$(addprefix bin/,$(COMMANDS))
 
-.PHONY: clean all binaries
+.PHONY: clean all binaries gpuhealth
 .DEFAULT: default
 
 all: binaries
@@ -89,6 +89,10 @@ bin/%: cmd/% FORCE
 
 binaries: $(BINARIES) ## build binaries
 	@echo "$(WHALE) $@"
+
+# Specific target for gpuhealth (your main binary)
+gpuhealth: bin/gpuhealth ## build gpuhealth binary
+	@echo "$(WHALE) gpuhealth built successfully"
 
 clean: ## clean up binaries
 	@echo "$(WHALE) $@"
