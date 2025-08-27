@@ -18,7 +18,7 @@ When creating an issue:
 First clone the source code from Github
 
 ```bash
-git clone https://github.com/leptonai/gpuhealth.git
+git clone https://github.com/NVIDIA/gpuhealth.git
 ```
 
 Use `go` to build `gpuhealth` from source
