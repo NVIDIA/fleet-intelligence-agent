@@ -20,9 +20,11 @@ import (
 	"github.com/leptonai/gpud/components"
 	"github.com/leptonai/gpud/components/all"
 	"github.com/leptonai/gpud/pkg/eventstore"
+	pkgfaultinjector "github.com/leptonai/gpud/pkg/fault-injector"
 	"github.com/leptonai/gpud/pkg/gpuhealthconfig"
 	pkghealthexporter "github.com/leptonai/gpud/pkg/healthexporter"
 	pkghost "github.com/leptonai/gpud/pkg/host"
+	pkgkmsgwriter "github.com/leptonai/gpud/pkg/kmsg/writer"
 	"github.com/leptonai/gpud/pkg/log"
 	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
 	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
@@ -47,6 +49,9 @@ type Server struct {
 
 	// healthExporter is the health exporter instance
 	healthExporter pkghealthexporter.Exporter
+
+	// faultInjector is the fault injector for testing
+	faultInjector pkgfaultinjector.Injector
 
 	machineID string
 }
@@ -107,6 +112,10 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *gpuhealthconf
 	}
 
 	s.machineID = machineID
+
+	// Initialize fault injector for testing
+	kmsgWriter := pkgkmsgwriter.NewWriter(pkgkmsgwriter.DefaultDevKmsg)
+	s.faultInjector = pkgfaultinjector.NewInjector(kmsgWriter)
 
 	nvmlInstance, err := nvidianvml.NewWithExitOnSuccessfulLoad(ctx)
 	if err != nil {
@@ -304,6 +313,7 @@ func (s *Server) startServer(ctx context.Context, nvmlInstance nvidianvml.Instan
 	})
 	router.GET("/healthz", s.healthz())
 	router.GET("/machine-info", globalHandler.machineInfo)
+	router.POST(URLPathInjectFault, s.injectFault)
 
 	log.Logger.Infow("gpuhealth started serving with HTTP", "address", s.config.Address)
 

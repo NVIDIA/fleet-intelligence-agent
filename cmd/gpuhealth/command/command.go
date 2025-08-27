@@ -6,6 +6,7 @@ import (
 	"github.com/urfave/cli"
 
 	cmdcompact "github.com/leptonai/gpud/cmd/gpuhealth/compact"
+	cmdinject "github.com/leptonai/gpud/cmd/gpuhealth/inject"
 	cmdmachineinfo "github.com/leptonai/gpud/cmd/gpuhealth/machine-info"
 	cmdmetadata "github.com/leptonai/gpud/cmd/gpuhealth/metadata"
 	cmdrun "github.com/leptonai/gpud/cmd/gpuhealth/run"
@@ -185,6 +186,30 @@ func App() *cli.App {
 				&cli.StringFlag{
 					Name:  "log-level,l",
 					Usage: "set the logging level [debug, info, warn, error, fatal, panic, dpanic]",
+				},
+			},
+		},
+		{
+			Name:   "inject",
+			Usage:  "inject faults into components for testing",
+			Action: cmdinject.Command,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     "component,c",
+					Usage:    "component name to inject fault into (required)",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  "fault-type",
+					Usage: "fault type to inject into the component (component-error or event)",
+				},
+				&cli.StringFlag{
+					Name:  "fault-message",
+					Usage: "message to inject into the component",
+				},
+				&cli.StringFlag{
+					Name:  "address",
+					Usage: "gpuhealth server address",
 				},
 			},
 		},

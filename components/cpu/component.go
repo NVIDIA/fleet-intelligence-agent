@@ -85,6 +85,31 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	return c, nil
 }
 
+// InjectFault replaces the time stat function with an error-returning version
+func (c *component) InjectFault(errMsg string) {
+	log.Logger.Infow("ERRORINJECTOR: injecting CPU fault", "errMsg", errMsg)
+	c.getTimeStatFunc = func(ctx context.Context) (cpu.TimesStat, error) {
+		return cpu.TimesStat{}, fmt.Errorf("injected CPU fault: %s", errMsg)
+	}
+}
+
+// InjectEvent injects an event directly into the component's event bucket
+func (c *component) InjectEvent(name, eventType, message string) error {
+	if c.eventBucket == nil {
+		return fmt.Errorf("CPU component has no event bucket")
+	}
+
+	event := eventstore.Event{
+		Component: Name,
+		Time:      time.Now().UTC(),
+		Name:      name,
+		Type:      eventType,
+		Message:   message,
+	}
+
+	return c.eventBucket.Insert(context.Background(), event)
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {
