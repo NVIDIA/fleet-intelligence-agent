@@ -3,14 +3,7 @@ name: CI - Lint & Code Quality
 on:
   push:
     branches: ["**"]
-  pull_request:
-    paths:
-      - ".github/workflows/ci-lint.yml"
-      - "**.go"
-      - "go.mod" 
-      - "go.sum"
-      - ".golangci.yml"
-    branches: ["**"]
+    tags: ["*.*.*"]
 
 permissions:
   contents: read

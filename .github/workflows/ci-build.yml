@@ -10,7 +10,7 @@ on:
       - "**.go"
       - "go.mod"
       - "go.sum"
-    branches: ["**"]
+    branches: ["main"]
 
 permissions:
   contents: read
