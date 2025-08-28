@@ -30,10 +30,10 @@ nfpms:
     recommends: [nvidia-driver]
     contents:
       - src: deployments/packages/gpuhealth/systemd/gpuhealthd.service
-        dst: /lib/systemd/system/gpuhealthd.service
+        dst: /usr/lib/systemd/system/gpuhealthd.service
         file_info: { mode: 0644 }
       - src: deployments/packages/gpuhealth/systemd/gpuhealth.env
-        dst: /etc/default/gpuhealth
+        dst: /etc/sysconfig/gpuhealth
         type: config
         file_info: { mode: 0644 }
       - src: deployments/packages/gpuhealth/doc/README.md

@@ -7,10 +7,11 @@ Configuration
 -------------
 
 The service configuration is located at:
-  /etc/default/gpuhealth
+  deb based system: /etc/default/gpuhealth
+  rpm based system: /etc/sysconfig/gpuhealth
 
 To configure the service:
-  1. Edit: sudo vi /etc/default/gpuhealth
+  1. Edit: sudo vi /etc/default/gpuhealth or sudo vi /etc/sysconfig/gpuhealth
   2. Restart: sudo systemctl restart gpuhealthd
 
 The default configuration sets log level to 'info'. Available levels:

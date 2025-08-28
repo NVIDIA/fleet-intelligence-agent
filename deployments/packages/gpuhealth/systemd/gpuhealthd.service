@@ -3,7 +3,8 @@ Description=GPU Health Daemon
 After=network.target local-fs.target
 
 [Service]
-EnvironmentFile=/etc/default/gpuhealth
+EnvironmentFile=-/etc/default/gpuhealth
+EnvironmentFile=-/etc/sysconfig/gpuhealth
 
 ExecStart=/usr/bin/gpuhealth run $GPUHEALTH_FLAGS
 ExecReload=/bin/kill -HUP $MAINPID
