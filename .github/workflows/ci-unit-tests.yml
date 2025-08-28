@@ -1,0 +1,121 @@
+name: CI - Unit Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    paths:
+      - ".github/workflows/ci-unit-tests.yml"
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+    branches: ["**"]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  unit-test-dev:
+    if: github.ref != 'refs/heads/main'
+    name: Unit Tests (Dev)
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          cache: true
+          go-version-file: go.mod
+
+      - name: Run unit tests
+        run: |
+          echo "Running unit tests for dev branch..."
+          KMSG_FILE_PATH=/dev/null ./scripts/tests-unit.sh
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-dev
+          path: coverage.txt
+          if-no-files-found: warn
+          retention-days: 1
+
+  unit-test-full:
+    # Full platform testing for PR/main/release - Self-hosted runners
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: gpuhealth-ubuntu-22.04-x86
+            os_name: ubuntu-22.04
+            arch: amd64
+            
+          - runner: gpuhealth-ubuntu-22.04-arm
+            os_name: ubuntu-22.04
+            arch: arm64
+            
+          - runner: gpuhealth-rhel-8-x86
+            os_name: rhel-8
+            arch: amd64
+            
+          - runner: gpuhealth-rhel-8-arm
+            os_name: rhel-8
+            arch: aarch64
+
+    name: Unit Tests (${{ matrix.os_name }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies (Ubuntu)
+        if: contains(matrix.os_name, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential linux-headers-$(uname -r)
+
+      - name: Install build dependencies (RHEL)
+        if: contains(matrix.os_name, 'rhel')
+        run: |
+          sudo dnf update -y
+          sudo dnf groupinstall -y "Development Tools"
+          sudo dnf install -y gcc gcc-c++ make kernel-headers kernel-devel
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          cache: true
+          go-version-file: go.mod
+
+      - name: Run unit tests
+        run: |
+          echo "Running unit tests on ${{ matrix.os_name }}-${{ matrix.arch }}..."
+          KMSG_FILE_PATH=/dev/null ./scripts/tests-unit.sh
+
+      - name: Upload coverage reports
+        if: matrix.os_name == 'ubuntu-22.04' && matrix.arch == 'amd64'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: coverage.txt
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results-${{ matrix.os_name }}-${{ matrix.arch }}
+          path:
+            - coverage.txt
+            - "**/*test.xml"
+          if-no-files-found: warn
+          retention-days: 3

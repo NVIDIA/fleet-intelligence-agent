@@ -1,0 +1,51 @@
+name: CI - Lint & Code Quality
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    paths:
+      - ".github/workflows/ci-lint.yml"
+      - "**.go"
+      - "go.mod" 
+      - "go.sum"
+      - ".golangci.yml"
+    branches: ["**"]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  lint:
+    name: Lint & Code Quality
+    runs-on: ubuntu-22.04  # GitHub-hosted runner
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          cache: true
+          go-version-file: go.mod
+
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.61.0
+
+      - name: Build custom golangci-lint with nilaway
+        run: golangci-lint custom
+
+      - name: Run golangci-lint
+        run: ./custom-gcl run --verbose --config=.golangci.yml ./...
+
+      - name: Check go mod tidy
+        run: |
+          go mod tidy
+          if ! git diff --exit-code go.mod go.sum; then
+            echo "go.mod or go.sum is not tidy"
+            exit 1
+          fi

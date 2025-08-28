@@ -1,0 +1,123 @@
+name: CI - Build Binary
+
+on:
+  push:
+    branches: ["main", "dev/**", "feature/**"]
+  pull_request:
+    paths:
+      - ".github/workflows/ci-build.yml"
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+jobs:
+  build-dev:
+    if: github.ref != 'refs/heads/main'
+    name: Build (Dev)
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          cache: true
+          go-version-file: go.mod
+
+      - name: Build binary
+        run: |
+          echo "🔨 Building gpuhealth binary for dev validation..."
+          make gpuhealth || go build -o bin/gpuhealth ./cmd/gpuhealth
+
+      - name: Test binary
+        run: |
+          ./bin/gpuhealth --version
+          ./bin/gpuhealth --help
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpuhealth-binary-dev
+          path: bin/gpuhealth
+          if-no-files-found: warn
+          retention-days: 1
+
+  build-full:
+    # Full platform builds for PR/main/release - Self-hosted runners
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: gpuhealth-ubuntu-22.04-x86
+            os_name: ubuntu-22.04
+            arch: amd64
+            
+          - runner: gpuhealth-ubuntu-22.04-arm
+            os_name: ubuntu-22.04
+            arch: arm64
+            
+          - runner: gpuhealth-rhel-8-x86
+            os_name: rhel-8
+            arch: amd64
+            
+          - runner: gpuhealth-rhel-8-arm
+            os_name: rhel-8
+            arch: aarch64
+
+    name: Build (${{ matrix.os_name }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies (Ubuntu)
+        if: contains(matrix.os_name, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential linux-headers-$(uname -r)
+
+      - name: Install build dependencies (RHEL)
+        if: contains(matrix.os_name, 'rhel')
+        run: |
+          sudo dnf update -y
+          sudo dnf groupinstall -y "Development Tools"
+          sudo dnf install -y gcc gcc-c++ make kernel-headers kernel-devel
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          cache: true
+          go-version-file: go.mod
+
+      - name: Build binary (native)
+        run: |
+          echo "🔨 Building gpuhealth binary natively on ${{ matrix.os_name }}-${{ matrix.arch }}..."
+          make gpuhealth || go build -o bin/gpuhealth ./cmd/gpuhealth
+
+      - name: Test binary
+        run: |
+          echo "Testing binary functionality..."
+          ./bin/gpuhealth --version
+          ./bin/gpuhealth --help
+          file ./bin/gpuhealth
+          ldd ./bin/gpuhealth || echo "Static binary or different libc"
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpuhealth-binary-${{ matrix.os_name }}-${{ matrix.arch }}
+          path: bin/gpuhealth
+          if-no-files-found: warn
+          retention-days: 7

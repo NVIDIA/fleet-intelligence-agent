@@ -1,0 +1,184 @@
+name: CI - Package Building
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    paths:
+      - ".github/workflows/ci-packages.yml"
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - ".goreleaser_*.yaml"
+      - "deployments/packages/**"
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+jobs:
+  package-pr:
+    # Package validation for PRs - subset of platforms
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: gpuhealth-ubuntu-22.04-x86
+            os_name: ubuntu-22.04
+            arch: amd64
+            package_type: deb
+            goreleaser_config: .goreleaser_gpuhealth_deb_amd64.yaml
+            
+          - runner: gpuhealth-rhel-8-x86
+            os_name: rhel-8
+            arch: amd64
+            package_type: rpm
+            goreleaser_config: .goreleaser_gpuhealth_rpm_x86_64.yaml
+
+    name: Package Test (${{ matrix.package_type }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies (Ubuntu)
+        if: contains(matrix.os_name, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential linux-headers-$(uname -r)
+
+      - name: Install build dependencies (RHEL)
+        if: contains(matrix.os_name, 'rhel')
+        run: |
+          sudo dnf update -y
+          sudo dnf groupinstall -y "Development Tools"
+          sudo dnf install -y gcc gcc-c++ make kernel-headers kernel-devel rpm-build
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          cache: true
+          go-version-file: go.mod
+
+      - name: Install GoReleaser
+        run: |
+          go install github.com/goreleaser/goreleaser@latest
+          goreleaser --version
+
+      - name: Validate GoReleaser config
+        run: |
+          goreleaser check --config ${{ matrix.goreleaser_config }}
+
+      - name: Test package build (dry-run)
+        run: |
+          echo "📦 Testing ${{ matrix.package_type }} package build..."
+          goreleaser build --config ${{ matrix.goreleaser_config }} --snapshot --clean
+
+      - name: Upload package test artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-test-${{ matrix.package_type }}-${{ matrix.arch }}
+          path: dist/
+          if-no-files-found: warn
+          retention-days: 1
+
+  package-full:
+    # Full package builds for main branch - all platforms
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu DEB packages
+          - runner: gpuhealth-ubuntu-22.04-x86
+            os_name: ubuntu-22.04
+            arch: amd64
+            package_type: deb
+            goreleaser_config: .goreleaser_gpuhealth_deb_amd64.yaml
+            
+          - runner: gpuhealth-ubuntu-22.04-arm
+            os_name: ubuntu-22.04
+            arch: arm64
+            package_type: deb
+            goreleaser_config: .goreleaser_gpuhealth_deb_arm64.yaml
+            
+          # RHEL RPM packages  
+          - runner: gpuhealth-rhel-8-x86
+            os_name: rhel-8
+            arch: amd64
+            package_type: rpm
+            goreleaser_config: .goreleaser_gpuhealth_rpm_x86_64.yaml
+            
+          - runner: gpuhealth-rhel-8-arm
+            os_name: rhel-8
+            arch: aarch64
+            package_type: rpm
+            goreleaser_config: .goreleaser_gpuhealth_rpm_aarch64.yaml
+
+    name: Build Package (${{ matrix.package_type }}-${{ matrix.os_name }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies (Ubuntu)
+        if: contains(matrix.os_name, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential linux-headers-$(uname -r)
+
+      - name: Install build dependencies (RHEL)
+        if: contains(matrix.os_name, 'rhel')
+        run: |
+          sudo dnf update -y
+          sudo dnf groupinstall -y "Development Tools"
+          sudo dnf install -y gcc gcc-c++ make kernel-headers kernel-devel rpm-build
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          cache: true
+          go-version-file: go.mod
+
+      - name: Install GoReleaser
+        run: |
+          go install github.com/goreleaser/goreleaser@latest
+          goreleaser --version
+
+      - name: Validate GoReleaser config
+        run: |
+          goreleaser check --config ${{ matrix.goreleaser_config }}
+
+      - name: Build package
+        run: |
+          echo "📦 Building ${{ matrix.package_type }} package on ${{ matrix.os_name }}-${{ matrix.arch }}..."
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            goreleaser build --config ${{ matrix.goreleaser_config }} --snapshot --clean
+          else
+            # Release build for tags
+            goreleaser release --config ${{ matrix.goreleaser_config }} --clean
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List generated packages
+        run: |
+          echo "Generated packages:"
+          find dist/ -name "*.deb" -o -name "*.rpm" | head -10
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.package_type }}-${{ matrix.os_name }}-${{ matrix.arch }}
+          path:
+            - "dist/*.deb"
+            - "dist/*.rpm"
+          if-no-files-found: warn
+          retention-days: 7
