@@ -27,6 +27,11 @@ func Command(c *cli.Context) error {
 		faultMessage = fmt.Sprintf("Injected fault for testing %s component", component)
 	}
 
+	eventType := c.String("event-type")
+	if eventType == "" {
+		eventType = "Fatal"
+	}
+
 	// Get the server address
 	address := c.String("address")
 	if address == "" {
@@ -49,7 +54,7 @@ func Command(c *cli.Context) error {
 			"event": map[string]string{
 				"component": component,
 				"name":      component,
-				"type":      "test",
+				"type":      eventType,
 				"message":   faultMessage,
 			},
 		}

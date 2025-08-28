@@ -208,6 +208,10 @@ func App() *cli.App {
 					Usage: "message to inject into the component",
 				},
 				&cli.StringFlag{
+					Name:  "event-type",
+					Usage: "type of the event to inject into the component",
+				},
+				&cli.StringFlag{
 					Name:  "address",
 					Usage: "gpuhealth server address",
 				},

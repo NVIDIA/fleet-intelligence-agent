@@ -111,6 +111,30 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	return c, nil
 }
 
+// InjectFault replaces the kmsg reading function with an error-returning version
+func (c *component) InjectFault(errMsg string) {
+	c.readAllKmsg = func(ctx context.Context) ([]kmsg.Message, error) {
+		return nil, fmt.Errorf("injected XID fault: %s", errMsg)
+	}
+}
+
+// InjectEvent injects an event directly into the component's event bucket
+func (c *component) InjectEvent(name, eventType, message string) error {
+	if c.eventBucket == nil {
+		return fmt.Errorf("XID component has no event bucket")
+	}
+
+	event := eventstore.Event{
+		Component: Name,
+		Time:      time.Now().UTC(),
+		Name:      name,
+		Type:      eventType,
+		Message:   message,
+	}
+
+	return c.eventBucket.Insert(context.Background(), event)
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

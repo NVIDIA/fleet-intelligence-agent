@@ -77,6 +77,30 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	return c, nil
 }
 
+// InjectFault replaces the virtual memory function with an error-returning version
+func (c *component) InjectFault(errMsg string) {
+	c.getVirtualMemoryFunc = func(ctx context.Context) (*mem.VirtualMemoryStat, error) {
+		return nil, fmt.Errorf("injected memory fault: %s", errMsg)
+	}
+}
+
+// InjectEvent injects an event directly into the component's event bucket
+func (c *component) InjectEvent(name, eventType, message string) error {
+	if c.eventBucket == nil {
+		return fmt.Errorf("memory component has no event bucket")
+	}
+
+	event := eventstore.Event{
+		Component: Name,
+		Time:      time.Now().UTC(),
+		Name:      name,
+		Type:      eventType,
+		Message:   message,
+	}
+
+	return c.eventBucket.Insert(context.Background(), event)
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {
