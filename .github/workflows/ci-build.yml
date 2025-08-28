@@ -2,7 +2,8 @@ name: CI - Build Binary
 
 on:
   push:
-    branches: ["main", "dev/**", "feature/**"]
+    branches: ["**"]
+    tags: ['*.*.*']
   pull_request:
     paths:
       - ".github/workflows/ci-build.yml"
@@ -13,6 +14,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-dev:

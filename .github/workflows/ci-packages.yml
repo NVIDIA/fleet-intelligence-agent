@@ -3,6 +3,7 @@ name: CI - Package Building
 on:
   push:
     branches: ["main"]
+    tags: ['*.*.*']
   pull_request:
     paths:
       - ".github/workflows/ci-packages.yml"
@@ -14,7 +15,11 @@ on:
     branches: ["**"]
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   package-pr:
