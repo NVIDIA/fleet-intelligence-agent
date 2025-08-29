@@ -35,7 +35,7 @@ jobs:
             
           - runner: gpuhealth-rhel-8-x86
             os_name: rhel-8
-            arch: amd64
+            arch: x86_64
             
           - runner: gpuhealth-rhel-8-arm
             os_name: rhel-8

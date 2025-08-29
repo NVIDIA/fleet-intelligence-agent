@@ -80,7 +80,7 @@ jobs:
           # RHEL RPM packages  
           - runner: gpuhealth-rhel-8-x86
             os_name: rhel-8
-            arch: amd64
+            arch: x86_64
             package_type: rpm
             goreleaser_config: .goreleaser_gpuhealth_rpm_x86_64.yaml
             
