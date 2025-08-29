@@ -71,7 +71,7 @@ jobs:
 
       - name: Build binary (native)
         run: |
-          echo "🔨 Building gpuhealth binary natively on ${{ matrix.os_name }}-${{ matrix.arch }}..."
+          echo "Building gpuhealth binary on ${{ matrix.os_name }}-${{ matrix.arch }}..."
           make gpuhealth || go build -o bin/gpuhealth ./cmd/gpuhealth
 
       - name: Test binary
