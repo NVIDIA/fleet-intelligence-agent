@@ -15,8 +15,7 @@ concurrency:
 
 jobs:
   unit-test:
-    if: github.ref != 'refs/heads/main'
-    name: Unit Tests (Dev)
+    name: Unit Tests
     runs-on: ubuntu-22.04
     
     steps:

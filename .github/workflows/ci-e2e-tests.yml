@@ -21,48 +21,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e-test:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: gpuhealth-ubuntu-22.04-x86
-            os_name: ubuntu-22.04
-            arch: amd64
-            
-          - runner: gpuhealth-ubuntu-22.04-arm
-            os_name: ubuntu-22.04
-            arch: arm64
-            
-          - runner: gpuhealth-rhel-8-x86
-            os_name: rhel-8
-            arch: x86_64
-            
-          - runner: gpuhealth-rhel-8-arm
-            os_name: rhel-8
-            arch: aarch64
-
-    name: E2E Tests (${{ matrix.os_name }}-${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Install build dependencies (Ubuntu)
-        if: contains(matrix.os_name, 'ubuntu')
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential linux-headers-$(uname -r)
-
-      - name: Install build dependencies (RHEL)
-        if: contains(matrix.os_name, 'rhel')
-        run: |
-          sudo dnf update -y
-          sudo dnf groupinstall -y "Development Tools"
-          sudo dnf install -y gcc gcc-c++ make kernel-headers kernel-devel
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -72,14 +38,14 @@ jobs:
 
       - name: Run E2E tests
         run: |
-          echo "Running full E2E tests on ${{ matrix.os_name }}-${{ matrix.arch }}..."
+          echo "Running E2E tests on ubuntu-22.04 (GitHub-hosted)..."
           KMSG_FILE_PATH=/dev/null ./scripts/tests-e2e.sh
 
       - name: Upload E2E test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-results-${{ matrix.os_name }}-${{ matrix.arch }}
+          name: e2e-results
           path: |
             e2e/**/*.log
             **/*test.xml
