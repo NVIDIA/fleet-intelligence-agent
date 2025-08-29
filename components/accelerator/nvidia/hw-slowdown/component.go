@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -65,10 +66,10 @@ type component struct {
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
 	c := &component{
-		ctx:    cctx,
+		ctx: cctx,
 
 		healthCheckInterval: gpudInstance.HealthCheckInterval,
-		cancel: ccancel,
+		cancel:              ccancel,
 
 		nvmlInstance:                     gpudInstance.NVMLInstance,
 		getClockEventsSupportedFunc:      nvidianvml.ClockEventsSupportedByDevice,
@@ -111,6 +112,13 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	}
 
 	return c, nil
+}
+
+// InjectFault injects a fault into the hw-slowdown component by replacing the getClockEventsFunc
+func (c *component) InjectFault(errMsg string) {
+	c.getClockEventsFunc = func(uuid string, dev device.Device) (nvidianvml.ClockEvents, error) {
+		return nvidianvml.ClockEvents{}, errors.New(errMsg)
+	}
 }
 
 func (c *component) Name() string { return Name }

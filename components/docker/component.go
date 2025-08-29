@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -61,6 +62,27 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		ignoreConnectionErrors: true,
 	}
 	return c, nil
+}
+
+// InjectFault injects a fault into the docker component using a three-step approach:
+// 1. Make checkDependencyInstalledFunc return true to bypass "docker not installed"
+// 2. Make checkDockerRunningFunc return true to bypass "docker is not running"
+// 3. Make checkServiceActiveFunc return an error to trigger unhealthy state
+func (c *component) InjectFault(errMsg string) {
+	// Step 1: Make docker appear installed
+	c.checkDependencyInstalledFunc = func() bool {
+		return true
+	}
+
+	// Step 2: Make docker appear running
+	c.checkDockerRunningFunc = func(ctx context.Context) bool {
+		return true
+	}
+
+	// Step 3: Make service check fail to trigger unhealthy state
+	c.checkServiceActiveFunc = func() (bool, error) {
+		return false, errors.New(errMsg)
+	}
 }
 
 func (c *component) Name() string { return Name }

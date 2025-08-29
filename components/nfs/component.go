@@ -81,6 +81,27 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	return c, nil
 }
 
+// InjectFault injects a fault into the nfs component using a two-step approach:
+// 1. Provide a fake config to bypass the "no configs found" early return
+// 2. Make validateMemberConfigs return an error to trigger degraded health state
+func (c *component) InjectFault(errMsg string) {
+	// Step 1: Provide a dummy config so the component doesn't skip with "no nfs group configs found"
+	c.getGroupConfigsFunc = func() pkgnfschecker.Configs {
+		return pkgnfschecker.Configs{
+			{
+				VolumePath:   "/tmp/fake-nfs-path",
+				DirName:      "fake-test-dir",
+				FileContents: "fake-content-for-testing",
+			},
+		}
+	}
+
+	// Step 2: Make validation fail to trigger degraded health state
+	c.validateMemberConfigs = func(ctx context.Context, configs pkgnfschecker.MemberConfigs) error {
+		return errors.New(errMsg)
+	}
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

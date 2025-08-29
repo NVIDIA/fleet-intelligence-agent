@@ -107,8 +107,19 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	return c, nil
 }
 
-// InjectFault replaces the class devices function with an error-returning version
+// InjectFault injects a fault into the infiniband component using a two-step approach:
+// 1. Set fake thresholds to bypass the "no threshold set" early return
+// 2. Make getClassDevicesFunc return an error to trigger unhealthy health state
 func (c *component) InjectFault(errMsg string) {
+	// Step 1: Set fake thresholds so the component doesn't skip with "ports or rate threshold not set"
+	c.getThresholdsFunc = func() infiniband.ExpectedPortStates {
+		return infiniband.ExpectedPortStates{
+			AtLeastPorts: 1,  // Fake threshold to bypass IsZero() check
+			AtLeastRate:  10, // Fake rate threshold
+		}
+	}
+
+	// Step 2: Make getClassDevicesFunc fail to trigger unhealthy state
 	c.getClassDevicesFunc = func() (infinibandclass.Devices, error) {
 		return nil, fmt.Errorf("injected InfiniBand fault: %s", errMsg)
 	}
@@ -123,7 +134,7 @@ func (c *component) InjectEvent(name, eventType, message string) error {
 	event := eventstore.Event{
 		Component: Name,
 		Time:      time.Now().UTC(),
-		Name:      name,
+		Name:      eventPCIPowerInsufficient,
 		Type:      eventType,
 		Message:   message,
 	}

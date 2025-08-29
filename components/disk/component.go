@@ -149,6 +149,30 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	return c, nil
 }
 
+// InjectFault injects a fault into the disk component by inserting a fake disk failure event
+func (c *component) InjectFault(errMsg string) {
+	c.getExt4PartitionsFunc = func(ctx context.Context) (disk.Partitions, error) {
+		return nil, errors.New(errMsg)
+	}
+}
+
+// InjectEvent injects an event directly into the component's event bucket
+func (c *component) InjectEvent(name, eventType, message string) error {
+	if c.eventBucket == nil {
+		return fmt.Errorf("disk component has no event bucket")
+	}
+
+	event := eventstore.Event{
+		Component: Name,
+		Time:      time.Now().UTC(),
+		Name:      name,
+		Type:      eventType,
+		Message:   message,
+	}
+
+	return c.eventBucket.Insert(context.Background(), event)
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {
@@ -231,6 +255,7 @@ func (c *component) Check() components.CheckResult {
 	if c.eventBucket != nil && c.rebootEventStore != nil {
 		// Query recent events to check for disk failures
 		recentEvents, err := c.eventBucket.Get(c.ctx, cr.ts.Add(-c.lookbackPeriod))
+		log.Logger.Infow("recent events", "events", recentEvents)
 		if err != nil {
 			cr.err = err
 			cr.health = apiv1.HealthStateTypeUnhealthy

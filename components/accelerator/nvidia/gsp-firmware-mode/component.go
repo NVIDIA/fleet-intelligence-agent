@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -40,14 +41,21 @@ type component struct {
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
 	c := &component{
-		ctx:                    cctx,
+		ctx: cctx,
 
-		healthCheckInterval: gpudInstance.HealthCheckInterval,
+		healthCheckInterval:    gpudInstance.HealthCheckInterval,
 		cancel:                 ccancel,
 		nvmlInstance:           gpudInstance.NVMLInstance,
 		getGSPFirmwareModeFunc: nvidianvml.GetGSPFirmwareMode,
 	}
 	return c, nil
+}
+
+// InjectFault injects a fault into the gsp-firmware-mode component by replacing the getGSPFirmwareModeFunc
+func (c *component) InjectFault(errMsg string) {
+	c.getGSPFirmwareModeFunc = func(uuid string, dev device.Device) (nvidianvml.GSPFirmwareMode, error) {
+		return nvidianvml.GSPFirmwareMode{}, errors.New(errMsg)
+	}
 }
 
 func (c *component) Name() string { return Name }

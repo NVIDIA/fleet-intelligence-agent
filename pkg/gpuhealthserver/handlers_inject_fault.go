@@ -8,7 +8,6 @@ import (
 
 	"github.com/leptonai/gpud/pkg/errdefs"
 	pkgfaultinjector "github.com/leptonai/gpud/pkg/fault-injector"
-	"github.com/leptonai/gpud/pkg/log"
 )
 
 const URLPathInjectFault = "/inject-fault"
@@ -42,7 +41,6 @@ func (s *Server) injectFault(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": errdefs.ErrInvalidArgument, "message": "invalid request: " + err.Error()})
 		return
 	}
-	log.Logger.Infow("ERRORINJECTOR: request", "request", request)
 
 	switch {
 	case request.KernelMessage != nil:

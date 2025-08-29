@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -47,6 +48,13 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		getUtilizationFunc:  nvidianvml.GetUtilization,
 	}
 	return c, nil
+}
+
+// InjectFault injects a fault into the utilization component by replacing the getUtilizationFunc
+func (c *component) InjectFault(errMsg string) {
+	c.getUtilizationFunc = func(uuid string, dev device.Device) (nvidianvml.Utilization, error) {
+		return nvidianvml.Utilization{}, errors.New(errMsg)
+	}
 }
 
 func (c *component) Name() string { return Name }

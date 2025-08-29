@@ -80,13 +80,6 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	return c, nil
 }
 
-// InjectFault replaces the remapped rows function with an error-returning version
-func (c *component) InjectFault(errMsg string) {
-	c.getRemappedRowsFunc = func(uuid string, dev device.Device) (nvidianvml.RemappedRows, error) {
-		return nvidianvml.RemappedRows{}, fmt.Errorf("injected remapped-rows fault: %s", errMsg)
-	}
-}
-
 // InjectEvent injects an event directly into the component's event bucket
 func (c *component) InjectEvent(name, eventType, message string) error {
 	if c.eventBucket == nil {

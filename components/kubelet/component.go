@@ -48,10 +48,10 @@ type component struct {
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
 	c := &component{
-		ctx:    cctx,
+		ctx: cctx,
 
 		healthCheckInterval: gpudInstance.HealthCheckInterval,
-		cancel: ccancel,
+		cancel:              ccancel,
 
 		checkDependencyInstalled: kubelet.CheckKubeletInstalled,
 		checkKubeletRunning: func() bool {
@@ -63,6 +63,25 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	}
 
 	return c, nil
+}
+
+// InjectFault injects a fault into the kubelet component using a three-step approach:
+// 1. Make checkDependencyInstalled return true to bypass "kubelet is not installed"
+// 2. Make checkKubeletRunning return true to bypass "kubelet is not running"
+// 3. Set failedCount >= threshold to trigger "list pods from kubelet read-only port failed" → Unhealthy
+func (c *component) InjectFault(errMsg string) {
+	// Step 1: Make kubelet appear installed
+	c.checkDependencyInstalled = func() bool {
+		return true
+	}
+
+	// Step 2: Make kubelet appear running
+	c.checkKubeletRunning = func() bool {
+		return true
+	}
+
+	// Step 3: Set failed count to exceed threshold to trigger unhealthy state (line 169)
+	c.failedCount = c.failedCountThreshold + 1
 }
 
 func (c *component) Name() string { return Name }

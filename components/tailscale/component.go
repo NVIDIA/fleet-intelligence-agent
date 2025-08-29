@@ -4,6 +4,7 @@ package tailscale
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"time"
 
@@ -47,6 +48,21 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		},
 	}
 	return c, nil
+}
+
+// InjectFault injects a fault into the tailscale component using a two-step approach:
+// 1. Make checkDependencyInstalled return true to bypass "tailscaled is not installed"
+// 2. Make checkServiceActiveFunc return an error to trigger unhealthy state
+func (c *component) InjectFault(errMsg string) {
+	// Step 1: Make tailscaled appear installed
+	c.checkDependencyInstalled = func() bool {
+		return true
+	}
+
+	// Step 2: Make service check fail to trigger unhealthy state
+	c.checkServiceActiveFunc = func() (bool, error) {
+		return false, errors.New(errMsg)
+	}
 }
 
 func (c *component) Name() string { return Name }

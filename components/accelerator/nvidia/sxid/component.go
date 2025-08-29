@@ -259,6 +259,7 @@ func (c *component) Check() components.CheckResult {
 
 	cctx, ccancel := context.WithTimeout(c.ctx, 30*time.Second)
 	kmsgs, err := c.readAllKmsg(cctx)
+	log.Logger.Infow("ERRORINJECTOR: readAllKmsg", "kmsgs", kmsgs, "err", err)
 	ccancel()
 	if err != nil {
 		cr.err = err

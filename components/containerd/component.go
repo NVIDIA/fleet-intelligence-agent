@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -84,6 +85,33 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		endpoint: pkgcontainerd.DefaultContainerRuntimeEndpoint,
 	}
 	return c, nil
+}
+
+// InjectFault injects a fault into the containerd component using a four-step approach:
+// 1. Make checkDependencyInstalledFunc return true to bypass "containerd not installed"
+// 2. Make checkSocketExistsFunc return true to bypass "socket file does not exist"
+// 3. Make checkContainerdRunningFunc return true to bypass "containerd not running"
+// 4. Make checkServiceActiveFunc return an error to trigger unhealthy state
+func (c *component) InjectFault(errMsg string) {
+	// Step 1: Make containerd appear installed
+	c.checkDependencyInstalledFunc = func() bool {
+		return true
+	}
+
+	// Step 2: Make socket appear to exist
+	c.checkSocketExistsFunc = func() bool {
+		return true
+	}
+
+	// Step 3: Make containerd appear running
+	c.checkContainerdRunningFunc = func(ctx context.Context) bool {
+		return true
+	}
+
+	// Step 4: Make service check fail to trigger unhealthy state
+	c.checkServiceActiveFunc = func(ctx context.Context) (bool, error) {
+		return false, errors.New(errMsg)
+	}
 }
 
 func (c *component) Name() string { return Name }

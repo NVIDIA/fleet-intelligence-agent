@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -41,15 +42,22 @@ type component struct {
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
 	c := &component{
-		ctx:                   cctx,
+		ctx: cctx,
 
-		healthCheckInterval: gpudInstance.HealthCheckInterval,
+		healthCheckInterval:   gpudInstance.HealthCheckInterval,
 		cancel:                ccancel,
 		nvmlInstance:          gpudInstance.NVMLInstance,
 		getECCModeEnabledFunc: nvidianvml.GetECCModeEnabled,
 		getECCErrorsFunc:      nvidianvml.GetECCErrors,
 	}
 	return c, nil
+}
+
+// InjectFault injects a fault into the ecc component by replacing the getECCErrorsFunc
+func (c *component) InjectFault(errMsg string) {
+	c.getECCErrorsFunc = func(uuid string, dev device.Device, eccModeEnabledCurrent bool) (nvidianvml.ECCErrors, error) {
+		return nvidianvml.ECCErrors{}, errors.New(errMsg)
+	}
 }
 
 func (c *component) Name() string { return Name }

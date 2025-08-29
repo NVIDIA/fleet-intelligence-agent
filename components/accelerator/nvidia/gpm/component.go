@@ -78,7 +78,7 @@ type component struct {
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
 	c := &component{
-		ctx:                 cctx,
+		ctx: cctx,
 
 		healthCheckInterval: gpudInstance.HealthCheckInterval,
 		cancel:              ccancel,
@@ -94,6 +94,21 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		},
 	}
 	return c, nil
+}
+
+// InjectFault injects a fault into the gpm component using a two-step approach:
+// 1. Make getGPMSupportedFunc return true to bypass "GPM not supported"
+// 2. Make getGPMMetricsFunc return an error to trigger unhealthy state
+func (c *component) InjectFault(errMsg string) {
+	// Step 1: Make GPM appear supported
+	c.getGPMSupportedFunc = func(dev device.Device) (bool, error) {
+		return true, nil
+	}
+
+	// Step 2: Make GPM metrics check fail to trigger unhealthy state
+	c.getGPMMetricsFunc = func(ctx context.Context, dev device.Device) (map[gonvml.GpmMetricId]float64, error) {
+		return nil, fmt.Errorf("injected GPM fault: %s", errMsg)
+	}
 }
 
 func (c *component) Name() string { return Name }

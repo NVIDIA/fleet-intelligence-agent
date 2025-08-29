@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -56,6 +57,13 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		getEgressLatenciesFunc:     latencyedge.Measure,
 		globalMillisecondThreshold: DefaultGlobalMillisecondThreshold,
 	}, nil
+}
+
+// InjectFault injects a fault into the network latency component by making getEgressLatenciesFunc return an error
+func (c *component) InjectFault(errMsg string) {
+	c.getEgressLatenciesFunc = func(ctx context.Context, opts ...latencyedge.OpOption) (latency.Latencies, error) {
+		return nil, errors.New(errMsg)
+	}
 }
 
 func (c *component) Name() string { return Name }

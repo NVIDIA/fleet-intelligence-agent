@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -40,14 +41,21 @@ type component struct {
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
 	c := &component{
-		ctx:               cctx,
+		ctx: cctx,
 
 		healthCheckInterval: gpudInstance.HealthCheckInterval,
-		cancel:            ccancel,
-		nvmlInstance:      gpudInstance.NVMLInstance,
-		getClockSpeedFunc: nvidianvml.GetClockSpeed,
+		cancel:              ccancel,
+		nvmlInstance:        gpudInstance.NVMLInstance,
+		getClockSpeedFunc:   nvidianvml.GetClockSpeed,
 	}
 	return c, nil
+}
+
+// InjectFault injects a fault into the clock-speed component by replacing the getClockSpeedFunc
+func (c *component) InjectFault(errMsg string) {
+	c.getClockSpeedFunc = func(uuid string, dev device.Device) (nvidianvml.ClockSpeed, error) {
+		return nvidianvml.ClockSpeed{}, errors.New(errMsg)
+	}
 }
 
 func (c *component) Name() string { return Name }

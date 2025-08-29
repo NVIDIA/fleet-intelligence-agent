@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -47,6 +48,13 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		getPersistenceModeFunc: nvidianvml.GetPersistenceMode,
 	}
 	return c, nil
+}
+
+// InjectFault injects a fault into the persistence-mode component by replacing the getPersistenceModeFunc
+func (c *component) InjectFault(errMsg string) {
+	c.getPersistenceModeFunc = func(uuid string, dev device.Device) (nvidianvml.PersistenceMode, error) {
+		return nvidianvml.PersistenceMode{}, errors.New(errMsg)
+	}
 }
 
 func (c *component) Name() string { return Name }

@@ -42,16 +42,23 @@ type component struct {
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
 	c := &component{
-		ctx:          cctx,
+		ctx: cctx,
 
 		healthCheckInterval: gpudInstance.HealthCheckInterval,
-		cancel:       ccancel,
-		nvmlInstance: gpudInstance.NVMLInstance,
+		cancel:              ccancel,
+		nvmlInstance:        gpudInstance.NVMLInstance,
 		checkEnvFunc: func(key string) bool {
 			return os.Getenv(key) == "1"
 		},
 	}
 	return c, nil
+}
+
+// InjectFault injects a fault into the bad-envs component by making checkEnvFunc always return true
+func (c *component) InjectFault(errMsg string) {
+	c.checkEnvFunc = func(key string) bool {
+		return true // Simulates that all bad environment variables are set
+	}
 }
 
 func (c *component) Name() string { return Name }

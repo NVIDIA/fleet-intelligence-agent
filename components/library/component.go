@@ -109,6 +109,13 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	return c, nil
 }
 
+// InjectFault injects a fault into the library component by making findLibrary return an error
+func (c *component) InjectFault(errMsg string) {
+	c.findLibrary = func(name string, opts ...file.OpOption) (string, error) {
+		return "", errors.New(errMsg)
+	}
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

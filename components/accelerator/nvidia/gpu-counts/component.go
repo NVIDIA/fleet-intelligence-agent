@@ -57,10 +57,10 @@ type component struct {
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
 	c := &component{
-		ctx:    cctx,
+		ctx: cctx,
 
 		healthCheckInterval: gpudInstance.HealthCheckInterval,
-		cancel: ccancel,
+		cancel:              ccancel,
 
 		nvmlInstance: gpudInstance.NVMLInstance,
 
@@ -92,6 +92,15 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	}
 
 	return c, nil
+}
+
+// InjectFault injects a fault into the gpu-counts component by setting an impossible expected GPU count
+func (c *component) InjectFault(errMsg string) {
+	// Replace the getThresholdsFunc to return an impossible positive count (999)
+	// This will force a mismatch with actual GPU count and make the component unhealthy
+	c.getThresholdsFunc = func() ExpectedGPUCounts {
+		return ExpectedGPUCounts{Count: 999}
+	}
 }
 
 func (c *component) Name() string { return Name }

@@ -59,6 +59,18 @@ func Command(c *cli.Context) error {
 			},
 		}
 
+	case "kernel-message", "kmsg":
+		kernelMsg, err := getKernelMessageForComponent(component, faultMessage)
+		if err != nil {
+			return fmt.Errorf("failed to get kernel message for component %s: %w", component, err)
+		}
+		requestBody = map[string]interface{}{
+			"kernel_message": map[string]string{
+				"priority": "KERN_ERR",
+				"message":  kernelMsg,
+			},
+		}
+
 	default:
 		return fmt.Errorf("invalid fault type: %s", faultType)
 	}
@@ -86,4 +98,40 @@ func Command(c *cli.Context) error {
 
 	fmt.Printf("Successfully injected fault into %s component\n", component)
 	return nil
+}
+
+// getKernelMessageForComponent returns the appropriate kernel message for a given component
+func getKernelMessageForComponent(component, faultMessage string) (string, error) {
+	switch component {
+	case "accelerator-nvidia-error-xid":
+		// XID 79: GPU has fallen off the bus (critical error)
+		return "NVRM: Xid (PCI:0000:01:00): 79, GPU has fallen off the bus", nil
+
+	case "accelerator-nvidia-error-sxid":
+		// SXID 11001: Fatal ingress invalid command
+		return "nvidia-nvswitch0: SXid (PCI:0000:00:00.0): 11001, Fatal, ingress invalid command", nil
+
+	case "accelerator-nvidia-nccl":
+		// NCCL segfault in libnccl.so
+		return "pt_main_thread[2536443]: segfault at 7f797fe00000 ip 00007f7c7ac69996 sp 00007f7c12fd7c30 error 4 in libnccl.so.2[7f7c7ac00000+d3d3000]", nil
+
+	case "disk":
+		// Filesystem remounted read-only (critical disk error)
+		return "EXT4-fs (dm-0): Remounting filesystem read-only", nil
+
+	case "cpu":
+		// CPU thermal throttling
+		return "CPU0: Package temperature above threshold, cpu clock throttled (total events = 1)", nil
+
+	case "memory":
+		// Memory ECC error
+		return "EDAC MC0: 1 CE memory read error on CPU_SrcID#0_Ha#0_Chan#0_DIMM#0 (channel:0 slot:0 page:0x0 offset:0x0 grain:8 syndrome:0x0)", nil
+
+	case "os":
+		// Out of memory killer
+		return "Out of memory: Kill process 12345 (python3) score 900 or sacrifice child", nil
+
+	default:
+		return "", fmt.Errorf("no kernel message defined for component: %s", component)
+	}
 }

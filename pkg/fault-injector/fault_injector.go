@@ -9,7 +9,6 @@ import (
 
 	componentsnvidiaxid "github.com/leptonai/gpud/components/accelerator/nvidia/xid"
 	pkgkmsgwriter "github.com/leptonai/gpud/pkg/kmsg/writer"
-	"github.com/leptonai/gpud/pkg/log"
 )
 
 // Injector defines the interface for injecting failures into the system.
@@ -51,20 +50,17 @@ func (i *injector) InjectComponentError(ctx context.Context, registry interface{
 
 	// Call registry.Get(componentName)
 	results := getMethod.Call([]reflect.Value{reflect.ValueOf(componentError.Component)})
-	log.Logger.Infow("ERRORINJECTOR: results", "results", results)
 	if len(results) == 0 {
 		return fmt.Errorf("registry Get method returned no results")
 	}
 
 	component := results[0]
-	log.Logger.Infow("ERRORINJECTOR: component", "component", componentError.Component, "componentValue", component)
 	if component.IsNil() {
 		return fmt.Errorf("component '%s' not found in registry", componentError.Component)
 	}
 
 	// Try different injection methods based on component type
 	componentValue := component.Elem() // Get the underlying component
-	log.Logger.Infow("ERRORINJECTOR: componentValue", "componentValue", componentValue)
 
 	// Call the standardized InjectFault method on any component
 	method := componentValue.MethodByName("InjectFault")
@@ -72,7 +68,6 @@ func (i *injector) InjectComponentError(ctx context.Context, registry interface{
 		return fmt.Errorf("component %s does not have InjectFault method", componentError.Component)
 	}
 
-	log.Logger.Infow("ERRORINJECTOR: injecting component error", "component", componentError.Component, "message", componentError.Message)
 	method.Call([]reflect.Value{reflect.ValueOf(componentError.Message)})
 	return nil
 }
@@ -87,28 +82,23 @@ func (i *injector) InjectEvent(ctx context.Context, registry interface{}, eventT
 
 	// Call registry.Get(componentName)
 	results := getMethod.Call([]reflect.Value{reflect.ValueOf(eventToInject.Component)})
-	log.Logger.Infow("ERRORINJECTOR: event injection results", "results", results)
 	if len(results) == 0 {
 		return fmt.Errorf("registry Get method returned no results")
 	}
 
 	component := results[0]
-	log.Logger.Infow("ERRORINJECTOR: event injection component", "component", eventToInject.Component, "componentValue", component)
 	if component.IsNil() {
 		return fmt.Errorf("component '%s' not found in registry", eventToInject.Component)
 	}
 
 	// Get the underlying component
 	componentValue := component.Elem()
-	log.Logger.Infow("ERRORINJECTOR: event injection componentValue", "componentValue", componentValue)
 
 	// Call the standardized InjectEvent method on any component
 	method := componentValue.MethodByName("InjectEvent")
 	if !method.IsValid() {
 		return fmt.Errorf("component %s does not have InjectEvent method", eventToInject.Component)
 	}
-
-	log.Logger.Infow("ERRORINJECTOR: injecting event", "component", eventToInject.Component, "event", eventToInject)
 
 	// Call the injection method with the event parameters
 	callResults := method.Call([]reflect.Value{

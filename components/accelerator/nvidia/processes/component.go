@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -40,14 +41,21 @@ type component struct {
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
 	c := &component{
-		ctx:              cctx,
+		ctx: cctx,
 
 		healthCheckInterval: gpudInstance.HealthCheckInterval,
-		cancel:           ccancel,
-		nvmlInstance:     gpudInstance.NVMLInstance,
-		getProcessesFunc: nvidianvml.GetProcesses,
+		cancel:              ccancel,
+		nvmlInstance:        gpudInstance.NVMLInstance,
+		getProcessesFunc:    nvidianvml.GetProcesses,
 	}
 	return c, nil
+}
+
+// InjectFault injects a fault into the processes component by replacing the getProcessesFunc
+func (c *component) InjectFault(errMsg string) {
+	c.getProcessesFunc = func(uuid string, dev device.Device) (nvidianvml.Processes, error) {
+		return nvidianvml.Processes{}, errors.New(errMsg)
+	}
 }
 
 func (c *component) Name() string { return Name }

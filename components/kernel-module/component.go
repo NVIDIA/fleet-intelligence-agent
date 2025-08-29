@@ -4,6 +4,7 @@ package kernelmodule
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -38,15 +39,22 @@ type component struct {
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(context.Background())
 	c := &component{
-		ctx:    cctx,
+		ctx: cctx,
 
 		healthCheckInterval: gpudInstance.HealthCheckInterval,
-		cancel: ccancel,
+		cancel:              ccancel,
 
 		getAllModulesFunc: getAllModules,
 		modulesToCheck:    gpudInstance.KernelModulesToCheck,
 	}
 	return c, nil
+}
+
+// InjectFault injects a fault into the kernel-module component by making getAllModulesFunc return an error
+func (c *component) InjectFault(errMsg string) {
+	c.getAllModulesFunc = func() ([]string, error) {
+		return nil, errors.New(errMsg)
+	}
 }
 
 func (c *component) Name() string { return Name }

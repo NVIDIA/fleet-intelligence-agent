@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -40,14 +41,21 @@ type component struct {
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
 	c := &component{
-		ctx:          cctx,
+		ctx: cctx,
 
 		healthCheckInterval: gpudInstance.HealthCheckInterval,
-		cancel:       ccancel,
-		nvmlInstance: gpudInstance.NVMLInstance,
-		getPowerFunc: nvidianvml.GetPower,
+		cancel:              ccancel,
+		nvmlInstance:        gpudInstance.NVMLInstance,
+		getPowerFunc:        nvidianvml.GetPower,
 	}
 	return c, nil
+}
+
+// InjectFault injects a fault into the power component by replacing the getPowerFunc
+func (c *component) InjectFault(errMsg string) {
+	c.getPowerFunc = func(uuid string, dev device.Device) (nvidianvml.Power, error) {
+		return nvidianvml.Power{}, errors.New(errMsg)
+	}
 }
 
 func (c *component) Name() string { return Name }
