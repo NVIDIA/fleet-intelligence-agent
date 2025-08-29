@@ -2,7 +2,7 @@ name: CI - Build Binary
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
     tags: ['*.*.*']
   pull_request:
     paths:
@@ -20,44 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-dev:
-    if: github.ref != 'refs/heads/main'
-    name: Build (Dev)
-    runs-on: ubuntu-22.04
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          cache: true
-          go-version-file: go.mod
-
-      - name: Build binary
-        run: |
-          echo "🔨 Building gpuhealth binary for dev validation..."
-          make gpuhealth || go build -o bin/gpuhealth ./cmd/gpuhealth
-
-      - name: Test binary
-        run: |
-          ./bin/gpuhealth --version
-          ./bin/gpuhealth --help
-
-      - name: Upload binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: gpuhealth-binary-dev
-          path: bin/gpuhealth
-          if-no-files-found: warn
-          retention-days: 1
-
   build-full:
-    # Full platform builds for PR/main/release - Self-hosted runners
-    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/')
     strategy:
       fail-fast: false
       matrix:
