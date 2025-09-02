@@ -67,8 +67,18 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          cache: true
+          cache: false  # Disable automatic caching to avoid tar issues
           go-version-file: go.mod
+          
+      - name: Setup Go cache manually
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
       - name: Build binary (native)
         run: |

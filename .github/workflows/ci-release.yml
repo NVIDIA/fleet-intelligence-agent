@@ -123,22 +123,21 @@ jobs:
               run_id: successfulPackageRun.id
             });
             
-            const requiredPackages = [
-              'package-deb-ubuntu-22.04-amd64',
-              'package-deb-ubuntu-22.04-arm64',
-              'package-rpm-rhel-8-x86_64',
-              'package-rpm-rhel-8-aarch64'
+            // Check for package artifacts with actual GoReleaser-generated names
+            const requiredPackagePatterns = [
+              /^gpuhealth.*amd64\.deb$/,
+              /^gpuhealth.*arm64\.deb$/,
+              /^gpuhealth.*x86_64\.rpm$/,
+              /^gpuhealth.*aarch64\.rpm$/
             ];
             
             const foundPackages = packageArtifacts.data.artifacts.filter(a => 
-              requiredPackages.includes(a.name) && a.expired === false
+              requiredPackagePatterns.some(pattern => pattern.test(a.name)) && a.expired === false
             );
             
-            if (foundPackages.length !== requiredPackages.length) {
-              const missing = requiredPackages.filter(req => 
-                !foundPackages.some(found => found.name === req)
-              );
-              core.setFailed(`Missing package artifacts: ${missing.join(', ')}`);
+            if (foundPackages.length !== requiredPackagePatterns.length) {
+              const foundNames = foundPackages.map(a => a.name);
+              core.setFailed(`Expected 4 package artifacts, found ${foundPackages.length}. Found: ${foundNames.join(', ')}`);
               return;
             }
             console.log(`All package artifacts found: ${foundPackages.map(a => a.name).join(', ')}`);
@@ -161,7 +160,7 @@ jobs:
       - name: Download all package artifacts  
         uses: actions/download-artifact@v4
         with:
-          pattern: package-*
+          pattern: "gpuhealth*"
           path: ./packages/
           
       - name: List collected artifacts
