@@ -20,6 +20,7 @@ nfpms:
     ids: [gpuhealth]
     formats: [deb]
     bindir: /usr/bin
+    file_name_template: '{{ .PackageName }}_{{ .Version }}.{{ .Arch }}'
     maintainer: "GPU Health Team <gpuhealth@exchange.nvidia.com>"
     license: Apache-2.0
     homepage: https://github.com/NVIDIA/gpuhealth
