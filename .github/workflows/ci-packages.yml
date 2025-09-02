@@ -93,11 +93,10 @@ jobs:
       - name: Build package
         run: |
           echo "Building ${{ matrix.package_type }} package on ${{ matrix.os_name }}-${{ matrix.arch }}..."
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            goreleaser build --config ${{ matrix.goreleaser_config }} --snapshot --clean
-          else
-            # Release build for tags
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             goreleaser release --config ${{ matrix.goreleaser_config }} --clean
+          else
+            goreleaser release --snapshot --config ${{ matrix.goreleaser_config }} --clean    # For branches and PRs
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
