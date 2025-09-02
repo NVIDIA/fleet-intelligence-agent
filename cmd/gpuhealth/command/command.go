@@ -211,10 +211,6 @@ func App() *cli.App {
 					Name:  "event-type",
 					Usage: "type of the event to inject into the component",
 				},
-				&cli.StringFlag{
-					Name:  "address",
-					Usage: "gpuhealth server address",
-				},
 				&cli.BoolFlag{
 					Name:  "clear",
 					Usage: "clear injected faults from the component instead of injecting new ones",
