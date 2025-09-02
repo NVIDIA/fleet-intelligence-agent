@@ -111,8 +111,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: package-${{ matrix.package_type }}-${{ matrix.os_name }}-${{ matrix.arch }}
-          path:
-            - "dist/*.deb"
-            - "dist/*.rpm"
+          path: "dist/"
           if-no-files-found: warn
           retention-days: 7
