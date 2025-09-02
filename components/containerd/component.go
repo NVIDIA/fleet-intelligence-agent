@@ -114,6 +114,18 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original containerd checking functions
+func (c *component) ClearFault() {
+	// Restore original functions from the New() method
+	c.checkDependencyInstalledFunc = pkgcontainerd.CheckContainerdInstalled
+	c.checkSocketExistsFunc = pkgcontainerd.CheckSocketExists
+	c.checkServiceActiveFunc = func(ctx context.Context) (bool, error) {
+		return systemd.IsActive("containerd")
+	}
+	c.checkContainerdRunningFunc = pkgcontainerd.CheckContainerdRunning
+	c.listAllSandboxesFunc = pkgcontainerd.ListAllSandboxes
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

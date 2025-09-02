@@ -58,6 +58,11 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original processes checking function
+func (c *component) ClearFault() {
+	c.getProcessesFunc = nvidianvml.GetProcesses
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

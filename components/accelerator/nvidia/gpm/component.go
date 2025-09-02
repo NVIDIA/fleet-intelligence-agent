@@ -111,6 +111,20 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original GPM checking functions
+func (c *component) ClearFault() {
+	// Restore original functions from the New() method
+	c.getGPMSupportedFunc = nvidianvml.GPMSupportedByDevice
+	c.getGPMMetricsFunc = func(ctx context.Context, dev device.Device) (map[gonvml.GpmMetricId]float64, error) {
+		return nvidianvml.GetGPMMetrics(
+			ctx,
+			dev,
+			sampleDuration,
+			defaultGPMMetricIDs...,
+		)
+	}
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

@@ -71,10 +71,25 @@ func (s *Server) injectFault(c *gin.Context) {
 			return
 		}
 
+	case request.ComponentClear != nil:
+		if injector, ok := s.faultInjector.(pkgfaultinjector.ComponentClearInjector); ok {
+			if err := injector.ClearComponentFault(c.Request.Context(), s.componentsRegistry, request.ComponentClear); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"code": errdefs.ErrUnknown, "message": "failed to clear component fault: " + err.Error()})
+				return
+			}
+		} else {
+			c.JSON(http.StatusNotImplemented, gin.H{"code": errdefs.ErrNotImplemented, "message": "component fault clearing not supported"})
+			return
+		}
+
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"code": errdefs.ErrInvalidArgument, "message": "one of kernel_message, component_error, or event is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": errdefs.ErrInvalidArgument, "message": "one of kernel_message, component_error, component_clear, or event is required"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "fault injected"})
+	successMessage := "fault injected"
+	if request.ComponentClear != nil {
+		successMessage = "component fault cleared"
+	}
+	c.JSON(http.StatusOK, gin.H{"message": successMessage})
 }

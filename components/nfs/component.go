@@ -102,6 +102,25 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original NFS checking functions
+func (c *component) ClearFault() {
+	// Restore original functions from the New() method
+	c.getGroupConfigsFunc = GetDefaultConfigs
+	c.validateMemberConfigs = func(ctx context.Context, configs pkgnfschecker.MemberConfigs) error {
+		return configs.Validate(ctx)
+	}
+	c.newChecker = pkgnfschecker.NewChecker
+	c.writeChecker = func(ctx context.Context, checker pkgnfschecker.Checker) error {
+		return checker.Write(ctx)
+	}
+	c.checkChecker = func(ctx context.Context, checker pkgnfschecker.Checker) pkgnfschecker.CheckResult {
+		return checker.Check(ctx)
+	}
+	c.cleanChecker = func(checker pkgnfschecker.Checker) error {
+		return checker.Clean()
+	}
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

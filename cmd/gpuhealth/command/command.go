@@ -201,7 +201,7 @@ func App() *cli.App {
 				},
 				&cli.StringFlag{
 					Name:  "fault-type",
-					Usage: "fault type to inject into the component (component-error or event)",
+					Usage: "fault type to inject into the component (component-error or event or kernel-message)",
 				},
 				&cli.StringFlag{
 					Name:  "fault-message",
@@ -214,6 +214,10 @@ func App() *cli.App {
 				&cli.StringFlag{
 					Name:  "address",
 					Usage: "gpuhealth server address",
+				},
+				&cli.BoolFlag{
+					Name:  "clear",
+					Usage: "clear injected faults from the component instead of injecting new ones",
 				},
 			},
 		},

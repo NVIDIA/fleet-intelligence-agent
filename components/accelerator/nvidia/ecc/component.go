@@ -60,6 +60,12 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original ECC checking function
+func (c *component) ClearFault() {
+	// Only restore the function that was actually modified in InjectFault
+	c.getECCErrorsFunc = nvidianvml.GetECCErrors
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

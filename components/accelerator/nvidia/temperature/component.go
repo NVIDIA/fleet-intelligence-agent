@@ -59,6 +59,11 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original temperature checking function
+func (c *component) ClearFault() {
+	c.getTemperatureFunc = nvidianvml.GetTemperature
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

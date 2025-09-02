@@ -121,6 +121,12 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original hardware slowdown checking function
+func (c *component) ClearFault() {
+	// Only restore the function that was actually modified in InjectFault
+	c.getClockEventsFunc = nvidianvml.GetClockEvents
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

@@ -103,6 +103,11 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original threshold checking function
+func (c *component) ClearFault() {
+	c.getThresholdsFunc = GetDefaultExpectedGPUCounts
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

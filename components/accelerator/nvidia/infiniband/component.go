@@ -125,6 +125,15 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original infiniband checking functions
+func (c *component) ClearFault() {
+	// Restore original functions from the New() method
+	c.getThresholdsFunc = GetDefaultExpectedPortStates
+	c.getClassDevicesFunc = func() (infinibandclass.Devices, error) {
+		return infinibandclass.LoadDevices(c.toolOverwrites.InfinibandClassRootDir)
+	}
+}
+
 // InjectEvent injects an event directly into the component's event bucket
 func (c *component) InjectEvent(name, eventType, message string) error {
 	if c.eventBucket == nil {

@@ -57,6 +57,11 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original kernel module checking function
+func (c *component) ClearFault() {
+	c.getAllModulesFunc = getAllModules
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

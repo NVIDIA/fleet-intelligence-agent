@@ -85,6 +85,17 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original docker checking functions
+func (c *component) ClearFault() {
+	// Restore original functions from the New() method
+	c.checkDependencyInstalledFunc = pkgdocker.CheckDockerInstalled
+	c.checkServiceActiveFunc = func() (bool, error) {
+		return systemd.IsActive("docker")
+	}
+	c.checkDockerRunningFunc = pkgdocker.CheckDockerRunning
+	c.listContainersFunc = pkgdocker.ListContainers
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

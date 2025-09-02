@@ -66,6 +66,11 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original network latency checking function
+func (c *component) ClearFault() {
+	c.getEgressLatenciesFunc = latencyedge.Measure
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

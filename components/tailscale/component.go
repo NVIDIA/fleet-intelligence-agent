@@ -65,6 +65,15 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original tailscale checking functions
+func (c *component) ClearFault() {
+	// Restore original functions from the New() method
+	c.checkDependencyInstalled = checkTailscaledInstalled
+	c.checkServiceActiveFunc = func() (bool, error) {
+		return systemd.IsActive("tailscaled")
+	}
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

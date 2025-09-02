@@ -61,6 +61,13 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original environment checking function
+func (c *component) ClearFault() {
+	c.checkEnvFunc = func(key string) bool {
+		return os.Getenv(key) == "1"
+	}
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

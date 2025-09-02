@@ -26,6 +26,11 @@ type EventInjector interface {
 	InjectEvent(ctx context.Context, registry interface{}, eventToInject *EventToInject) error
 }
 
+// ComponentClearInjector defines the interface for clearing component faults.
+type ComponentClearInjector interface {
+	ClearComponentFault(ctx context.Context, registry interface{}, componentClear *ComponentClear) error
+}
+
 func NewInjector(kmsgWriter pkgkmsgwriter.KmsgWriter) Injector {
 	return &injector{
 		kmsgWriter: kmsgWriter,
@@ -115,6 +120,38 @@ func (i *injector) InjectEvent(ctx context.Context, registry interface{}, eventT
 	return nil
 }
 
+func (i *injector) ClearComponentFault(ctx context.Context, registry interface{}, componentClear *ComponentClear) error {
+	// Use reflection to get the component from the registry
+	registryValue := reflect.ValueOf(registry)
+	getMethod := registryValue.MethodByName("Get")
+	if !getMethod.IsValid() {
+		return fmt.Errorf("registry does not have Get method")
+	}
+
+	// Call registry.Get(componentName)
+	results := getMethod.Call([]reflect.Value{reflect.ValueOf(componentClear.Component)})
+	if len(results) == 0 {
+		return fmt.Errorf("registry Get method returned no results")
+	}
+
+	component := results[0]
+	if component.IsNil() {
+		return fmt.Errorf("component '%s' not found in registry", componentClear.Component)
+	}
+
+	// Get the underlying component
+	componentValue := component.Elem()
+
+	// Call the ClearFault method on the component
+	method := componentValue.MethodByName("ClearFault")
+	if !method.IsValid() {
+		return fmt.Errorf("component %s does not have ClearFault method", componentClear.Component)
+	}
+
+	method.Call([]reflect.Value{})
+	return nil
+}
+
 // Request is the request body for the inject-fault endpoint.
 type Request struct {
 	// XID is the XID to inject.
@@ -125,6 +162,9 @@ type Request struct {
 
 	// ComponentError is the component error to inject.
 	ComponentError *ComponentError `json:"component_error,omitempty"`
+
+	// ComponentClear is the component fault to clear.
+	ComponentClear *ComponentClear `json:"component_clear,omitempty"`
 
 	// Event is the event to inject directly into a component's event store.
 	Event *EventToInject `json:"event,omitempty"`
@@ -137,6 +177,10 @@ type XIDToInject struct {
 type ComponentError struct {
 	Component string `json:"component"`
 	Message   string `json:"message"`
+}
+
+type ComponentClear struct {
+	Component string `json:"component"`
 }
 
 type EventToInject struct {
@@ -174,6 +218,12 @@ func (r *Request) Validate() error {
 		}
 		if r.ComponentError.Message == "" {
 			r.ComponentError.Message = "Injected error for testing"
+		}
+		return nil
+
+	case r.ComponentClear != nil:
+		if r.ComponentClear.Component == "" {
+			return errors.New("component name is required for component fault clearing")
 		}
 		return nil
 

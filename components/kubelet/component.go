@@ -84,6 +84,17 @@ func (c *component) InjectFault(errMsg string) {
 	c.failedCount = c.failedCountThreshold + 1
 }
 
+// ClearFault clears any injected faults and restores the original kubelet checking functions
+func (c *component) ClearFault() {
+	// Restore original functions from the New() method
+	c.checkDependencyInstalled = kubelet.CheckKubeletInstalled
+	c.checkKubeletRunning = func() bool {
+		return netutil.IsPortOpen(kubelet.DefaultKubeletReadOnlyPort)
+	}
+	// Reset failed count
+	c.failedCount = 0
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

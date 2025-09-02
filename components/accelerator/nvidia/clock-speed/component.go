@@ -58,6 +58,11 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original clock speed checking function
+func (c *component) ClearFault() {
+	c.getClockSpeedFunc = nvidianvml.GetClockSpeed
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {

@@ -17,6 +17,15 @@ func Command(c *cli.Context) error {
 		return fmt.Errorf("component name is required")
 	}
 
+	// Get the server address
+	address := fmt.Sprintf("http://localhost:%d", gpuhealthconfig.DefaultHealthPort)
+
+	// Check if clear flag is set
+	clearFault := c.Bool("clear")
+	if clearFault {
+		return clearComponentFault(component, address)
+	}
+
 	faultType := c.String("fault-type")
 	if faultType == "" {
 		faultType = "event"
@@ -30,12 +39,6 @@ func Command(c *cli.Context) error {
 	eventType := c.String("event-type")
 	if eventType == "" {
 		eventType = "Fatal"
-	}
-
-	// Get the server address
-	address := c.String("address")
-	if address == "" {
-		address = fmt.Sprintf("http://localhost:%d", gpuhealthconfig.DefaultHealthPort)
 	}
 
 	// Create the injection request
@@ -134,4 +137,38 @@ func getKernelMessageForComponent(component, faultMessage string) (string, error
 	default:
 		return "", fmt.Errorf("no kernel message defined for component: %s", component)
 	}
+}
+
+// clearComponentFault sends a request to clear injected faults from a component
+func clearComponentFault(component, address string) error {
+	// Create the clear request
+	requestBody := map[string]interface{}{
+		"component_clear": map[string]string{
+			"component": component,
+		},
+	}
+
+	// Marshal to JSON
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Make the POST request to the inject-fault endpoint with clear action
+	url := fmt.Sprintf("%s/inject-fault", address)
+	fmt.Printf("Clearing fault from %s component at %s...\n", component, url)
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to make request to %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server returned error status %d", resp.StatusCode)
+	}
+
+	fmt.Printf("Successfully cleared fault from %s component\n", component)
+	return nil
 }

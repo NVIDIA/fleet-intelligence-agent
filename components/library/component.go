@@ -116,6 +116,11 @@ func (c *component) InjectFault(errMsg string) {
 	}
 }
 
+// ClearFault clears any injected faults and restores the original library checking function
+func (c *component) ClearFault() {
+	c.findLibrary = file.FindLibrary
+}
+
 func (c *component) Name() string { return Name }
 
 func (c *component) Tags() []string {
