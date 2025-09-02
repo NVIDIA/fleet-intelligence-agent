@@ -2,8 +2,15 @@ name: CI - Unit Tests
 
 on:
   push:
-    branches: ["**"]
-    tags: ['*.*.*']
+    branches: ["**"]  # Every commit on every branch
+  pull_request:
+    paths:
+      - ".github/workflows/ci-unit-tests.yml"
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - "scripts/tests-unit.sh"
+    branches: ["main"]
 
 permissions:
   contents: read

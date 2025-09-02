@@ -2,15 +2,16 @@ name: CI - Build Binary
 
 on:
   push:
-    branches: ["main"]
-    tags: ['*.*.*']
+    branches: ["main"]    # Main branch commits
+    tags: ['*.*.*']       # Release tags
   pull_request:
     paths:
       - ".github/workflows/ci-build.yml"
       - "**.go"
       - "go.mod"
       - "go.sum"
-    branches: ["main"]
+      - "Makefile"
+    branches: ["main"]    # PRs to main
 
 permissions:
   contents: read

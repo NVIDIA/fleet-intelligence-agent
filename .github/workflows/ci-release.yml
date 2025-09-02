@@ -1,0 +1,304 @@
+name: Release - Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (must have existing CI artifacts)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read  # Required to download artifacts from other workflows
+
+jobs:
+  # Validate that required artifacts exist for the specified tag
+  validate-artifacts:
+    name: Validate Required Artifacts
+    runs-on: ubuntu-22.04
+    outputs:
+      tag: ${{ github.event.inputs.tag }}
+      artifacts-valid: ${{ steps.validate.outputs.artifacts-valid }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+        
+      - name: Validate tag exists
+        id: validate
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          echo "Validating release for tag: $TAG"
+          
+          # Check if tag exists
+          if ! git rev-parse --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag '$TAG' does not exist in repository"
+            echo "Available tags:"
+            git tag --sort=-version:refname | head -10
+            exit 1
+          fi
+          
+          echo "Tag '$TAG' exists"
+          echo "artifacts-valid=true" >> $GITHUB_OUTPUT
+          
+      - name: Check for required CI artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = '${{ github.event.inputs.tag }}';
+            console.log(`Checking for CI artifacts for tag: ${tag}`);
+            
+            // Get the commit SHA for the tag
+            const tagRef = await github.rest.git.getRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `tags/${tag}`
+            });
+            const tagSha = tagRef.data.object.sha;
+            console.log(`Tag SHA: ${tagSha}`);
+            
+            // Check CI Build workflow runs
+            const buildRuns = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ci-build.yml',
+              head_sha: tagSha
+            });
+            
+            const successfulBuildRun = buildRuns.data.workflow_runs.find(run => run.conclusion === 'success');
+            if (!successfulBuildRun) {
+              core.setFailed(`No successful CI build workflow run found for tag ${tag}`);
+              return;
+            }
+            console.log(`Found successful build run: ${successfulBuildRun.id}`);
+            
+            // Check CI Package workflow runs  
+            const packageRuns = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ci-packages.yml',
+              head_sha: tagSha
+            });
+            
+            const successfulPackageRun = packageRuns.data.workflow_runs.find(run => run.conclusion === 'success');
+            if (!successfulPackageRun) {
+              core.setFailed(`No successful CI package workflow run found for tag ${tag}`);
+              return;
+            }
+            console.log(`Found successful package run: ${successfulPackageRun.id}`);
+            
+            // Verify build artifacts exist
+            const buildArtifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: successfulBuildRun.id
+            });
+            
+            const requiredBinaries = [
+              'gpuhealth-binary-ubuntu-22.04-amd64',
+              'gpuhealth-binary-ubuntu-22.04-arm64',
+              'gpuhealth-binary-rhel-8-x86_64', 
+              'gpuhealth-binary-rhel-8-aarch64'
+            ];
+            
+            const foundBinaries = buildArtifacts.data.artifacts.filter(a => 
+              requiredBinaries.includes(a.name) && a.expired === false
+            );
+            
+            if (foundBinaries.length !== requiredBinaries.length) {
+              const missing = requiredBinaries.filter(req => 
+                !foundBinaries.some(found => found.name === req)
+              );
+              core.setFailed(`Missing binary artifacts: ${missing.join(', ')}`);
+              return;
+            }
+            console.log(`✅ All binary artifacts found: ${foundBinaries.map(a => a.name).join(', ')}`);
+            
+            // Verify package artifacts exist
+            const packageArtifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: successfulPackageRun.id
+            });
+            
+            const requiredPackages = [
+              'package-deb-ubuntu-22.04-amd64',
+              'package-deb-ubuntu-22.04-arm64',
+              'package-rpm-rhel-8-x86_64',
+              'package-rpm-rhel-8-aarch64'
+            ];
+            
+            const foundPackages = packageArtifacts.data.artifacts.filter(a => 
+              requiredPackages.includes(a.name) && a.expired === false
+            );
+            
+            if (foundPackages.length !== requiredPackages.length) {
+              const missing = requiredPackages.filter(req => 
+                !foundPackages.some(found => found.name === req)
+              );
+              core.setFailed(`Missing package artifacts: ${missing.join(', ')}`);
+              return;
+            }
+            console.log(`All package artifacts found: ${foundPackages.map(a => a.name).join(', ')}`);
+            
+            console.log(`All required artifacts validated for tag ${tag}`);
+
+  # Download artifacts from successful CI workflows
+  collect-artifacts:
+    name: Collect Build Artifacts
+    runs-on: ubuntu-22.04
+    needs: validate-artifacts
+    if: needs.validate-artifacts.outputs.artifacts-valid == 'true'
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gpuhealth-binary-*
+          path: ./binaries/
+          
+      - name: Download all package artifacts  
+        uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          path: ./packages/
+          
+      - name: List collected artifacts
+        run: |
+          echo "=== Binaries ==="
+          find ./binaries/ -type f -name "gpuhealth" -exec ls -la {} \;
+          echo "=== Packages ==="
+          find ./packages/ -type f \( -name "*.deb" -o -name "*.rpm" \) -exec ls -la {} \;
+          
+      - name: Get release tag
+        id: tag
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Prepare release artifacts
+        run: |
+          mkdir -p ./release-assets
+          TAG="${{ needs.validate-artifacts.outputs.tag }}"
+          
+          # Copy binaries with proper naming
+          for binary in ./binaries/*/gpuhealth; do
+            if [[ -f "$binary" ]]; then
+              dir_name=$(basename $(dirname "$binary"))
+              # Extract platform info from artifact name
+              platform=$(echo "$dir_name" | sed 's/gpuhealth-binary-//')
+              cp "$binary" "./release-assets/gpuhealth-${TAG}-${platform}"
+            fi
+          done
+          
+          # Copy packages
+          find ./packages/ -type f \( -name "*.deb" -o -name "*.rpm" \) -exec cp {} ./release-assets/ \;
+          
+          echo "=== Final Release Assets ==="
+          ls -la ./release-assets/
+          
+      - name: Upload consolidated release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-${{ needs.validate-artifacts.outputs.tag }}
+          path: ./release-assets/
+          retention-days: 30
+
+  # Pre-release validation on GitHub-hosted (fast)
+  pre-release-validation:
+    needs: [validate-artifacts, collect-artifacts]
+    if: needs.validate-artifacts.outputs.artifacts-valid == 'true'
+    name: Pre-Release Validation
+    runs-on: ubuntu-22.04  # GitHub-hosted
+    outputs:
+      tag: ${{ needs.validate-artifacts.outputs.tag }}
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get tag
+        id: tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG=${GITHUB_REF#refs/tags/}
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Release tag: ${TAG}"
+
+      - name: Validate tag format
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          if [[ ! $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+            echo "Invalid tag format: $TAG"
+            echo "Expected format: v1.2.3 or v1.2.3-alpha"
+            exit 1
+          fi
+
+      - name: Check changelog
+        run: |
+          if [ -f CHANGELOG.md ]; then
+            TAG="${{ steps.tag.outputs.tag }}"
+            if ! grep -q "$TAG" CHANGELOG.md; then
+              echo "Warning: Tag $TAG not found in CHANGELOG.md"
+            fi
+          fi
+
+
+
+  # Create GitHub release using pre-built artifacts
+  create-github-release:
+    needs: [validate-artifacts, collect-artifacts, pre-release-validation]
+    if: needs.validate-artifacts.outputs.artifacts-valid == 'true'
+    name: Create GitHub Release
+    runs-on: ubuntu-22.04  # GitHub-hosted for API operations
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download consolidated release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets-${{ needs.validate-artifacts.outputs.tag }}
+          path: ./release-assets
+
+      - name: Verify release assets
+        run: |
+          echo "=== Release Assets Ready for Upload ==="
+          ls -la ./release-assets/
+          echo "=== Binary Count ==="
+          find ./release-assets/ -name "gpuhealth-*" -type f | wc -l
+          echo "=== Package Count ==="
+          find ./release-assets/ -name "*.deb" -o -name "*.rpm" | wc -l
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate-artifacts.outputs.tag }}
+          name: "gpuhealth ${{ needs.validate-artifacts.outputs.tag }}"
+          draft: false
+          prerelease: ${{ contains(needs.validate-artifacts.outputs.tag, '-') }}
+          generate_release_notes: true
+          files: ./release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release Summary
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** ${{ needs.pre-release-validation.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Packages:** $(ls ./final-release/ | wc -l) files" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Release Assets:" >> $GITHUB_STEP_SUMMARY
+          for file in ./final-release/*; do
+            echo "- $(basename $file)" >> $GITHUB_STEP_SUMMARY
+          done

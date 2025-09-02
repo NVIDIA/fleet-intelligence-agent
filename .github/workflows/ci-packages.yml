@@ -2,8 +2,8 @@ name: CI - Package Building
 
 on:
   push:
-    branches: ["main"]
-    tags: ['*.*.*']
+    branches: ["main"]    # Main branch commits
+    tags: ['*.*.*']       # Release tags
   pull_request:
     paths:
       - ".github/workflows/ci-packages.yml"
@@ -12,7 +12,7 @@ on:
       - "go.sum"
       - ".goreleaser_*.yaml"
       - "deployments/packages/**"
-    branches: ["**"]
+    branches: ["main"]    # PRs to main
 
 permissions:
   contents: write
@@ -92,7 +92,7 @@ jobs:
 
       - name: Build package
         run: |
-          echo "📦 Building ${{ matrix.package_type }} package on ${{ matrix.os_name }}-${{ matrix.arch }}..."
+          echo "Building ${{ matrix.package_type }} package on ${{ matrix.os_name }}-${{ matrix.arch }}..."
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             goreleaser build --config ${{ matrix.goreleaser_config }} --snapshot --clean
           else
