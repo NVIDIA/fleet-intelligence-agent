@@ -83,7 +83,7 @@ jobs:
 
       - name: Install GoReleaser
         run: |
-          go install github.com/goreleaser/goreleaser@latest
+          go install github.com/goreleaser/goreleaser/v2@latest
           goreleaser --version
 
       - name: Validate GoReleaser config
