@@ -54,8 +54,31 @@ sudo cp bin/gpuhealth /usr/local/bin/
 ./bin/gpuhealth --version
 ```
 
-**Development:**
+## Development Setup
+
+### Prerequisites for Development
+
+- Go 1.24+ 
+- Git with SSH access to NVIDIA internal repositories
+- Access to `gitlab-master.nvidia.com:12051`
+
+### Clone and Setup
+
 ```bash
+# Clone the repository
+git clone https://github.com/NVIDIA/gpuhealth.git
+cd gpuhealth
+
+# Configure Go for private NVIDIA GitLab access
+go env -w GOPRIVATE=gitlab-master.nvidia.com/* GONOPROXY=gitlab-master.nvidia.com/* GONOSUMDB=gitlab-master.nvidia.com/*
+
+# Configure Git to use SSH for GitLab (if using SSH keys)
+git config --global url."ssh://git@gitlab-master.nvidia.com:12051/".insteadOf "https://gitlab-master.nvidia.com/"
+
+# Download dependencies
+go mod tidy
+
+# Build and test
 make all && make test && make lint
 ```
 
