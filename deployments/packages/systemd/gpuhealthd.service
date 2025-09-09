@@ -1,0 +1,21 @@
+[Unit]
+Description=GPU Health Daemon
+After=network.target local-fs.target
+
+[Service]
+EnvironmentFile=-/etc/default/gpuhealth
+
+ExecStart=/usr/bin/gpuhealth run $GPUHEALTH_FLAGS
+ExecReload=/bin/kill -HUP $MAINPID
+
+Restart=always
+RestartSec=5s
+TimeoutStartSec=300
+TimeoutStopSec=30
+
+User=root
+Group=root
+LimitNOFILE=40000
+
+[Install]
+WantedBy=multi-user.target

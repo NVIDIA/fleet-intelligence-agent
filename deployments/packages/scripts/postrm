@@ -1,0 +1,37 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    remove|0)
+        echo "GPU Health Agent removed (configuration preserved)"
+        
+        # Simple systemd cleanup
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || echo "[WARNING] Failed to reload systemd daemon"
+        fi
+        
+        echo "To completely remove including data: sudo apt purge gpuhealth"
+        ;;
+        
+    purge)
+        echo "Completely removing GPU Health Agent..."
+        
+        # Basic systemd cleanup
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || echo "[WARNING] Failed to reload systemd daemon"
+        fi
+        
+        # Remove data directory and configuration
+        rm -rf /var/lib/gpuhealth 2>/dev/null || echo "[WARNING] Failed to remove data directory"
+        rm -f /etc/default/gpuhealth 2>/dev/null || echo "[WARNING] Failed to remove configuration"
+        
+        echo "[SUCCESS] GPU Health Agent completely removed"
+        ;;
+        
+    upgrade|1|2|failed-upgrade|abort-install|abort-upgrade|disappear)
+        # Just reload systemd for other scenarios
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || true
+        fi
+        ;;
+esac
