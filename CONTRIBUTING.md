@@ -121,15 +121,49 @@ For more information about the DCO, see: https://developercertificate.org/
 
 4. **Test Your Changes**: Ensure all tests pass and add new tests for your changes if applicable.
 
-5. **Commit with Sign-off**: Make sure all commits are signed off according to the DCO requirements.
+5. **Squash Commits**: Before finalizing your pull request, squash multiple commits into a single, clean commit:
+   ```bash
+   # Interactive rebase to squash commits (replace N with number of commits)
+   git rebase -i HEAD~N
+   
+   # Or squash all commits in your feature branch
+   git rebase -i main
+   ```
+   Choose "squash" (or "s") for commits you want to combine.
 
-6. **Submit Pull Request**: Create a pull request against the main branch with:
+6. **Sign-off Final Commit**: Make sure your final squashed commit is signed off according to the DCO requirements:
+   ```bash
+   # If you need to add sign-off to your final commit
+   git commit --amend --signoff
+   ```
+   Your final commit should have:
+   - A properly formatted commit message (see format below)
+   - Proper DCO sign-off
+   - A single logical change
+
+   **Commit Message Format:**
+   ```
+   [ISSUE-123] feat: Add GPU temperature monitoring
+   
+   - Implement temperature threshold checking
+   - Add Prometheus metrics for temperature alerts
+   - Include unit tests for temperature validation
+   
+   Signed-off-by: Your Name <your.email@example.com>
+   ```
+   
+   Format: `[ISSUE-NUMBER] type: Brief description`
+   - **Issue/Ticket**: Reference GitHub issue or internal ticket (e.g., `[#456]`, `[GPUHEALTH-123]`)
+   - **Type**: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `chore`
+   - **Description**: Clear, imperative mood summary (e.g., "Add feature" not "Added feature")
+
+7. **Submit Pull Request**: Create a pull request against the main branch with:
    - Clear title and description
    - Reference to the related issue
    - Summary of changes made
    - Any breaking changes highlighted
 
-7. **Code Review**: Address any feedback from maintainers during the review process.
+8. **Code Review**: Address any feedback from maintainers during the review process.
 
 ## Coding Standards
 
