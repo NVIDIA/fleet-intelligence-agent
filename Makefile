@@ -1,0 +1,134 @@
+GO ?= go
+INSTALL ?= install
+GOLANGCI_LINT ?= golangci-lint
+GOFMT ?= gofmt
+GOTEST ?= go test
+
+# Root directory of the project (absolute path).
+ROOTDIR=$(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+
+BUILD_TIMESTAMP ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+VERSION ?= $(shell git describe --match 'v[0-9]*' --dirty='.m' --always)
+REVISION=$(shell git rev-parse HEAD)$(shell if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi)
+PACKAGE=github.com/NVIDIA/gpuhealth
+
+ifneq "$(strip $(shell command -v $(GO) 2>/dev/null))" ""
+	GOOS ?= $(shell $(GO) env GOOS)
+	GOARCH ?= $(shell $(GO) env GOARCH)
+else
+	ifeq ($(GOOS),)
+		# approximate GOOS for the platform if we don't have Go and GOOS isn't
+		# set. We leave GOARCH unset, so that may need to be fixed.
+		ifeq ($(OS),Windows_NT)
+			GOOS = windows
+		else
+			UNAME_S := $(shell uname -s)
+			ifeq ($(UNAME_S),Linux)
+				GOOS = linux
+			endif
+			ifeq ($(UNAME_S),Darwin)
+				GOOS = darwin
+			endif
+			ifeq ($(UNAME_S),FreeBSD)
+				GOOS = freebsd
+			endif
+		endif
+	else
+		GOOS ?= $$GOOS
+		GOARCH ?= $$GOARCH
+	endif
+endif
+
+ifndef GODEBUG
+	EXTRA_LDFLAGS += -s -w
+	DEBUG_GO_GCFLAGS :=
+	DEBUG_TAGS :=
+else
+	DEBUG_GO_GCFLAGS := -gcflags=all="-N -l"
+	DEBUG_TAGS := static_build
+endif
+
+RELEASE=gpuhealth-$(VERSION:v%=%)-${GOOS}-${GOARCH}
+
+COMMANDS=gpuhealth
+
+# Discover gpud version from go.mod
+GPUd_VERSION ?= $(shell $(GO) list -m -f '{{.Version}}' github.com/leptonai/gpud 2>/dev/null)
+
+GO_BUILD_FLAGS=-ldflags '-s -X $(PACKAGE)/internal/version.BuildTimestamp=$(BUILD_TIMESTAMP) -X $(PACKAGE)/internal/version.Version=$(VERSION) -X $(PACKAGE)/internal/version.Revision=$(REVISION) -X $(PACKAGE)/internal/version.Package=$(PACKAGE) -X $(PACKAGE)/internal/version.GPUdModuleVersion=$(GPUd_VERSION)'
+
+ifdef BUILDTAGS
+    GO_BUILDTAGS = ${BUILDTAGS}
+endif
+GO_BUILDTAGS ?=
+GO_BUILDTAGS += ${DEBUG_TAGS}
+ifneq ($(STATIC),)
+	GO_BUILDTAGS += osusergo netgo static_build
+endif
+GO_TAGS=$(if $(GO_BUILDTAGS),-tags "$(strip $(GO_BUILDTAGS))",)
+
+PACKAGES=$(shell $(GO) list ${GO_TAGS} ./... | grep -v /vendor/)
+
+GOPATHS=$(shell echo ${GOPATH} | tr ":" "\n" | tr ";" "\n")
+
+BINARIES=$(addprefix bin/,$(COMMANDS))
+
+.PHONY: clean all binaries gpuhealth lint test fmt help package-snapshot
+.DEFAULT: help
+
+help: ## show this help message
+	@echo "Available targets:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+all: binaries ## build all binaries
+
+FORCE:
+
+define BUILD_BINARY
+@echo "Building $@"
+@CGO_ENABLED=1 $(GO) build ${GO_BUILD_FLAGS} ${DEBUG_GO_GCFLAGS} -o $@ ${GO_TAGS}  ./$<
+endef
+
+# Build a binary from a cmd.
+bin/%: cmd/% FORCE
+	$(call BUILD_BINARY)
+
+binaries: $(BINARIES) ## build binaries
+	@echo "Built binaries: $(BINARIES)"
+
+# Specific target for gpuhealth (your main binary)
+gpuhealth: bin/gpuhealth ## build gpuhealth binary
+	@echo "gpuhealth built successfully at bin/gpuhealth"
+
+lint: ## run linting tools
+	@echo "Running linting..."
+	@if command -v $(GOLANGCI_LINT) >/dev/null 2>&1; then \
+		$(GOLANGCI_LINT) run ./...; \
+	else \
+		echo "golangci-lint not found, running basic checks..."; \
+		$(GOFMT) -l -s . | tee /tmp/gofmt.out; \
+		if [ -s /tmp/gofmt.out ]; then \
+			echo "Code formatting issues found. Run 'make fmt' to fix."; \
+			exit 1; \
+		fi; \
+		go vet ./...; \
+	fi
+
+fmt: ## format Go code
+	@echo "Formatting code..."
+	@$(GOFMT) -l -s -w .
+
+test: ## run tests with coverage
+	@echo "Running tests..."
+	@mkdir -p coverage
+	@$(GOTEST) -race -coverprofile=coverage/coverage.out -covermode=atomic ./...
+	@$(GO) tool cover -html=coverage/coverage.out -o coverage/coverage.html
+	@echo "Coverage report generated: coverage/coverage.html"
+	@$(GO) tool cover -func=coverage/coverage.out | tail -1
+
+clean: ## clean up binaries and build artifacts
+	@echo "Cleaning up..."
+	@rm -f $(BINARIES)
+	@rm -rf dist/
+	@rm -rf coverage/
+	@rm -f /tmp/gofmt.out

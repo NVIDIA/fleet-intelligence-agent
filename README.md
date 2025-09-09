@@ -1,0 +1,125 @@
+# NVIDIA GPU Health Agent
+
+## Overview
+
+`gpuhealth` is a lightweight GPU health monitoring and reporting agent for NVIDIA GPU infrastructure. Built on [leptonai/gpud](https://github.com/leptonai/gpud), it provides focused health monitoring without management overhead.
+
+**Key Features:**
+- **Lightweight**: <100MB RAM, <1% CPU usage
+- **Non-intrusive**: Read-only operations, no system modifications
+- **Flexible**: HTTP API, Prometheus metrics, CSV/JSON export
+- **Production-ready**: 24/7 datacenter operation
+
+## Quick Start
+
+### Prerequisites
+
+- Linux (Ubuntu 22.04+, RHEL 8+)
+- Go 1.24+ (for building from source)
+- NVIDIA drivers (recommended)
+- Root/sudo access
+
+### Installation
+
+**Package Installation (Recommended):**
+```bash
+# Ubuntu/Debian
+wget https://github.com/NVIDIA/gpuhealth/releases/latest/download/gpuhealth_*_amd64.deb
+sudo dpkg -i gpuhealth_*_amd64.deb
+
+# RHEL/Rocky/AlmaLinux/CentOS
+wget https://github.com/NVIDIA/gpuhealth/releases/latest/download/gpuhealth-*-1.x86_64.rpm
+sudo rpm -i gpuhealth-*-1.x86_64.rpm
+
+# Verify installation
+gpuhealth --version
+systemctl status gpuhealthd
+```
+
+**Note**: Package releases are coming soon. In the meantime, use the build-from-source method below.
+
+**Build from Source (Alternative Method):**
+```bash
+# Clone the repository
+git clone https://github.com/NVIDIA/gpuhealth.git
+cd gpuhealth
+
+# Build the binary
+make gpuhealth
+
+# Install system-wide (optional)
+sudo cp bin/gpuhealth /usr/local/bin/
+
+# Verify installation
+./bin/gpuhealth --version
+```
+
+**Development:**
+```bash
+make all && make test && make lint
+```
+
+### Usage
+
+```bash
+# Quick health scan
+gpuhealth scan
+
+# Start monitoring server (HTTP API on port 15133)
+gpuhealth run
+
+# Check status and machine info
+gpuhealth status
+gpuhealth machine-info
+
+# Offline data collection
+gpuhealth run --offline-mode --path=/tmp/gpu-health --duration=00:05:00 --format=csv
+```
+
+### HTTP API
+
+```bash
+# Health check
+curl http://localhost:15133/healthz
+
+# Machine and GPU info
+curl http://localhost:15133/machine-info
+
+# Current health states
+curl http://localhost:15133/v1/states
+
+# Prometheus metrics
+curl http://localhost:15133/metrics
+```
+
+## What It Monitors
+
+**GPU Metrics:** Power, temperature, clocks, utilization, memory, Xid events  
+**System Metrics:** CPU, memory, disk, network usage  
+**Infrastructure:** NVIDIA drivers, CUDA runtime, InfiniBand, containers
+
+## Export Formats
+
+- **HTTP API**: JSON, Prometheus metrics
+- **File Export**: CSV, JSON, OTLP
+
+## FAQ
+
+**Q: Does it send data externally?**  
+A: No, all data stays local by default, can be configured to send to an OTLP compatible endpoint.
+
+**Q: System requirements?**  
+A: Linux, <100MB RAM, <1% CPU. NVIDIA drivers recommended but not required.
+
+**Q: Works without NVIDIA GPUs?**  
+A: Yes, system monitoring works without GPUs.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+
+**Related:** [leptonai/gpud](https://github.com/leptonai/gpud) (upstream dependency)
+
+## License
+
+Apache License 2.0 - see [LICENSE](LICENSE) for details.

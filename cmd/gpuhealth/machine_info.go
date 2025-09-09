@@ -1,0 +1,89 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/leptonai/gpud/pkg/log"
+	pkgmachineinfo "github.com/leptonai/gpud/pkg/machine-info"
+	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
+	"github.com/leptonai/gpud/pkg/netutil"
+	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
+	"github.com/leptonai/gpud/pkg/sqlite"
+	"github.com/urfave/cli"
+
+	"github.com/NVIDIA/gpuhealth/internal/cmdutil"
+	"github.com/NVIDIA/gpuhealth/internal/config"
+)
+
+func machineInfoCommand(cliContext *cli.Context) error {
+	logLevel := cliContext.String("log-level")
+	zapLvl, err := log.ParseLogLevel(logLevel)
+	if err != nil {
+		return err
+	}
+	log.Logger = log.CreateLogger(zapLvl, "")
+
+	log.Logger.Debugw("starting machine-info command")
+
+	stateFile, err := config.DefaultStateFile()
+	if err != nil {
+		return fmt.Errorf("failed to get state file: %w", err)
+	}
+
+	// only read the state file if it exists (existing gpuhealth login)
+	if _, err := os.Stat(stateFile); err == nil {
+		// Check if we have read permission to the state file
+		if _, err := os.Open(stateFile); err != nil {
+			if os.IsPermission(err) {
+				return fmt.Errorf("insufficient permissions to read state file %s. Please run with sudo", stateFile)
+			}
+			// If it's not a permission error, continue - the sqlite.Open call below will handle other issues
+		}
+
+		dbRW, err := sqlite.Open(stateFile)
+		if err != nil {
+			return fmt.Errorf("failed to open state file: %w", err)
+		}
+		defer dbRW.Close()
+
+		dbRO, err := sqlite.Open(stateFile, sqlite.WithReadOnly(true))
+		if err != nil {
+			return fmt.Errorf("failed to open state file: %w", err)
+		}
+		defer dbRO.Close()
+
+		rootCtx, rootCancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer rootCancel()
+		machineID, err := pkgmetadata.ReadMachineIDWithFallback(rootCtx, dbRW, dbRO)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("GPUhealth machine ID: %q\n\n", machineID)
+	}
+
+	nvmlInstance, err := nvidianvml.New()
+	if err != nil {
+		return err
+	}
+
+	machineInfo, err := pkgmachineinfo.GetMachineInfo(nvmlInstance)
+	if err != nil {
+		return err
+	}
+	machineInfo.RenderTable(os.Stdout)
+
+	pubIP, _ := netutil.PublicIP()
+	providerInfo := pkgmachineinfo.GetProvider(pubIP)
+	if providerInfo == nil {
+		fmt.Printf("%s failed to find provider (%v)\n", cmdutil.WarningSign, err)
+	} else {
+		fmt.Printf("%s successfully found provider %s\n", cmdutil.CheckMark, providerInfo.Provider)
+		providerInfo.RenderTable(os.Stdout)
+	}
+
+	return nil
+}

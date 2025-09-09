@@ -1,0 +1,38 @@
+linters-settings:
+  govet:
+    shadow: false
+  gocyclo:
+    min-complexity: 30
+  misspell:
+    locale: US
+  goimports:
+    local-prefixes: github.com/NVIDIA/gpuhealth
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+    disabled-checks:
+      - ifElseChain
+      - wrapperFunc
+      - sloppyReassign
+      - rangeValCopy
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - unconvert
+    - gocyclo
+    - gocritic
+
+run:
+  timeout: 5m
+  go: '1.24'
