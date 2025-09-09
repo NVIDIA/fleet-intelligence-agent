@@ -45,6 +45,7 @@ logs/
 .env.*
 config/local.yaml
 config/local.yml
+!deployments/packages/systemd/gpuhealth.env
 
 # Database files
 *.db

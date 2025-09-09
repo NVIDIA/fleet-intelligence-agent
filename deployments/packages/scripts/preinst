@@ -1,0 +1,18 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    install|1)
+        echo "Preparing to install GPU Health Agent..."
+        # Warn if systemd not available
+        if [ ! -d /run/systemd/system ]; then
+            echo "[WARNING] Systemd not detected - service management will be limited"
+        fi
+        ;;
+    upgrade|2)
+        echo "Preparing to upgrade GPU Health Agent${2:+ from version $2}..."
+        ;;
+    abort-upgrade)
+        echo "Aborting GPU Health Agent upgrade..."
+        ;;
+esac
