@@ -205,6 +205,34 @@ func App() *cli.App {
 				},
 			},
 		},
+		{
+			Name:   "inject",
+			Usage:  "inject faults into components for testing",
+			Action: injectCommand,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     "component,c",
+					Usage:    "component name to inject fault into (required)",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  "fault-type",
+					Usage: "fault type to inject into the component (component-error or event or kernel-message)",
+				},
+				&cli.StringFlag{
+					Name:  "fault-message",
+					Usage: "message to inject into the component",
+				},
+				&cli.StringFlag{
+					Name:  "event-type",
+					Usage: "type of the event to inject into the component",
+				},
+				&cli.BoolFlag{
+					Name:  "clear",
+					Usage: "clear injected faults from the component instead of injecting new ones",
+				},
+			},
+		},
 	}
 
 	return app
