@@ -149,15 +149,68 @@ checksum:
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
+# GitHub release configuration
+release:
+  github:
+    owner: NVIDIA
+    name: gpuhealth
+  name_template: "NVIDIA GPU Health Agent v{{.Version}}"
+  header: |
+    ## NVIDIA GPU Health Agent v{{.Version}}
+    
+    This release includes GPU health monitoring and reporting capabilities for NVIDIA GPU infrastructure.
+    
+    ### Available Packages
+    
+    - **DEB packages**: `amd64` and `arm64` for Debian/Ubuntu systems
+    - **RPM packages**: `x86_64` and `aarch64` for RHEL/CentOS/Fedora systems  
+    - **Binary archives**: Standalone binaries for both architectures
+    
+    ### Installation
+    
+    Download the appropriate package for your system from the assets below. For installation instructions, see the project README.
+    
+  footer: |    
+    ### Verification
+    
+    All release artifacts are checksummed. Verify downloads using:
+    ```bash
+    sha256sum -c checksums.txt
+    ```
+    
+    ### Support
+    
+    For issues and questions, please visit: https://github.com/NVIDIA/gpuhealth/issues
+  draft: false
+  prerelease: auto  # Auto-detect pre-release based on version (e.g., v1.0.0-beta)
+  mode: replace  # Replace existing release if it exists
+  skip_upload: false
+
 # Changelog configuration
 changelog:
   sort: asc
+  use: git
+  groups:
+    - title: 'New Features'
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: 'Bug Fixes'
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: 'Performance Improvements'
+      regexp: "^.*perf[(\\w)]*:+.*$"
+      order: 2
+    - title: 'Documentation Updates'
+      regexp: "^.*docs[(\\w)]*:+.*$"
+      order: 3
+    - title: 'Other Changes'
+      order: 999
   filters:
     exclude:
-      - '^docs:'
       - '^test:'
       - '^ci:'
       - '^build:'
       - '^style:'
+      - '^chore:'
       - Merge pull request
       - Merge branch

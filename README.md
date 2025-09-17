@@ -21,22 +21,52 @@
 
 ### Installation
 
-**Package Installation (Recommended):**
+#### Package Installation (Recommended)
+
+**Step 1: Download Package**
+1. Go to the [Releases page](https://github.com/NVIDIA/gpuhealth/releases)
+2. Download the appropriate package for your system:
+   - **Debian/Ubuntu x86_64**: `gpuhealth_VERSION_amd64.deb`
+   - **Debian/Ubuntu ARM64**: `gpuhealth_VERSION_arm64.deb`
+   - **RHEL/RockyLinux/AlmaLinux/AmazonLinux x86_64**: `gpuhealth-VERSION-1.x86_64.rpm`
+   - **RHEL/RockyLinux/AlmaLinux/AmazonLinux ARM64**: `gpuhealth-VERSION-1.aarch64.rpm`
+
+**Step 2: Install Package**
 ```bash
-# Ubuntu/Debian
-wget https://github.com/NVIDIA/gpuhealth/releases/latest/download/gpuhealth_*_amd64.deb
-sudo dpkg -i gpuhealth_*_amd64.deb
+# Debian/Ubuntu (x86_64)
+sudo apt install ./gpuhealth_VERSION_amd64.deb
 
-# RHEL/Rocky/AlmaLinux/CentOS
-wget https://github.com/NVIDIA/gpuhealth/releases/latest/download/gpuhealth-*-1.x86_64.rpm
-sudo rpm -i gpuhealth-*-1.x86_64.rpm
+# Debian/Ubuntu (ARM64)
+sudo apt install ./gpuhealth_VERSION_arm64.deb
 
+# RHEL/RockyLinux/AlmaLinux/AmazonLinux (x86_64)
+sudo dnf install ./gpuhealth-VERSION-1.x86_64.rpm
+
+# RHEL/RockyLinux/AlmaLinux/AmazonLinux (ARM64)
+sudo dnf install ./gpuhealth-VERSION-1.aarch64.rpm
+```
+
+**Step 3: Verify Installation**
+```bash
 # Verify installation
 gpuhealth --version
 systemctl status gpuhealthd
 ```
 
-**Note**: Package releases are coming soon. In the meantime, use the build-from-source method below.
+#### Binary Installation (Alternative)
+
+For systems where you prefer not to use packages (e.g. offline mode):
+
+1. Download the binary archive for your platform from the [Releases page](https://github.com/NVIDIA/gpuhealth/releases)
+2. Extract and install:
+```bash
+# Download and extract (replace VERSION and ARCH as needed)
+tar -xzf gpuhealth_vVERSION_linux_ARCH.tar.gz
+sudo cp gpuhealth /usr/local/bin/
+
+# Verify installation
+gpuhealth --version
+```
 
 **Build from Source (Alternative Method):**
 ```bash
