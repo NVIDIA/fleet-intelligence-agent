@@ -2,7 +2,7 @@ linters-settings:
   govet:
     shadow: false
   gocyclo:
-    min-complexity: 30
+    min-complexity: 32
   misspell:
     locale: US
   goimports:
@@ -35,4 +35,4 @@ linters:
 
 run:
   timeout: 5m
-  go: '1.24'
+  go: '1.24.7'

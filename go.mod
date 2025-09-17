@@ -1,6 +1,6 @@
 module github.com/NVIDIA/gpuhealth
 
-go 1.24.5
+go 1.24.7
 
 replace github.com/leptonai/gpud => gitlab-master.nvidia.com/gpu-health/gpud v0.7.2-0.20250916202408-21570d70aed8
 
