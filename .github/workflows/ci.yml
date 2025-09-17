@@ -29,18 +29,13 @@ jobs:
         run: |
           git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
       - name: Download dependencies
         run: go mod download
+
+      - name: Clean previous lint cache
+        run: |
+          rm -rf ~/.cache/golangci-lint || true
+          mkdir -p ~/.cache/golangci-lint
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3
@@ -67,18 +62,13 @@ jobs:
         run: |
           git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
       - name: Download dependencies
         run: go mod download
+
+      - name: Clean previous test artifacts
+        run: |
+          rm -rf ./coverage || true
+          mkdir -p ./coverage
 
       - name: Run unit tests
         run: make test
@@ -93,6 +83,7 @@ jobs:
   build_check:
     name: Build Check
     runs-on: self-hosted
+    needs: [lint]
     strategy:
       matrix:
         goos: [linux]
@@ -116,19 +107,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-${{ matrix.goos }}-${{ matrix.goarch }}-
-            ${{ runner.os }}-go-
-
       - name: Download dependencies
         run: go mod download
+
+      - name: Clean previous build artifacts
+        run: |
+          rm -f gpuhealth-${{ matrix.goos }}-${{ matrix.goarch }} || true
 
       - name: Build all packages
         env:
@@ -158,6 +142,7 @@ jobs:
   package_snapshot:
     name: Package Snapshot
     runs-on: self-hosted
+    needs: [unit_test, build_check]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -178,18 +163,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
       - name: Download dependencies
         run: go mod download
+
+      - name: Clean previous dist directory
+        run: |
+          rm -rf ./dist || true
 
       - name: Run GoReleaser snapshot
         uses: goreleaser/goreleaser-action@v5
