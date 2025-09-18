@@ -13,6 +13,46 @@ env:
   GONOSUMDB: gitlab-master.nvidia.com/*
 
 jobs:
+  secret-detection:
+    name: Secret Detection
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for comprehensive scanning
+
+      - name: Set up Python
+        run: |
+          # Ensure Python and pip are available
+          python3 --version
+          pip3 --version
+
+      - name: Install detect-secrets
+        run: |
+          # Install detect-secrets from PyPI with user flag to avoid permission issues
+          pip3 install --user detect-secrets
+          # Add user bin to PATH
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Run detect-secrets scan
+        run: |
+          # Scan for new secrets not in baseline
+          echo "Scanning for secrets..."
+          if detect-secrets scan --baseline .secrets.baseline --all-files; then
+            echo "No new secrets detected!"
+          else
+            echo "New secrets detected!"
+            echo "::error::New secrets found that are not in the baseline"
+            echo ""
+            echo "To fix this:"
+            echo "1. Review the detected secrets above"
+            echo "2. If they are false positives, run: detect-secrets scan --update .secrets.baseline"
+            echo "3. If they are real secrets, remove them from the code"
+            echo "4. Commit the updated .secrets.baseline file"
+            exit 1
+          fi
+
   lint:
     name: Lint
     runs-on: self-hosted
