@@ -154,7 +154,6 @@ release:
   github:
     owner: NVIDIA
     name: gpuhealth
-  name_template: "NVIDIA GPU Health Agent v{{.Version}}"
   header: |
     ## NVIDIA GPU Health Agent v{{.Version}}
     

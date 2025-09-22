@@ -14,7 +14,7 @@
 
 ### Prerequisites
 
-- Linux (Ubuntu 22.04+, RHEL 8+)
+- Linux (Ubuntu 22.04+, RHEL 9+, Amazon Linux 2023+)
 - Go 1.24+ (for building from source)
 - NVIDIA drivers (recommended)
 - Root/sudo access
