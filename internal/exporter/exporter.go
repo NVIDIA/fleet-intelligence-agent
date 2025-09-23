@@ -28,7 +28,10 @@ import (
 	"time"
 
 	"github.com/leptonai/gpud/pkg/log"
+	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
+	"github.com/leptonai/gpud/pkg/sqlite"
 
+	"github.com/NVIDIA/gpuhealth/internal/config"
 	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
 	"github.com/NVIDIA/gpuhealth/internal/exporter/converter"
 	"github.com/NVIDIA/gpuhealth/internal/exporter/writer"
@@ -144,6 +147,11 @@ func (e *healthExporter) export() error {
 	ctx, cancel := context.WithTimeout(e.ctx, e.options.timeout)
 	defer cancel()
 
+	// Refresh configuration from metadata on every export
+	// If the endpoints/auth token are not empty, export will continue
+	// If the endpoints/auth token are empty, exportHTTP will skip
+	e.refreshConfigFromMetadata(ctx)
+
 	// Collect health data
 	healthData, err := e.collector.Collect(ctx)
 	if err != nil {
@@ -183,8 +191,59 @@ func (e *healthExporter) exportToFile(data *collector.HealthData) error {
 
 // exportToHTTP sends health data via HTTP
 func (e *healthExporter) exportToHTTP(ctx context.Context, data *collector.HealthData) error {
-	if err := e.httpWriter.Send(ctx, data, e.options.config.Endpoint, e.options.config.RetryMaxAttempts); err != nil {
-		return fmt.Errorf("failed to send data to %s: %w", e.options.config.Endpoint, err)
+	// Skip export if no endpoints are configured
+	if e.options.config.MetricsEndpoint == "" && e.options.config.LogsEndpoint == "" {
+		log.Logger.Infow("No endpoints configured, skipping HTTP export")
+		return nil
+	}
+
+	if e.options.config.AuthToken == "" {
+		log.Logger.Infow("No auth token configured, skipping HTTP export")
+		return nil
+	}
+
+	if err := e.httpWriter.Send(ctx, data, e.options.config.MetricsEndpoint, e.options.config.LogsEndpoint, e.options.config.RetryMaxAttempts, e.options.config.AuthToken); err != nil {
+		return fmt.Errorf("failed to send data: %w", err)
 	}
 	return nil
+}
+
+// refreshConfigFromMetadata updates the exporter configuration from metadata table
+func (e *healthExporter) refreshConfigFromMetadata(ctx context.Context) {
+	stateFile, err := config.DefaultStateFile()
+	if err != nil {
+		log.Logger.Debugw("failed to get state file path", "error", err)
+		return
+	}
+
+	dbRO, err := sqlite.Open(stateFile)
+	if err != nil {
+		log.Logger.Debugw("failed to open state database", "error", err)
+		return
+	}
+	defer dbRO.Close()
+
+	// Load metrics endpoint
+	if metricsEndpoint, err := pkgmetadata.ReadMetadata(ctx, dbRO, "metrics_endpoint"); err == nil && metricsEndpoint != "" {
+		if e.options.config.MetricsEndpoint != metricsEndpoint {
+			e.options.config.MetricsEndpoint = metricsEndpoint
+			log.Logger.Infow("updated metrics endpoint from metadata", "metrics_endpoint", metricsEndpoint)
+		}
+	}
+
+	// Load logs endpoint
+	if logsEndpoint, err := pkgmetadata.ReadMetadata(ctx, dbRO, "logs_endpoint"); err == nil && logsEndpoint != "" {
+		if e.options.config.LogsEndpoint != logsEndpoint {
+			e.options.config.LogsEndpoint = logsEndpoint
+			log.Logger.Infow("updated logs endpoint from metadata", "logs_endpoint", logsEndpoint)
+		}
+	}
+
+	// Load auth token
+	if token, err := pkgmetadata.ReadMetadata(ctx, dbRO, pkgmetadata.MetadataKeyToken); err == nil && token != "" {
+		if e.options.config.AuthToken != token {
+			e.options.config.AuthToken = token
+			log.Logger.Infow("updated auth token from metadata")
+		}
+	}
 }

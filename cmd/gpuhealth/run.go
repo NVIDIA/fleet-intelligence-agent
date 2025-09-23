@@ -68,12 +68,6 @@ func configureHealthExporterFromEnv(cfg *config.Config) error {
 		return fmt.Errorf("health exporter config is nil")
 	}
 
-	// GPUHEALTH_ENDPOINT - Health endpoint URL
-	if endpoint := os.Getenv("GPUHEALTH_ENDPOINT"); endpoint != "" {
-		cfg.HealthExporter.Endpoint = endpoint
-		log.Logger.Infow("set health exporter endpoint from env", "endpoint", endpoint)
-	}
-
 	// GPUHEALTH_INCLUDE_METRICS - Include metrics in export
 	if includeMetrics := os.Getenv("GPUHEALTH_INCLUDE_METRICS"); includeMetrics != "" {
 		if val, err := strconv.ParseBool(includeMetrics); err == nil {

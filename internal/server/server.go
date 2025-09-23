@@ -211,31 +211,8 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 	promRecorder := pkgmetricsrecorder.NewPrometheusRecorder(ctx, 15*time.Minute, dbRO)
 	promRecorder.Start()
 
-	// Start mock endpoint only if not in offline mode
-	var mock *exporter.MockEndpoint
-	isOfflineMode := config.HealthExporter != nil && config.HealthExporter.OfflineMode
-	if !isOfflineMode {
-		// Start mock endpoint
-		// TODO: Remove this once we have a real endpoint
-		mock = exporter.NewMockEndpoint(8080)
-		if err := mock.Start(); err != nil {
-			panic(fmt.Sprintf("Failed to start mock endpoint: %v", err))
-		}
-	}
-
-	// TODO: We require user register agent with  -- datacenter and --node-group, and agent need to send metrics with above metadata information
-	// gpud login --endpoint <health-endpoint> --token <sak-token> --data-center <data-center> --node-group <node-group>
-
 	// Create and start health exporter with all dependencies if enabled
 	if config.HealthExporter != nil {
-		// Set endpoint based on mode and availability of mock
-		if !config.HealthExporter.OfflineMode {
-			if mock != nil {
-				config.HealthExporter.Endpoint = mock.HealthBulkURL()
-			}
-			// If mock is nil, use the endpoint from config (already set)
-		}
-
 		var err error
 		s.healthExporter, err = exporter.New(
 			ctx,
