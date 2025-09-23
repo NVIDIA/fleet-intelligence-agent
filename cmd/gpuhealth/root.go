@@ -206,6 +206,23 @@ func App() *cli.App {
 			},
 		},
 		{
+			Name:   "register",
+			Usage:  "register the agent with GPU Health backend endpoints and credentials",
+			Action: registerCommand,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     "endpoint",
+					Usage:    "base endpoint URL (required)",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     "token",
+					Usage:    "authentication token (required)",
+					Required: true,
+				},
+			},
+		},
+		{
 			Name:   "inject",
 			Usage:  "inject faults into components for testing",
 			Action: injectCommand,

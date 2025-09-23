@@ -64,8 +64,14 @@ type Config struct {
 
 // HealthExporterConfig holds configuration for the health data exporter
 type HealthExporterConfig struct {
-	// Endpoint is the global health endpoint URL where data will be sent
-	Endpoint string `json:"endpoint"`
+	// MetricsEndpoint is the specific endpoint for sending metrics data
+	MetricsEndpoint string `json:"metrics_endpoint"`
+
+	// LogsEndpoint is the specific endpoint for sending logs/events data
+	LogsEndpoint string `json:"logs_endpoint"`
+
+	// AuthToken is the authentication token for HTTP requests
+	AuthToken string `json:"auth_token,omitempty"`
 
 	// Interval is how often to export health data
 	Interval metav1.Duration `json:"interval"`

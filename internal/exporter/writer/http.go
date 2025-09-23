@@ -36,7 +36,7 @@ const (
 
 // HTTPWriter defines the interface for sending health data via HTTP
 type HTTPWriter interface {
-	Send(ctx context.Context, data *collector.HealthData, endpoint string, maxRetries int) error
+	Send(ctx context.Context, data *collector.HealthData, metricsEndpoint string, logsEndpoint string, maxRetries int, authToken string) error
 }
 
 // httpWriter implements the HTTPWriter interface
@@ -54,18 +54,18 @@ func NewHTTPWriter(httpClient *http.Client, otlpConverter converter.OTLPConverte
 }
 
 // Send sends health data to the specified endpoint
-func (w *httpWriter) Send(ctx context.Context, data *collector.HealthData, endpoint string, maxRetries int) error {
+func (w *httpWriter) Send(ctx context.Context, data *collector.HealthData, metricsEndpoint string, logsEndpoint string, maxRetries int, authToken string) error {
 	// Convert to OTLP format
 	otlpData := w.otlpConverter.Convert(data)
 
 	// Send metrics first
-	if otlpData.Metrics != nil && len(otlpData.Metrics.ResourceMetrics) > 0 {
+	if otlpData.Metrics != nil && len(otlpData.Metrics.ResourceMetrics) > 0 && metricsEndpoint != "" {
 		metricsBytes, err := proto.Marshal(otlpData.Metrics)
 		if err != nil {
 			return fmt.Errorf("failed to marshal OTLP metrics data: %w", err)
 		}
 
-		if err := w.sendOTLPRequestWithRetry(ctx, metricsBytes, "metrics", data.CollectionID, endpoint, maxRetries); err != nil {
+		if err := w.sendOTLPRequestWithRetry(ctx, metricsBytes, "metrics", data.CollectionID, metricsEndpoint, maxRetries, authToken); err != nil {
 			log.Logger.Errorw("Failed to send metrics data after all retries",
 				"collection_id", data.CollectionID,
 				"error", err,
@@ -75,30 +75,30 @@ func (w *httpWriter) Send(ctx context.Context, data *collector.HealthData, endpo
 	}
 
 	// Send logs
-	if otlpData.Logs != nil && len(otlpData.Logs.ResourceLogs) > 0 {
+	if otlpData.Logs != nil && len(otlpData.Logs.ResourceLogs) > 0 && logsEndpoint != "" {
 		logsBytes, err := proto.Marshal(otlpData.Logs)
 		if err != nil {
 			return fmt.Errorf("failed to marshal OTLP logs data: %w", err)
 		}
 
-		if err := w.sendOTLPRequestWithRetry(ctx, logsBytes, "logs", data.CollectionID, endpoint, maxRetries); err != nil {
+		if err := w.sendOTLPRequestWithRetry(ctx, logsBytes, "logs", data.CollectionID, logsEndpoint, maxRetries, authToken); err != nil {
 			return fmt.Errorf("failed to send critical logs data (includes events): %w", err)
 		}
 	}
 
-	log.Logger.Infow("Successfully sent health data to endpoint", "endpoint", endpoint)
+	log.Logger.Infow("Successfully sent health data to both endpoints", "metrics_endpoint", metricsEndpoint, "logs_endpoint", logsEndpoint)
 	return nil
 }
 
 // sendOTLPRequestWithRetry sends the OTLP data with retry logic
-func (w *httpWriter) sendOTLPRequestWithRetry(ctx context.Context, reqData []byte, dataType, collectionID, endpoint string, maxRetries int) error {
+func (w *httpWriter) sendOTLPRequestWithRetry(ctx context.Context, reqData []byte, dataType, collectionID, endpoint string, maxRetries int, authToken string) error {
 	if maxRetries <= 0 {
 		maxRetries = 1 // At least one attempt
 	}
 
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		err := w.sendOTLPRequest(ctx, reqData, dataType, collectionID, endpoint)
+		err := w.sendOTLPRequest(ctx, reqData, dataType, collectionID, endpoint, authToken)
 		if err == nil {
 			if attempt > 1 {
 				log.Logger.Infow("Request succeeded after retries",
@@ -145,7 +145,7 @@ func (w *httpWriter) sendOTLPRequestWithRetry(ctx context.Context, reqData []byt
 }
 
 // sendOTLPRequest sends a single OTLP request
-func (w *httpWriter) sendOTLPRequest(ctx context.Context, reqData []byte, dataType, collectionID, endpoint string) error {
+func (w *httpWriter) sendOTLPRequest(ctx context.Context, reqData []byte, dataType, collectionID, endpoint string, authToken string) error {
 	contentType := "application/x-protobuf"
 
 	// Get machine ID for HTTP header
@@ -165,6 +165,10 @@ func (w *httpWriter) sendOTLPRequest(ctx context.Context, reqData []byte, dataTy
 	req.Header.Set("X-Machine-ID", machineID)
 	req.Header.Set("X-Data-Type", dataType)
 	req.Header.Set("X-Collection-ID", collectionID)
+
+	if authToken != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", authToken))
+	}
 
 	// Send request
 	resp, err := w.httpClient.Do(req)
