@@ -2,36 +2,31 @@
 
 ## Overview
 
-`gpuhealth` is a lightweight GPU health monitoring and reporting agent for NVIDIA GPU infrastructure. Built on [leptonai/gpud](https://github.com/leptonai/gpud), it provides focused health monitoring without management overhead.
+Lightweight GPU health monitoring and reporting agent for NVIDIA GPU infrastructure building on top of [leptonai/gpud](https://github.com/leptonai/gpud)
+
+**What It Monitors:**
+- **GPU Metrics**: Power, temperature, clocks, utilization, memory, Xid events
+- **System Metrics**: CPU, memory, disk, network usage
+- **Infrastructure**: NVIDIA drivers, CUDA runtime, InfiniBand, containers
+
+**Export Formats:**
+- **HTTP API Server**: Serves data via REST endpoints (JSON) and Prometheus metrics (`/metrics`)
+- **File Export (Offline Mode)**: Writes data to local files in CSV or JSON format
+- **Remote Export**: Sends telemetry data to OpenTelemetry-compatible endpoints via OTLP over HTTP
 
 **Key Features:**
 - **Lightweight**: <100MB RAM, <1% CPU usage
 - **Non-intrusive**: Read-only operations, no system modifications
-- **Flexible**: HTTP API, Prometheus metrics, CSV/JSON export
 - **Production-ready**: 24/7 datacenter operation
 
 ## Quick Start
-
-### Prerequisites
-
-- Linux (Ubuntu 22.04+, RHEL 9+, Amazon Linux 2023+)
-- Go 1.24+ (for building from source)
-- NVIDIA drivers (recommended)
-- Root/sudo access
 
 ### Installation
 
 #### Package Installation (Recommended)
 
-**Step 1: Download Package**
-1. Go to the [Releases page](https://github.com/NVIDIA/gpuhealth/releases)
-2. Download the appropriate package for your system:
-   - **Debian/Ubuntu x86_64**: `gpuhealth_VERSION_amd64.deb`
-   - **Debian/Ubuntu ARM64**: `gpuhealth_VERSION_arm64.deb`
-   - **RHEL/RockyLinux/AlmaLinux/AmazonLinux x86_64**: `gpuhealth-VERSION-1.x86_64.rpm`
-   - **RHEL/RockyLinux/AlmaLinux/AmazonLinux ARM64**: `gpuhealth-VERSION-1.aarch64.rpm`
+Download the appropriate package from [Releases](https://github.com/NVIDIA/gpuhealth/releases):
 
-**Step 2: Install Package**
 ```bash
 # Debian/Ubuntu (x86_64)
 sudo apt install ./gpuhealth_VERSION_amd64.deb
@@ -39,77 +34,33 @@ sudo apt install ./gpuhealth_VERSION_amd64.deb
 # Debian/Ubuntu (ARM64)
 sudo apt install ./gpuhealth_VERSION_arm64.deb
 
-# RHEL/RockyLinux/AlmaLinux/AmazonLinux (x86_64)
+# RHEL/Rocky/AlmaLinux/Amazon Linux (x86_64)
 sudo dnf install ./gpuhealth-VERSION-1.x86_64.rpm
 
-# RHEL/RockyLinux/AlmaLinux/AmazonLinux (ARM64)
+# RHEL/Rocky/AlmaLinux/Amazon Linux (ARM64)
 sudo dnf install ./gpuhealth-VERSION-1.aarch64.rpm
-```
 
-**Step 3: Verify Installation**
-```bash
-# Verify installation
+# Verify
 gpuhealth --version
 systemctl status gpuhealthd
 ```
 
-#### Binary Installation (Alternative)
+#### Binary Installation
 
-For systems where you prefer not to use packages (e.g. offline mode):
-
-1. Download the binary archive for your platform from the [Releases page](https://github.com/NVIDIA/gpuhealth/releases)
-2. Extract and install:
 ```bash
-# Download and extract (replace VERSION and ARCH as needed)
+# Download and extract binary
 tar -xzf gpuhealth_vVERSION_linux_ARCH.tar.gz
 sudo cp gpuhealth /usr/local/bin/
-
-# Verify installation
 gpuhealth --version
 ```
 
-**Build from Source (Alternative Method):**
+#### Build from Source
+
 ```bash
-# Clone the repository
 git clone https://github.com/NVIDIA/gpuhealth.git
 cd gpuhealth
-
-# Build the binary
 make gpuhealth
-
-# Install system-wide (optional)
 sudo cp bin/gpuhealth /usr/local/bin/
-
-# Verify installation
-./bin/gpuhealth --version
-```
-
-## Development Setup
-
-### Prerequisites for Development
-
-- Go 1.24+ 
-- Git with SSH access to NVIDIA internal repositories
-- Access to `gitlab-master.nvidia.com:12051`
-
-### Clone and Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/NVIDIA/gpuhealth.git
-cd gpuhealth
-
-# Configure Go for private NVIDIA GitLab access
-go env -w GOPRIVATE=gitlab-master.nvidia.com/* GONOPROXY=gitlab-master.nvidia.com/* GONOSUMDB=gitlab-master.nvidia.com/*
-
-# Configure Git to use SSH for GitLab (if using SSH keys)
-git config --global url."ssh://git@gitlab-master.nvidia.com:12051/".insteadOf "https://gitlab-master.nvidia.com/"
-
-# Download dependencies
-go mod tidy
-
-# Build and test
-make all && make test && make lint
 ```
 
 ### Usage
@@ -145,16 +96,64 @@ curl http://localhost:15133/v1/states
 curl http://localhost:15133/metrics
 ```
 
-## What It Monitors
+### Configuration
 
-**GPU Metrics:** Power, temperature, clocks, utilization, memory, Xid events  
-**System Metrics:** CPU, memory, disk, network usage  
-**Infrastructure:** NVIDIA drivers, CUDA runtime, InfiniBand, containers
+Edit `/etc/default/gpuhealth` and restart the service:
 
-## Export Formats
+```bash
+sudo nano /etc/default/gpuhealth
+sudo systemctl restart gpuhealthd
+```
 
-- **HTTP API**: JSON, Prometheus metrics
-- **File Export**: CSV, JSON, OTLP
+Register for remote export:
+
+```bash
+sudo gpuhealth register --endpoint "https://telemetry.company.com/v1" --token "your-token"
+sudo systemctl restart gpuhealthd
+```
+
+HTTP proxy configuration:
+
+```bash
+# Add to /etc/default/gpuhealth
+HTTP_PROXY="http://proxy.company.com:8080"
+HTTPS_PROXY="http://proxy.company.com:8080"
+
+# For authenticated proxies
+HTTP_PROXY="http://username:password@proxy.company.com:8080"
+HTTPS_PROXY="http://username:password@proxy.company.com:8080"
+```
+
+### Available Configuration Options
+
+| Environment Variable | Description | Default |
+|---------------------|-------------|---------|
+| `GPUHEALTH_FLAGS` | Additional command line flags | `--log-level=warn` |
+| `GPUHEALTH_COLLECT_INTERVAL` | Data collection interval | `1m` |
+| `GPUHEALTH_INCLUDE_METRICS` | Include metrics in export | `true` |
+| `GPUHEALTH_INCLUDE_EVENTS` | Include events in export | `true` |
+| `GPUHEALTH_INCLUDE_MACHINEINFO` | Include machine info | `true` |
+| `GPUHEALTH_INCLUDE_HEALTHCHECKS` | Include component health data | `true` |
+| `GPUHEALTH_METRICS_LOOKBACK` | How far back to look for metrics | `1m` |
+| `GPUHEALTH_EVENTS_LOOKBACK` | How far back to look for events | `1m` |
+| `GPUHEALTH_CHECK_INTERVAL` | Component health check frequency | `1m` |
+| `GPUHEALTH_RETRY_MAX_ATTEMPTS` | Max retry attempts for failed exports | `3` |
+| `HTTP_PROXY` | HTTP proxy server URL | - |
+| `HTTPS_PROXY` | HTTPS proxy server URL | - |
+
+## Development
+
+```bash
+# Clone and setup
+git clone https://github.com/NVIDIA/gpuhealth.git
+cd gpuhealth
+
+# Configure for NVIDIA internal access
+go env -w GOPRIVATE=gitlab-master.nvidia.com/*
+
+# Build and test
+make all && make test
+```
 
 ## FAQ
 
@@ -166,6 +165,9 @@ A: Linux, <100MB RAM, <1% CPU. NVIDIA drivers recommended but not required.
 
 **Q: Works without NVIDIA GPUs?**  
 A: Yes, system monitoring works without GPUs.
+
+**Q: How do I troubleshoot export issues?**
+A: Check logs with `sudo journalctl -u gpuhealthd -f` and verify endpoints with `sudo gpuhealth metadata`.
 
 ## Contributing
 
