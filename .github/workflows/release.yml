@@ -48,8 +48,8 @@ jobs:
 
       - name: Validate tag format
         run: |
-          if [[ ! "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
-            echo "Tag ${{ github.ref_name }} does not match expected format (v1.2.3 or v1.2.3-beta)"
+          if [[ ! "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?$ ]]; then
+            echo "Tag ${{ github.ref_name }} does not match expected format (v1.2.3, v1.2.3-beta, or v1.2.3-rc.2)"
             exit 1
           fi
 
