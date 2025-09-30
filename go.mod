@@ -2,7 +2,7 @@ module github.com/NVIDIA/gpuhealth
 
 go 1.24.7
 
-replace github.com/leptonai/gpud => gitlab-master.nvidia.com/gpu-health/gpud v0.8.0-beta.5.0.20250922215452-330bf248454c
+replace github.com/leptonai/gpud => gitlab-master.nvidia.com/gpu-health/gpud v0.8.0-beta.5.0.20250930205604-bae5242e1fbb
 
 require (
 	github.com/dustin/go-humanize v1.0.1
@@ -10,6 +10,7 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/leptonai/gpud v0.7.1
 	github.com/mitchellh/go-homedir v1.1.0
+	github.com/olekukonko/tablewriter v0.0.5
 	github.com/prometheus/client_golang v1.23.0
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli v1.22.17
@@ -76,7 +77,6 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0-rc6 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
