@@ -33,12 +33,10 @@ func App() *cli.App {
 	app.Description = "Use this tool to monitor the health of your NVIDIA GPUs and export metrics for analysis"
 
 	cli.VersionPrinter = func(c *cli.Context) {
-		fmt.Printf("%s v%s (gpud %s, go %s, rev %s, built %s)\n",
+		fmt.Printf("%s v%s (go %s, built %s)\n",
 			c.App.Name,
 			version.Version,
-			version.GPUdModuleVersion,
 			version.GoVersion,
-			version.Revision,
 			version.BuildTimestamp,
 		)
 	}
