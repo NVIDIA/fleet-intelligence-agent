@@ -282,7 +282,7 @@ func (c *csvConverter) writeMachineInfoCSV(outputDir, filename string, data *col
 	// Header and basic system info
 	records = append(records,
 		[]string{"attribute_name", "attribute_value"},
-		[]string{"GPU Health Version", i.GPUdVersion},
+		[]string{"GPU Health Version", i.GPUHealthVersion},
 		[]string{"Container Runtime Version", i.ContainerRuntimeVersion},
 		[]string{"OS Image", i.OSImage},
 		[]string{"Kernel Version", i.KernelVersion},

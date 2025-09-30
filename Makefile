@@ -52,10 +52,7 @@ RELEASE=gpuhealth-$(VERSION:v%=%)-${GOOS}-${GOARCH}
 
 COMMANDS=gpuhealth
 
-# Discover gpud version from go.mod
-GPUd_VERSION ?= $(shell $(GO) list -m -f '{{.Version}}' github.com/leptonai/gpud 2>/dev/null)
-
-GO_BUILD_FLAGS=-ldflags '-s -X $(PACKAGE)/internal/version.BuildTimestamp=$(BUILD_TIMESTAMP) -X $(PACKAGE)/internal/version.Version=$(VERSION) -X $(PACKAGE)/internal/version.Revision=$(REVISION) -X $(PACKAGE)/internal/version.Package=$(PACKAGE) -X $(PACKAGE)/internal/version.GPUdModuleVersion=$(GPUd_VERSION)'
+GO_BUILD_FLAGS=-ldflags '-s -X $(PACKAGE)/internal/version.BuildTimestamp=$(BUILD_TIMESTAMP) -X $(PACKAGE)/internal/version.Version=$(VERSION) -X $(PACKAGE)/internal/version.Revision=$(REVISION) -X $(PACKAGE)/internal/version.Package=$(PACKAGE)'
 
 ifdef BUILDTAGS
     GO_BUILDTAGS = ${BUILDTAGS}

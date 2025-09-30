@@ -23,16 +23,15 @@ import (
 	"fmt"
 	"time"
 
-	apiv1 "github.com/leptonai/gpud/api/v1"
 	"github.com/leptonai/gpud/components"
 	"github.com/leptonai/gpud/pkg/eventstore"
 	pkghost "github.com/leptonai/gpud/pkg/host"
 	"github.com/leptonai/gpud/pkg/log"
-	machineinfo "github.com/leptonai/gpud/pkg/machine-info"
 	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
 
 	"github.com/NVIDIA/gpuhealth/internal/config"
+	"github.com/NVIDIA/gpuhealth/internal/machineinfo"
 )
 
 // GetMachineID gets machine ID from system (no database dependencies)
@@ -57,7 +56,7 @@ type HealthData struct {
 	CollectionID  string
 	MachineID     string
 	Timestamp     time.Time
-	MachineInfo   *apiv1.MachineInfo
+	MachineInfo   *machineinfo.MachineInfo
 	Metrics       pkgmetrics.Metrics
 	Events        eventstore.Events
 	ComponentData map[string]interface{}

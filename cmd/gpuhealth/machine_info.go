@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/leptonai/gpud/pkg/log"
-	pkgmachineinfo "github.com/leptonai/gpud/pkg/machine-info"
 	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
 	"github.com/leptonai/gpud/pkg/netutil"
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/NVIDIA/gpuhealth/internal/cmdutil"
 	"github.com/NVIDIA/gpuhealth/internal/config"
+	"github.com/NVIDIA/gpuhealth/internal/machineinfo"
 )
 
 func machineInfoCommand(cliContext *cli.Context) error {
@@ -70,14 +70,14 @@ func machineInfoCommand(cliContext *cli.Context) error {
 		return err
 	}
 
-	machineInfo, err := pkgmachineinfo.GetMachineInfo(nvmlInstance)
+	machineInfo, err := machineinfo.GetMachineInfo(nvmlInstance)
 	if err != nil {
 		return err
 	}
 	machineInfo.RenderTable(os.Stdout)
 
 	pubIP, _ := netutil.PublicIP()
-	providerInfo := pkgmachineinfo.GetProvider(pubIP)
+	providerInfo := machineinfo.GetProvider(pubIP)
 	if providerInfo == nil {
 		fmt.Printf("%s failed to find provider (%v)\n", cmdutil.WarningSign, err)
 	} else {

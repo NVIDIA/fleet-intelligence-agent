@@ -344,7 +344,7 @@ func runCommand(cliContext *cli.Context) error {
 	signals := make(chan os.Signal, 1)
 	done := make(chan struct{})
 
-	log.Logger.Infof("starting gpuhealth %v (gpud %s, go %s, rev %s, built %s)", version.Version, version.GPUdModuleVersion, version.GoVersion, version.Revision, version.BuildTimestamp)
+	log.Logger.Infof("starting gpuhealth %v", version.Version)
 
 	// Setup signal handling for graceful shutdown
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)

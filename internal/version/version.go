@@ -33,7 +33,4 @@ var (
 
 	// GoVersion is Go tree's version.
 	GoVersion = runtime.Version()
-
-	// GPUdModuleVersion is injected at build time via ldflags.
-	GPUdModuleVersion = "unknown"
 )

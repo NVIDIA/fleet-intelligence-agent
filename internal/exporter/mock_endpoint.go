@@ -32,7 +32,6 @@ import (
 	"sync"
 	"time"
 
-	apiv1 "github.com/leptonai/gpud/api/v1"
 	"github.com/leptonai/gpud/pkg/eventstore"
 	"github.com/leptonai/gpud/pkg/log"
 	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
@@ -42,6 +41,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
+	"github.com/NVIDIA/gpuhealth/internal/machineinfo"
 )
 
 // MockEndpoint represents a mock global health endpoint for testing
@@ -488,7 +488,7 @@ func (m *MockEndpoint) parseOTLPLogs(logsData *logsv1.LogsData, healthData *coll
 
 		// Extract machine info from resource attributes using reflection
 		if rl.Resource != nil {
-			healthData.MachineInfo = &apiv1.MachineInfo{}
+			healthData.MachineInfo = &machineinfo.MachineInfo{}
 
 			// Parse machine.id separately since it's not part of MachineInfo struct
 			for _, attr := range rl.Resource.Attributes {
@@ -584,7 +584,7 @@ func (m *MockEndpoint) parseOTLPMetrics(metricsData *metricsv1.MetricsData, heal
 
 		// Extract machine info from resource attributes using reflection
 		if rm.Resource != nil {
-			healthData.MachineInfo = &apiv1.MachineInfo{}
+			healthData.MachineInfo = &machineinfo.MachineInfo{}
 
 			// Parse machine.id separately since it's not part of MachineInfo struct
 			for _, attr := range rm.Resource.Attributes {

@@ -109,7 +109,6 @@ Register for remote export:
 
 ```bash
 sudo gpuhealth register --endpoint "https://telemetry.company.com/v1" --token "your-token"
-sudo systemctl restart gpuhealthd
 ```
 
 HTTP proxy configuration:
