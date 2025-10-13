@@ -137,3 +137,7 @@ clean: ## clean up binaries and build artifacts
 	@rm -rf dist/
 	@rm -rf coverage/
 	@rm -f /tmp/gofmt.out
+
+package-snapshot: ## package snapshot
+	@echo "Packaging snapshot..."
+	@goreleaser release --snapshot --clean --config .goreleaser.yaml
