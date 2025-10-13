@@ -197,7 +197,7 @@ func (config *Config) ShouldEnable(componentName string) bool {
 // If no disable components are specified, all components are enabled by default.
 func (config *Config) ShouldDisable(componentName string) bool {
 	// Not specified, enable all components (don't disable any)
-	if len(config.Components) == 0 || config.Components[0] == "*" || config.Components[0] == "all" {
+	if len(config.Components) == 0 {
 		return false
 	}
 
@@ -205,16 +205,16 @@ func (config *Config) ShouldDisable(componentName string) bool {
 		config.disabledComponents = make(map[string]any)
 
 		for _, c := range config.Components {
+			// Skip "all" and "*" markers
 			if c == "*" || c == "all" {
-				// Enable all components
-				return false
+				continue
 			}
 
 			// Prefix "-" is used to disable a component
-			if !strings.HasPrefix(c, "-") {
-				continue
+			if strings.HasPrefix(c, "-") {
+				// Store without the "-" prefix for matching
+				config.disabledComponents[strings.TrimPrefix(c, "-")] = struct{}{}
 			}
-			config.disabledComponents[c] = struct{}{}
 		}
 	}
 

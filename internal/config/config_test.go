@@ -112,8 +112,8 @@ func TestComponentSelection(t *testing.T) {
 			Components: []string{"-disk", "-network"},
 		}
 
-		assert.True(t, cfg.ShouldDisable("-disk"))
-		assert.True(t, cfg.ShouldDisable("-network"))
+		assert.True(t, cfg.ShouldDisable("disk"))
+		assert.True(t, cfg.ShouldDisable("network"))
 		assert.False(t, cfg.ShouldDisable("gpu-memory"))
 		assert.False(t, cfg.ShouldEnable("disk"))
 	})
@@ -136,6 +136,27 @@ func TestComponentSelection(t *testing.T) {
 		assert.True(t, cfg.ShouldEnable("gpu-memory"))
 		assert.True(t, cfg.ShouldEnable("any-component"))
 		assert.False(t, cfg.ShouldDisable("gpu-memory"))
+	})
+
+	t.Run("all with exclusions", func(t *testing.T) {
+		cfg := &Config{
+			Components: []string{"all", "-kubelet", "-docker", "-tailscale"},
+		}
+
+		// Should enable all components
+		assert.True(t, cfg.ShouldEnable("gpu-memory"))
+		assert.True(t, cfg.ShouldEnable("cpu"))
+		assert.True(t, cfg.ShouldEnable("kubelet"))
+		assert.True(t, cfg.ShouldEnable("docker"))
+
+		// Should disable the excluded components
+		assert.True(t, cfg.ShouldDisable("kubelet"))
+		assert.True(t, cfg.ShouldDisable("docker"))
+		assert.True(t, cfg.ShouldDisable("tailscale"))
+
+		// Should not disable non-excluded components
+		assert.False(t, cfg.ShouldDisable("gpu-memory"))
+		assert.False(t, cfg.ShouldDisable("cpu"))
 	})
 }
 
