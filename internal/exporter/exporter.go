@@ -29,10 +29,9 @@ import (
 
 	"github.com/leptonai/gpud/pkg/log"
 	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
-	"github.com/leptonai/gpud/pkg/sqlite"
 
 	"github.com/NVIDIA/gpuhealth/internal/attestation"
-	"github.com/NVIDIA/gpuhealth/internal/config"
+	"github.com/NVIDIA/gpuhealth/internal/enrollment"
 	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
 	"github.com/NVIDIA/gpuhealth/internal/exporter/converter"
 	"github.com/NVIDIA/gpuhealth/internal/exporter/writer"
@@ -100,7 +99,7 @@ func New(ctx context.Context, opts ...ExporterOption) (Exporter, error) {
 	fileWriter := writer.NewFileWriter(otlpConverter, csvConverter)
 	httpWriter := writer.NewHTTPWriter(options.httpClient, otlpConverter)
 
-	return &healthExporter{
+	exporter := &healthExporter{
 		ctx:                cctx,
 		cancel:             cancel,
 		options:            options,
@@ -108,7 +107,12 @@ func New(ctx context.Context, opts ...ExporterOption) (Exporter, error) {
 		fileWriter:         fileWriter,
 		httpWriter:         httpWriter,
 		attestationManager: attestationManager,
-	}, nil
+	}
+
+	// Set JWT refresh function on the HTTP writer
+	httpWriter.SetJWTRefreshFunc(exporter.refreshJWTToken)
+
+	return exporter, nil
 }
 
 // Start begins the periodic export process
@@ -225,48 +229,125 @@ func (e *healthExporter) exportToHTTP(ctx context.Context, data *collector.Healt
 		return nil
 	}
 
-	if err := e.httpWriter.Send(ctx, data, e.options.config.MetricsEndpoint, e.options.config.LogsEndpoint, e.options.config.RetryMaxAttempts, e.options.config.AuthToken); err != nil {
+	newToken, err := e.httpWriter.Send(ctx, data, e.options.config.MetricsEndpoint, e.options.config.LogsEndpoint, e.options.config.RetryMaxAttempts, e.options.config.AuthToken)
+	if err != nil {
 		return fmt.Errorf("failed to send data: %w", err)
 	}
+
+	// If we received a new JWT token, update it in metadata and config
+	if newToken != "" && newToken != e.options.config.AuthToken {
+		log.Logger.Info("Updating JWT token from server response")
+
+		if err := e.updateTokenInMetadata(ctx, newToken); err != nil {
+			log.Logger.Errorw("Failed to update JWT token in metadata", "error", err)
+			// Don't fail the export if token update fails
+		} else {
+			e.options.config.AuthToken = newToken
+			log.Logger.Infow("Successfully updated JWT token")
+		}
+	}
+
 	return nil
 }
 
 // refreshConfigFromMetadata updates the exporter configuration from metadata table
 func (e *healthExporter) refreshConfigFromMetadata(ctx context.Context) {
-	stateFile, err := config.DefaultStateFile()
-	if err != nil {
-		log.Logger.Debugw("failed to get state file path", "error", err)
+	// Use the passed database connection instead of opening a new one
+	if e.options.dbRO == nil {
+		log.Logger.Debugw("no database connection available for metadata refresh")
 		return
 	}
 
-	dbRO, err := sqlite.Open(stateFile)
-	if err != nil {
-		log.Logger.Debugw("failed to open state database", "error", err)
-		return
-	}
-	defer dbRO.Close()
-
-	// Load metrics endpoint
-	if metricsEndpoint, err := pkgmetadata.ReadMetadata(ctx, dbRO, "metrics_endpoint"); err == nil && metricsEndpoint != "" {
+	// Load metrics endpoint (update even if empty to handle un-enrollment)
+	if metricsEndpoint, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "metrics_endpoint"); err == nil {
 		if e.options.config.MetricsEndpoint != metricsEndpoint {
 			e.options.config.MetricsEndpoint = metricsEndpoint
-			log.Logger.Infow("updated metrics endpoint from metadata", "metrics_endpoint", metricsEndpoint)
+			if metricsEndpoint == "" {
+				log.Logger.Infow("cleared metrics endpoint from metadata")
+			} else {
+				log.Logger.Infow("updated metrics endpoint from metadata", "metrics_endpoint", metricsEndpoint)
+			}
 		}
+	} else {
+		log.Logger.Errorw("failed to read metrics endpoint from metadata", "error", err)
 	}
 
-	// Load logs endpoint
-	if logsEndpoint, err := pkgmetadata.ReadMetadata(ctx, dbRO, "logs_endpoint"); err == nil && logsEndpoint != "" {
+	// Load logs endpoint (update even if empty to handle un-enrollment)
+	if logsEndpoint, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "logs_endpoint"); err == nil {
 		if e.options.config.LogsEndpoint != logsEndpoint {
 			e.options.config.LogsEndpoint = logsEndpoint
-			log.Logger.Infow("updated logs endpoint from metadata", "logs_endpoint", logsEndpoint)
+			if logsEndpoint == "" {
+				log.Logger.Infow("cleared logs endpoint from metadata")
+			} else {
+				log.Logger.Infow("updated logs endpoint from metadata", "logs_endpoint", logsEndpoint)
+			}
+		}
+	} else {
+		log.Logger.Errorw("failed to read logs endpoint from metadata", "error", err)
+	}
+
+	// Load auth token (update even if empty to handle un-enrollment)
+	if token, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, pkgmetadata.MetadataKeyToken); err == nil {
+		if e.options.config.AuthToken != token {
+			e.options.config.AuthToken = token
+			if token == "" {
+				log.Logger.Infow("cleared auth token from metadata")
+			} else {
+				log.Logger.Infow("updated auth token from metadata")
+			}
+		}
+	} else {
+		log.Logger.Errorw("failed to read auth token from metadata", "error", err)
+	}
+}
+
+// updateTokenInMetadata updates the JWT token in the metadata database
+func (e *healthExporter) updateTokenInMetadata(ctx context.Context, newToken string) error {
+	// Use the passed database connection instead of opening a new one
+	if e.options.dbRW == nil {
+		return fmt.Errorf("no read-write database connection available for token update")
+	}
+
+	if err := pkgmetadata.SetMetadata(ctx, e.options.dbRW, pkgmetadata.MetadataKeyToken, newToken); err != nil {
+		return fmt.Errorf("failed to update JWT token in metadata: %w", err)
+	}
+
+	return nil
+}
+
+// refreshJWTToken attempts to get a new JWT token using the stored SAK token
+func (e *healthExporter) refreshJWTToken(ctx context.Context) (string, error) {
+	// Use the passed database connection to read SAK token and endpoints
+	if e.options.dbRO == nil {
+		return "", fmt.Errorf("no database connection available for JWT refresh")
+	}
+
+	// Read SAK token from metadata
+	sakToken, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "sak_token")
+	if err != nil || sakToken == "" {
+		return "", fmt.Errorf("no SAK token available for JWT refresh")
+	}
+
+	// Read enroll endpoint from metadata (stored during enrollment)
+	enrollEndpoint, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "enroll_endpoint")
+	if err != nil || enrollEndpoint == "" {
+		return "", fmt.Errorf("no enroll endpoint available for JWT refresh")
+	}
+
+	// Perform enrollment to get new JWT token using the shared function
+	newJWT, err := enrollment.PerformEnrollment(ctx, enrollEndpoint, sakToken)
+	if err != nil {
+		return "", fmt.Errorf("failed to refresh JWT token: %w", err)
+	}
+
+	// Update JWT token in metadata using the read-write connection
+	if e.options.dbRW != nil {
+		if err := pkgmetadata.SetMetadata(ctx, e.options.dbRW, pkgmetadata.MetadataKeyToken, newJWT); err != nil {
+			log.Logger.Errorw("Failed to update refreshed JWT token in metadata", "error", err)
+			// Don't fail the refresh, just log the error
 		}
 	}
 
-	// Load auth token
-	if token, err := pkgmetadata.ReadMetadata(ctx, dbRO, pkgmetadata.MetadataKeyToken); err == nil && token != "" {
-		if e.options.config.AuthToken != token {
-			e.options.config.AuthToken = token
-			log.Logger.Infow("updated auth token from metadata")
-		}
-	}
+	log.Logger.Infow("Successfully refreshed JWT token")
+	return newJWT, nil
 }

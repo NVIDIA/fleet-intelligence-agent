@@ -221,6 +221,7 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 			exporter.WithEventStore(eventStore),
 			exporter.WithComponentsRegistry(s.componentsRegistry),
 			exporter.WithNVMLInstance(nvmlInstance),
+			exporter.WithDatabaseConnections(dbRW, dbRO),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create health exporter: %w", err)

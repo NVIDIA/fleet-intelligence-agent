@@ -62,6 +62,55 @@ sudo gpuhealth metadata --set-key="key" --set-value="value"
 
 Used to view or update the agent's metadata store, including remote export configuration.
 
+### Enroll Agent
+
+```bash
+sudo gpuhealth enroll --endpoint=https://api.example.com/api/v1/health --token=<your-sak-token>
+```
+
+Enrolls the agent with the GPU Health backend by exchanging a Service Account Key (SAK) token for a JWT token. The JWT token and backend endpoints are stored locally for subsequent data exports.
+
+**Required Options:**
+- `--endpoint`: Base endpoint URL for the GPU Health backend (must use HTTPS)
+- `--token`: Service Account Key (SAK) token for authentication
+
+**What it does:**
+1. Validates the endpoint URL (must be HTTPS)
+2. Makes an enrollment request to exchange the SAK token for a JWT token
+3. Stores the JWT token and backend endpoints (metrics, logs, nonce) in the local metadata database
+4. The stored credentials are used automatically by the agent for data export
+
+**Example output:**
+```
+Enrollment succeeded
+```
+
+**Error handling:**
+- 400: Token format is incorrect
+- 401: Token is invalid
+- 403: Token is expired or revoked
+- 404: Endpoint not found
+- 429: Server is rate limiting (retry later)
+- 502/503/504: Temporary server issues (retry)
+
+### Unenroll Agent
+
+```bash
+sudo gpuhealth unenroll
+```
+
+Removes all enrollment credentials and backend endpoints from the agent. After unenrolling, the agent will no longer export data to the backend until re-enrolled.
+
+**What it does:**
+1. Clears the JWT token from local storage
+2. Clears the SAK token from local storage
+3. Removes all stored backend endpoints (enroll, metrics, logs, nonce)
+
+Use this command when:
+- Decommissioning a machine
+- Switching to a different backend
+- Troubleshooting authentication issues
+
 ## Offline Data Collection
 
 For environments without network access or when you need to collect data to files:
