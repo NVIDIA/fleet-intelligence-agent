@@ -16,6 +16,7 @@
 package exporter
 
 import (
+	"database/sql"
 	"errors"
 	"net/http"
 	"time"
@@ -43,6 +44,8 @@ type exporterOptions struct {
 	nvmlInstance       nvidianvml.Instance
 	httpClient         *http.Client
 	timeout            time.Duration
+	dbRW               *sql.DB // Read-write database connection
+	dbRO               *sql.DB // Read-only database connection
 }
 
 // WithConfig sets the health exporter configuration
@@ -107,6 +110,21 @@ func WithTimeout(timeout time.Duration) ExporterOption {
 			return errors.New("timeout must be positive")
 		}
 		c.timeout = timeout
+		return nil
+	}
+}
+
+// WithDatabaseConnections sets the database connections for metadata access
+func WithDatabaseConnections(dbRW, dbRO *sql.DB) ExporterOption {
+	return func(c *exporterOptions) error {
+		if dbRW == nil {
+			return errors.New("read-write database connection cannot be nil")
+		}
+		if dbRO == nil {
+			return errors.New("read-only database connection cannot be nil")
+		}
+		c.dbRW = dbRW
+		c.dbRO = dbRO
 		return nil
 	}
 }

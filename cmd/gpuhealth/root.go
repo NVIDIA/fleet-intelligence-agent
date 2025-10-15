@@ -204,9 +204,9 @@ func App() *cli.App {
 			},
 		},
 		{
-			Name:   "register",
-			Usage:  "register the agent with GPU Health backend endpoints and credentials",
-			Action: registerCommand,
+			Name:   "enroll",
+			Usage:  "enroll the agent with GPU Health backend endpoints and credentials",
+			Action: enrollCommand,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:     "endpoint",
@@ -219,6 +219,11 @@ func App() *cli.App {
 					Required: true,
 				},
 			},
+		},
+		{
+			Name:   "unenroll",
+			Usage:  "un-enroll the agent from GPU Health backend (removes credentials and endpoints)",
+			Action: unenrollCommand,
 		},
 		{
 			Name:   "inject",
