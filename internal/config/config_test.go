@@ -140,7 +140,7 @@ func TestComponentSelection(t *testing.T) {
 
 	t.Run("all with exclusions", func(t *testing.T) {
 		cfg := &Config{
-			Components: []string{"all", "-kubelet", "-docker", "-tailscale"},
+			Components: []string{"all", "-kubelet", "-docker", "-tailscale", "-accelerator-nvidia-gsp-firmware"},
 		}
 
 		// Should enable all components
@@ -153,6 +153,7 @@ func TestComponentSelection(t *testing.T) {
 		assert.True(t, cfg.ShouldDisable("kubelet"))
 		assert.True(t, cfg.ShouldDisable("docker"))
 		assert.True(t, cfg.ShouldDisable("tailscale"))
+		assert.True(t, cfg.ShouldDisable("accelerator-nvidia-gsp-firmware"))
 
 		// Should not disable non-excluded components
 		assert.False(t, cfg.ShouldDisable("gpu-memory"))
