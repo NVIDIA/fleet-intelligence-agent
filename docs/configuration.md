@@ -154,7 +154,7 @@ GPUHEALTH_FLAGS="--log-level=warn --components=gpu,infiniband,cpu,memory"
 - `accelerator-nvidia-ecc` - ECC memory errors
 - `accelerator-nvidia-fabric-manager` - NVIDIA Fabric Manager status
 - `accelerator-nvidia-gpm` - GPU Performance Monitor
-- `accelerator-nvidia-gsp-firmware-mode` - GSP firmware mode
+- `accelerator-nvidia-gsp-firmware` - GSP firmware mode
 - `accelerator-nvidia-gpu-counts` - GPU count validation
 - `accelerator-nvidia-hw-slowdown` - Hardware slowdown detection
 - `accelerator-nvidia-infiniband` - InfiniBand monitoring
