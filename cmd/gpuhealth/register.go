@@ -37,9 +37,9 @@ func registerCommand(cliContext *cli.Context) error {
 		return fmt.Errorf("invalid endpoint URL: %w", err)
 	}
 
-	// Construct metrics and logs endpoints
-	metricsEndpoint := baseURL.String() + "/metrics"
-	logsEndpoint := baseURL.String() + "/logs"
+	// Construct full endpoints with /api/v1/health prefix
+	metricsEndpoint := baseURL.JoinPath("/api/v1/health/metrics").String()
+	logsEndpoint := baseURL.JoinPath("/api/v1/health/logs").String()
 
 	// Store endpoints and token in metadata table
 	if err := storeConfigInMetadata(metricsEndpoint, logsEndpoint, token); err != nil {
