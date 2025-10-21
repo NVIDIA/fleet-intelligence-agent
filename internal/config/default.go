@@ -64,6 +64,8 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 		HealthExporter: &HealthExporterConfig{
 			MetricsEndpoint:      "",
 			LogsEndpoint:         "",
+			AttestationEnabled:   true,
+			AttestationInterval:  metav1.Duration{Duration: 24 * time.Hour}, // Default 24 hours
 			AuthToken:            "",
 			Interval:             metav1.Duration{Duration: 1 * time.Minute},
 			Timeout:              metav1.Duration{Duration: 30 * time.Second},

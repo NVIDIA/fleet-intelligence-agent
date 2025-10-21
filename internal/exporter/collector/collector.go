@@ -30,6 +30,7 @@ import (
 	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
 
+	"github.com/NVIDIA/gpuhealth/internal/attestation"
 	"github.com/NVIDIA/gpuhealth/internal/config"
 	"github.com/NVIDIA/gpuhealth/internal/machineinfo"
 )
@@ -53,13 +54,14 @@ func GenerateCollectionID() string {
 
 // HealthData represents the collected health data
 type HealthData struct {
-	CollectionID  string
-	MachineID     string
-	Timestamp     time.Time
-	MachineInfo   *machineinfo.MachineInfo
-	Metrics       pkgmetrics.Metrics
-	Events        eventstore.Events
-	ComponentData map[string]interface{}
+	CollectionID    string
+	MachineID       string
+	Timestamp       time.Time
+	MachineInfo     *machineinfo.MachineInfo
+	Metrics         pkgmetrics.Metrics
+	Events          eventstore.Events
+	ComponentData   map[string]interface{}
+	AttestationData *attestation.AttestationData
 }
 
 // Collector defines the interface for collecting health data
@@ -69,11 +71,13 @@ type Collector interface {
 
 // collector implements the Collector interface
 type collector struct {
-	config             *config.HealthExporterConfig
-	metricsStore       pkgmetrics.Store
-	eventStore         eventstore.Store
-	componentsRegistry components.Registry
-	nvmlInstance       nvidianvml.Instance
+	config                    *config.HealthExporterConfig
+	metricsStore              pkgmetrics.Store
+	eventStore                eventstore.Store
+	componentsRegistry        components.Registry
+	nvmlInstance              nvidianvml.Instance
+	attestationManager        *attestation.Manager
+	lastAttestationCollection time.Time
 }
 
 // New creates a new health data collector
@@ -83,6 +87,7 @@ func New(
 	eventStore eventstore.Store,
 	componentsRegistry components.Registry,
 	nvmlInstance nvidianvml.Instance,
+	attestationManager *attestation.Manager,
 ) Collector {
 	return &collector{
 		config:             config,
@@ -90,6 +95,7 @@ func New(
 		eventStore:         eventStore,
 		componentsRegistry: componentsRegistry,
 		nvmlInstance:       nvmlInstance,
+		attestationManager: attestationManager,
 	}
 }
 
@@ -138,10 +144,22 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 		}
 	}
 
+	// Collect attestation data if provider is available
+	if err := c.collectAttestationData(data); err != nil {
+		log.Logger.Errorw("Failed to collect attestation data", "error", err)
+	}
+
+	// Count evidences for logging
+	evidencesCount := 0
+	if data.AttestationData != nil {
+		evidencesCount = len(data.AttestationData.SDKResponse.Evidences)
+	}
+
 	log.Logger.Infow("Health data collection completed",
 		"metrics", len(data.Metrics),
 		"events", len(data.Events),
-		"components", len(data.ComponentData))
+		"components", len(data.ComponentData),
+		"evidences", evidencesCount)
 
 	return data, nil
 }
@@ -264,5 +282,38 @@ func (c *collector) collectComponentData(data *HealthData) error {
 
 	data.ComponentData = componentData
 	log.Logger.Debugw("Collected component data", "count", len(componentData))
+	return nil
+}
+
+// collectAttestationData collects attestation data from the attestation manager if available and updated
+func (c *collector) collectAttestationData(data *HealthData) error {
+	if c.attestationManager == nil {
+		log.Logger.Debugw("No attestation manager available, skipping attestation data collection")
+		return nil
+	}
+
+	// Check if attestation data has been updated since last collection
+	if !c.attestationManager.IsAttestationDataUpdated(c.lastAttestationCollection) {
+		log.Logger.Debugw("Attestation data not updated since last collection, skipping",
+			"last_collection", c.lastAttestationCollection)
+		return nil
+	}
+
+	attestationData := c.attestationManager.GetAttestationData()
+
+	// Only set the data if we have attestation data and evidences
+	if attestationData != nil && len(attestationData.SDKResponse.Evidences) > 0 {
+		data.AttestationData = attestationData
+		c.lastAttestationCollection = time.Now().UTC()
+		log.Logger.Debugw("Collected updated attestation data",
+			"evidences_count", len(attestationData.SDKResponse.Evidences),
+			"result_code", attestationData.SDKResponse.ResultCode,
+			"result_message", attestationData.SDKResponse.ResultMessage,
+			"nonce_refresh_timestamp", attestationData.NonceRefreshTimestamp,
+			"collection_time", c.lastAttestationCollection)
+	} else {
+		log.Logger.Debugw("No attestation evidence available")
+	}
+
 	return nil
 }

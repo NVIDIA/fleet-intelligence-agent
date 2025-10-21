@@ -118,6 +118,16 @@ func configureHealthExporterFromEnv(cfg *config.Config) error {
 		}
 	}
 
+	// GPUHEALTH_ATTESTATION_INTERVAL - Attestation interval
+	if interval := os.Getenv("GPUHEALTH_ATTESTATION_INTERVAL"); interval != "" {
+		if duration, err := time.ParseDuration(interval); err == nil {
+			cfg.HealthExporter.AttestationInterval = metav1.Duration{Duration: duration}
+			log.Logger.Infow("set attestation interval from env", "attestation_interval", duration)
+		} else {
+			return fmt.Errorf("invalid GPUHEALTH_ATTESTATION_INTERVAL value: %v", interval)
+		}
+	}
+
 	// GPUHEALTH_METRICS_LOOKBACK - Metrics lookback duration
 	if metricsLookback := os.Getenv("GPUHEALTH_METRICS_LOOKBACK"); metricsLookback != "" {
 		if duration, err := time.ParseDuration(metricsLookback); err == nil {
