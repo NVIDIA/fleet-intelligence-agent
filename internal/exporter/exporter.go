@@ -31,6 +31,7 @@ import (
 	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
 	"github.com/leptonai/gpud/pkg/sqlite"
 
+	"github.com/NVIDIA/gpuhealth/internal/attestation"
 	"github.com/NVIDIA/gpuhealth/internal/config"
 	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
 	"github.com/NVIDIA/gpuhealth/internal/exporter/converter"
@@ -42,12 +43,13 @@ var _ Exporter = (*healthExporter)(nil)
 
 // healthExporter implements the Exporter interface with improved architecture
 type healthExporter struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
-	options    *exporterOptions
-	collector  collector.Collector
-	fileWriter writer.FileWriter
-	httpWriter writer.HTTPWriter
+	ctx                context.Context
+	cancel             context.CancelFunc
+	options            *exporterOptions
+	collector          collector.Collector
+	fileWriter         writer.FileWriter
+	httpWriter         writer.HTTPWriter
+	attestationManager *attestation.Manager
 
 	// Last export timestamp for tracking
 	lastExport time.Time
@@ -73,6 +75,15 @@ func New(ctx context.Context, opts ...ExporterOption) (Exporter, error) {
 	}
 	options.setDefaults()
 
+	// Create attestation manager if enabled
+	var attestationManager *attestation.Manager
+	if options.config.AttestationEnabled {
+		attestationManager = attestation.NewManager(cctx, options.nvmlInstance, options.config.AttestationInterval.Duration)
+		log.Logger.Infow("Attestation manager created", "interval", options.config.AttestationInterval.Duration)
+	} else {
+		log.Logger.Infow("Attestation disabled, skipping attestation manager creation")
+	}
+
 	// Create components
 	dataCollector := collector.New(
 		options.config,
@@ -80,6 +91,7 @@ func New(ctx context.Context, opts ...ExporterOption) (Exporter, error) {
 		options.eventStore,
 		options.componentsRegistry,
 		options.nvmlInstance,
+		attestationManager,
 	)
 
 	otlpConverter := converter.NewOTLPConverter()
@@ -89,12 +101,13 @@ func New(ctx context.Context, opts ...ExporterOption) (Exporter, error) {
 	httpWriter := writer.NewHTTPWriter(options.httpClient, otlpConverter)
 
 	return &healthExporter{
-		ctx:        cctx,
-		cancel:     cancel,
-		options:    options,
-		collector:  dataCollector,
-		fileWriter: fileWriter,
-		httpWriter: httpWriter,
+		ctx:                cctx,
+		cancel:             cancel,
+		options:            options,
+		collector:          dataCollector,
+		fileWriter:         fileWriter,
+		httpWriter:         httpWriter,
+		attestationManager: attestationManager,
 	}, nil
 }
 
@@ -107,6 +120,12 @@ func (e *healthExporter) Start() error {
 
 	log.Logger.Infow("Starting health exporter")
 
+	// Start the attestation manager if enabled
+	if e.attestationManager != nil {
+		e.attestationManager.Start()
+	}
+
+	// Start the health export ticker
 	go func() {
 		ticker := time.NewTicker(e.options.config.Interval.Duration)
 		defer ticker.Stop()
@@ -120,8 +139,8 @@ func (e *healthExporter) Start() error {
 				if err := e.export(); err != nil {
 					log.Logger.Errorw("Export failed", "error", err)
 				} else {
-					log.Logger.Infow("Successfully exported health data", "timestamp", time.Now())
-					e.lastExport = time.Now()
+					log.Logger.Infow("Successfully exported health data", "timestamp", time.Now().UTC())
+					e.lastExport = time.Now().UTC()
 				}
 			}
 		}
@@ -133,6 +152,9 @@ func (e *healthExporter) Start() error {
 // Stop gracefully shuts down the exporter
 func (e *healthExporter) Stop() error {
 	log.Logger.Infow("Stopping health exporter")
+	if e.attestationManager != nil {
+		e.attestationManager.Stop()
+	}
 	e.cancel()
 	return nil
 }
@@ -144,6 +166,7 @@ func (e *healthExporter) ExportNow(ctx context.Context) error {
 
 // export performs the actual data export operation
 func (e *healthExporter) export() error {
+	log.Logger.Infow("Starting health export")
 	ctx, cancel := context.WithTimeout(e.ctx, e.options.timeout)
 	defer cancel()
 

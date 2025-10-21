@@ -23,12 +23,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
-
 	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	logsv1 "go.opentelemetry.io/proto/otlp/logs/v1"
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
 	resourcev1 "go.opentelemetry.io/proto/otlp/resource/v1"
+
+	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
 )
 
 // OTLPData holds both metrics and logs for OTLP export
@@ -120,6 +120,12 @@ func (c *otlpConverter) createOTLPResource(data *collector.HealthData) *resource
 		attributes = append(attributes, machineInfoAttributes...)
 	}
 
+	// Add attestation data attributes if available using reflection
+	if data.AttestationData != nil {
+		attestationAttributes := convertStructToOTLPAttributesWithPrefix(data.AttestationData, "attestation")
+		attributes = append(attributes, attestationAttributes...)
+	}
+
 	return &resourcev1.Resource{
 		Attributes: attributes,
 	}
@@ -184,6 +190,12 @@ func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metr
 								Key: "component_data_count",
 								Value: &commonv1.AnyValue{
 									Value: &commonv1.AnyValue_IntValue{IntValue: int64(len(data.ComponentData))},
+								},
+							},
+							{
+								Key: "attestation_evidences_count",
+								Value: &commonv1.AnyValue{
+									Value: &commonv1.AnyValue_IntValue{IntValue: int64(c.getAttestationEvidencesCount(data))},
 								},
 							},
 						},
@@ -332,6 +344,12 @@ func (c *otlpConverter) convertToOTLPLogs(data *collector.HealthData) []*logsv1.
 		}
 	}
 
+	// Add attestation data as log records if available
+	if data.AttestationData != nil {
+		attestationLogRecords := c.convertAttestationToOTLPLogs(data)
+		logRecords = append(logRecords, attestationLogRecords...)
+	}
+
 	return logRecords
 }
 
@@ -443,4 +461,148 @@ func convertStructToOTLPAttributesWithPrefix(v interface{}, prefix string) []*co
 	}
 
 	return attributes
+}
+
+// getAttestationEvidencesCount returns the count of attestation evidences
+func (c *otlpConverter) getAttestationEvidencesCount(data *collector.HealthData) int {
+	if data.AttestationData == nil {
+		return 0
+	}
+	return len(data.AttestationData.SDKResponse.Evidences)
+}
+
+// convertAttestationToOTLPLogs converts attestation data to OTLP log records
+func (c *otlpConverter) convertAttestationToOTLPLogs(data *collector.HealthData) []*logsv1.LogRecord {
+	var logRecords []*logsv1.LogRecord
+
+	attestation := data.AttestationData
+	if attestation == nil {
+		return logRecords
+	}
+
+	// Add SDK response summary log
+	summaryAttributes := []*commonv1.KeyValue{
+		{
+			Key: "log_type",
+			Value: &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_StringValue{StringValue: "attestation_summary"},
+			},
+		},
+		{
+			Key: "result_code",
+			Value: &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_IntValue{IntValue: int64(attestation.SDKResponse.ResultCode)},
+			},
+		},
+		{
+			Key: "result_message",
+			Value: &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_StringValue{StringValue: attestation.SDKResponse.ResultMessage},
+			},
+		},
+		{
+			Key: "evidences_count",
+			Value: &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_IntValue{IntValue: int64(len(attestation.SDKResponse.Evidences))},
+			},
+		},
+		{
+			Key: "nonce_refresh_timestamp",
+			Value: &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_StringValue{StringValue: attestation.NonceRefreshTimestamp.Format(time.RFC3339)},
+			},
+		},
+	}
+
+	summaryLogRecord := &logsv1.LogRecord{
+		TimeUnixNano:   uint64(attestation.NonceRefreshTimestamp.UnixNano()),
+		SeverityNumber: logsv1.SeverityNumber_SEVERITY_NUMBER_INFO,
+		SeverityText:   "INFO",
+		Body: &commonv1.AnyValue{
+			Value: &commonv1.AnyValue_StringValue{
+				StringValue: fmt.Sprintf("Attestation Summary: %s (Code: %d, Evidences: %d)",
+					attestation.SDKResponse.ResultMessage,
+					attestation.SDKResponse.ResultCode,
+					len(attestation.SDKResponse.Evidences)),
+			},
+		},
+		Attributes: summaryAttributes,
+	}
+	logRecords = append(logRecords, summaryLogRecord)
+
+	// Add individual evidence items as log records
+	for i, evidence := range attestation.SDKResponse.Evidences {
+		evidenceAttributes := []*commonv1.KeyValue{
+			{
+				Key: "log_type",
+				Value: &commonv1.AnyValue{
+					Value: &commonv1.AnyValue_StringValue{StringValue: "attestation_evidence"},
+				},
+			},
+			{
+				Key: "evidence_index",
+				Value: &commonv1.AnyValue{
+					Value: &commonv1.AnyValue_IntValue{IntValue: int64(i)},
+				},
+			},
+			{
+				Key: "arch",
+				Value: &commonv1.AnyValue{
+					Value: &commonv1.AnyValue_StringValue{StringValue: evidence.Arch},
+				},
+			},
+			{
+				Key: "driver_version",
+				Value: &commonv1.AnyValue{
+					Value: &commonv1.AnyValue_StringValue{StringValue: evidence.DriverVersion},
+				},
+			},
+			{
+				Key: "vbios_version",
+				Value: &commonv1.AnyValue{
+					Value: &commonv1.AnyValue_StringValue{StringValue: evidence.VBIOSVersion},
+				},
+			},
+			{
+				Key: "nonce",
+				Value: &commonv1.AnyValue{
+					Value: &commonv1.AnyValue_StringValue{StringValue: evidence.Nonce},
+				},
+			},
+			{
+				Key: "version",
+				Value: &commonv1.AnyValue{
+					Value: &commonv1.AnyValue_StringValue{StringValue: evidence.Version},
+				},
+			},
+			{
+				Key: "evidence_length",
+				Value: &commonv1.AnyValue{
+					Value: &commonv1.AnyValue_IntValue{IntValue: int64(len(evidence.Evidence))},
+				},
+			},
+			{
+				Key: "certificate_length",
+				Value: &commonv1.AnyValue{
+					Value: &commonv1.AnyValue_IntValue{IntValue: int64(len(evidence.Certificate))},
+				},
+			},
+		}
+
+		evidenceLogRecord := &logsv1.LogRecord{
+			TimeUnixNano:   uint64(attestation.NonceRefreshTimestamp.UnixNano()),
+			SeverityNumber: logsv1.SeverityNumber_SEVERITY_NUMBER_INFO,
+			SeverityText:   "INFO",
+			Body: &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_StringValue{
+					StringValue: fmt.Sprintf("GPU %d Attestation Evidence: Arch=%s, VBIOS=%s, Driver=%s",
+						i, evidence.Arch, evidence.VBIOSVersion, evidence.DriverVersion),
+				},
+			},
+			Attributes: evidenceAttributes,
+		}
+		logRecords = append(logRecords, evidenceLogRecord)
+	}
+
+	return logRecords
 }

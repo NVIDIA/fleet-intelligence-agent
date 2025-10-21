@@ -70,6 +70,12 @@ type HealthExporterConfig struct {
 	// LogsEndpoint is the specific endpoint for sending logs/events data
 	LogsEndpoint string `json:"logs_endpoint"`
 
+	// AttestationEnabled controls whether attestation functionality is enabled
+	AttestationEnabled bool `json:"attestation_enabled"`
+
+	// AttestationInterval is how often to run attestation (default: 24 hours)
+	AttestationInterval metav1.Duration `json:"attestation_interval"`
+
 	// AuthToken is the authentication token for HTTP requests
 	AuthToken string `json:"auth_token,omitempty"`
 
