@@ -58,6 +58,8 @@ type AttestationSDKResponse struct {
 type AttestationData struct {
 	SDKResponse           AttestationSDKResponse `json:"sdk_response"`
 	NonceRefreshTimestamp time.Time              `json:"nonce_refresh_timestamp"`
+	Success               bool                   `json:"success"`
+	ErrorMessage          string                 `json:"error_message,omitempty"`
 }
 
 // Manager manages the attestation process with configurable intervals
@@ -176,12 +178,17 @@ func (m *Manager) Stop() {
 func (m *Manager) runAttestation() {
 	log.Logger.Infow("Starting attestation process")
 
-	log.Logger.Infow("Getting machine ID and VBIOS versions")
+	// Always update cache with result (success or failure) so server knows status
+	attestationData := &AttestationData{}
 
-	// Get VBIOS versions for all GPUs
+	// Step 1: Get VBIOS versions for all GPUs
+	log.Logger.Infow("Getting machine ID and VBIOS versions")
 	machineId, vbiosVersions, err := m.getMachineIdWithVBIOS()
 	if err != nil {
 		log.Logger.Errorw("Failed to get VBIOS versions", "error", err)
+		attestationData.Success = false
+		attestationData.ErrorMessage = err.Error()
+		m.cache.updateAttestationData(attestationData)
 		return
 	}
 
@@ -190,38 +197,46 @@ func (m *Manager) runAttestation() {
 		"vbios_versions", vbiosVersions,
 		"gpu_count", len(vbiosVersions))
 
-	// Load JWT token from metadata database
+	// Step 2: Load JWT token from metadata database
 	jwtToken := m.getJWTTokenFromMetadata(m.ctx)
 	if jwtToken == "" {
 		log.Logger.Errorw("JWT token not found in metadata, cannot proceed with attestation")
+		attestationData.Success = false
+		attestationData.ErrorMessage = "JWT token not found in metadata"
+		m.cache.updateAttestationData(attestationData)
 		return
 	}
 
-	// Get nonce by calling the envoy endpoint
+	// Step 3: Get nonce by calling the envoy endpoint
 	nonce, nonceRefreshTimestamp, err := m.getNonce(jwtToken, machineId)
-
-	log.Logger.Debugw("Nonce received from server:", "nonce", nonce, "nonce_refresh_timestamp", nonceRefreshTimestamp)
-
 	if err != nil {
 		log.Logger.Errorw("Failed to get nonce", "error", err)
+		attestationData.Success = false
+		attestationData.ErrorMessage = err.Error()
+		m.cache.updateAttestationData(attestationData)
 		return
 	}
 
-	log.Logger.Debugw("Getting evidences with nonce and VBIOS versions", "nonce", nonce, "vbios_versions", vbiosVersions)
+	// Update nonce refresh timestamp with actual server response
+	attestationData.NonceRefreshTimestamp = nonceRefreshTimestamp
 
+	// Step 4: Get evidences from attestation SDK
+	log.Logger.Debugw("Getting evidences with nonce and VBIOS versions", "nonce", nonce, "vbios_versions", vbiosVersions)
 	sdkResponse, err := m.getEvidences(nonce, vbiosVersions)
 	if err != nil {
 		log.Logger.Errorw("Failed to get evidences", "error", err)
+		attestationData.Success = false
+		attestationData.ErrorMessage = err.Error()
+		m.cache.updateAttestationData(attestationData)
 		return
 	}
 
-	// Create complete attestation data
-	attestationData := &AttestationData{
-		SDKResponse:           *sdkResponse,
-		NonceRefreshTimestamp: nonceRefreshTimestamp,
-	}
+	// Success case: populate all data
+	attestationData.SDKResponse = *sdkResponse
+	attestationData.Success = true
+	attestationData.ErrorMessage = ""
 
-	log.Logger.Debugw("Updating attestation cache",
+	log.Logger.Debugw("Updating attestation cache with successful data",
 		"evidences_count", len(sdkResponse.Evidences),
 		"result_code", sdkResponse.ResultCode,
 		"result_message", sdkResponse.ResultMessage,
@@ -229,8 +244,6 @@ func (m *Manager) runAttestation() {
 
 	// Update the attestation cache
 	m.cache.updateAttestationData(attestationData)
-
-	log.Logger.Infow("Attestation process completed", "nonce_refresh_timestamp", nonceRefreshTimestamp)
 }
 
 func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time, error) {
