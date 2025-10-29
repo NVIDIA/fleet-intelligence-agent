@@ -43,8 +43,14 @@ func enrollCommand(cliContext *cli.Context) error {
 		return fmt.Errorf("enrollment endpoint must use HTTPS, got %s", baseURL.Scheme)
 	}
 
-	// Construct enroll endpoint first
-	enrollEndpoint, err := url.JoinPath(baseURL.String(), "enroll")
+	// Append /api/v1/health to base endpoint
+	healthEndpoint, err := url.JoinPath(baseURL.String(), "api", "v1", "health")
+	if err != nil {
+		return fmt.Errorf("failed to construct health endpoint: %w", err)
+	}
+
+	// Construct enroll endpoint
+	enrollEndpoint, err := url.JoinPath(healthEndpoint, "enroll")
 	if err != nil {
 		return fmt.Errorf("failed to construct enroll endpoint: %w", err)
 	}
@@ -57,15 +63,15 @@ func enrollCommand(cliContext *cli.Context) error {
 	}
 
 	// Construct other endpoints using url.JoinPath for proper URL handling
-	metricsEndpoint, err := url.JoinPath(baseURL.String(), "metrics")
+	metricsEndpoint, err := url.JoinPath(healthEndpoint, "metrics")
 	if err != nil {
 		return fmt.Errorf("failed to construct metrics endpoint: %w", err)
 	}
-	logsEndpoint, err := url.JoinPath(baseURL.String(), "logs")
+	logsEndpoint, err := url.JoinPath(healthEndpoint, "logs")
 	if err != nil {
 		return fmt.Errorf("failed to construct logs endpoint: %w", err)
 	}
-	nonceEndpoint, err := url.JoinPath(baseURL.String(), "nonce")
+	nonceEndpoint, err := url.JoinPath(healthEndpoint, "nonce")
 	if err != nil {
 		return fmt.Errorf("failed to construct nonce endpoint: %w", err)
 	}
