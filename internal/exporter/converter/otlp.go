@@ -112,6 +112,12 @@ func (c *otlpConverter) createOTLPResource(data *collector.HealthData) *resource
 				Value: &commonv1.AnyValue_StringValue{StringValue: data.MachineID},
 			},
 		},
+		{
+			Key: "agentConfig.totalComponents",
+			Value: &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_IntValue{IntValue: int64(len(data.ComponentData))},
+			},
+		},
 	}
 
 	// Add machine info attributes if available using reflection

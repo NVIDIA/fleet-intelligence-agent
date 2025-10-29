@@ -490,14 +490,22 @@ func (m *MockEndpoint) parseOTLPLogs(logsData *logsv1.LogsData, healthData *coll
 		if rl.Resource != nil {
 			healthData.MachineInfo = &machineinfo.MachineInfo{}
 
-			// Parse machine.id separately since it's not part of MachineInfo struct
+			// Parse machine.id and agentConfig.totalComponents separately
+			totalComponents := int64(0)
 			for _, attr := range rl.Resource.Attributes {
 				if attr.Key == "machine.id" {
 					if stringVal := attr.Value.GetStringValue(); stringVal != "" {
 						healthData.MachineID = stringVal
 					}
-					break
+				} else if attr.Key == "agentConfig.totalComponents" {
+					totalComponents = attr.Value.GetIntValue()
 				}
+			}
+
+			// Log agent configuration for visibility
+			if totalComponents > 0 {
+				log.Logger.Infow("mock health endpoint: agent configuration from resource",
+					"agentConfig.totalComponents", totalComponents)
 			}
 
 			// Parse all other attributes into MachineInfo using reflection
@@ -586,14 +594,22 @@ func (m *MockEndpoint) parseOTLPMetrics(metricsData *metricsv1.MetricsData, heal
 		if rm.Resource != nil {
 			healthData.MachineInfo = &machineinfo.MachineInfo{}
 
-			// Parse machine.id separately since it's not part of MachineInfo struct
+			// Parse machine.id and agentConfig.totalComponents separately
+			totalComponents := int64(0)
 			for _, attr := range rm.Resource.Attributes {
 				if attr.Key == "machine.id" {
 					if stringVal := attr.Value.GetStringValue(); stringVal != "" {
 						healthData.MachineID = stringVal
 					}
-					break
+				} else if attr.Key == "agentConfig.totalComponents" {
+					totalComponents = attr.Value.GetIntValue()
 				}
+			}
+
+			// Log agent configuration for visibility
+			if totalComponents > 0 {
+				log.Logger.Infow("mock health endpoint: agent configuration from resource",
+					"agentConfig.totalComponents", totalComponents)
 			}
 
 			// Parse all other attributes into MachineInfo using reflection
