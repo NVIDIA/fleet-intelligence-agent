@@ -145,21 +145,11 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 	}
 
 	// Collect attestation data if provider is available
-	if err := c.collectAttestationData(data); err != nil {
-		log.Logger.Errorw("Failed to collect attestation data", "error", err)
+	if c.config.AttestationEnabled {
+		if err := c.collectAttestationData(data); err != nil {
+			log.Logger.Errorw("Failed to collect attestation data", "error", err)
+		}
 	}
-
-	// Count evidences for logging
-	evidencesCount := 0
-	if data.AttestationData != nil {
-		evidencesCount = len(data.AttestationData.SDKResponse.Evidences)
-	}
-
-	log.Logger.Infow("Health data collection completed",
-		"metrics", len(data.Metrics),
-		"events", len(data.Events),
-		"components", len(data.ComponentData),
-		"evidences", evidencesCount)
 
 	return data, nil
 }
@@ -292,27 +282,13 @@ func (c *collector) collectAttestationData(data *HealthData) error {
 		return nil
 	}
 
-	// Check if attestation data has been updated since last collection
-	if !c.attestationManager.IsAttestationDataUpdated(c.lastAttestationCollection) {
-		log.Logger.Debugw("Attestation data not updated since last collection, skipping",
-			"last_collection", c.lastAttestationCollection)
-		return nil
-	}
-
+	// Get latest attestation data (success or failure info)
 	attestationData := c.attestationManager.GetAttestationData()
+	data.AttestationData = attestationData
 
-	// Only set the data if we have attestation data and evidences
-	if attestationData != nil && len(attestationData.SDKResponse.Evidences) > 0 {
-		data.AttestationData = attestationData
+	// Update collection timestamp if data was newly updated
+	if c.attestationManager.IsAttestationDataUpdated(c.lastAttestationCollection) {
 		c.lastAttestationCollection = time.Now().UTC()
-		log.Logger.Debugw("Collected updated attestation data",
-			"evidences_count", len(attestationData.SDKResponse.Evidences),
-			"result_code", attestationData.SDKResponse.ResultCode,
-			"result_message", attestationData.SDKResponse.ResultMessage,
-			"nonce_refresh_timestamp", attestationData.NonceRefreshTimestamp,
-			"collection_time", c.lastAttestationCollection)
-	} else {
-		log.Logger.Debugw("No attestation evidence available")
 	}
 
 	return nil
