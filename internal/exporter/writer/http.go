@@ -82,6 +82,7 @@ func (w *httpWriter) SetJWTRefreshFunc(refreshFunc JWTRefreshFunc) {
 func (w *httpWriter) Send(ctx context.Context, data *collector.HealthData, metricsEndpoint string, logsEndpoint string, maxRetries int, authToken string) (string, error) {
 	// Convert to OTLP format
 	otlpData := w.otlpConverter.Convert(data)
+	log.Logger.Infow("OTLP data", "metrics", otlpData.Metrics, "logs", otlpData.Logs)
 
 	var newToken string
 

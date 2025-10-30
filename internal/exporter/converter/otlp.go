@@ -416,14 +416,12 @@ func convertStructToOTLPAttributesWithPrefix(v interface{}, prefix string) []*co
 		switch field.Kind() {
 		case reflect.String:
 			stringValue = field.String()
-		case reflect.Int64:
-			if field.Int() != 0 {
-				stringValue = fmt.Sprintf("%d", field.Int())
-			}
-		case reflect.Uint64:
-			if field.Uint() != 0 {
-				stringValue = fmt.Sprintf("%d", field.Uint())
-			}
+		case reflect.Bool:
+			stringValue = fmt.Sprintf("%t", field.Bool()) // Always include bool (even false)
+		case reflect.Int, reflect.Int32, reflect.Int64:
+			stringValue = fmt.Sprintf("%d", field.Int()) // Always include int (even 0)
+		case reflect.Uint, reflect.Uint32, reflect.Uint64:
+			stringValue = fmt.Sprintf("%d", field.Uint()) // Always include uint (even 0)
 		case reflect.Struct:
 			// Handle time.Time specially
 			if field.Type().String() == "time.Time" {
@@ -495,6 +493,18 @@ func (c *otlpConverter) convertAttestationToOTLPLogs(data *collector.HealthData)
 			},
 		},
 		{
+			Key: "success",
+			Value: &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_BoolValue{BoolValue: attestation.Success},
+			},
+		},
+		{
+			Key: "error_message",
+			Value: &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_StringValue{StringValue: attestation.ErrorMessage},
+			},
+		},
+		{
 			Key: "result_code",
 			Value: &commonv1.AnyValue{
 				Value: &commonv1.AnyValue_IntValue{IntValue: int64(attestation.SDKResponse.ResultCode)},
@@ -520,17 +530,28 @@ func (c *otlpConverter) convertAttestationToOTLPLogs(data *collector.HealthData)
 		},
 	}
 
+	// Create summary log with appropriate severity based on success/failure
+	severity := logsv1.SeverityNumber_SEVERITY_NUMBER_INFO
+	severityText := "INFO"
+	var bodyMessage string
+
+	if attestation.Success {
+		bodyMessage = fmt.Sprintf("Attestation Success: %s (Code: %d, Evidences: %d)",
+			attestation.SDKResponse.ResultMessage,
+			attestation.SDKResponse.ResultCode,
+			len(attestation.SDKResponse.Evidences))
+	} else {
+		severity = logsv1.SeverityNumber_SEVERITY_NUMBER_ERROR
+		severityText = "ERROR"
+		bodyMessage = fmt.Sprintf("Attestation Failed: %s", attestation.ErrorMessage)
+	}
+
 	summaryLogRecord := &logsv1.LogRecord{
 		TimeUnixNano:   uint64(attestation.NonceRefreshTimestamp.UnixNano()),
-		SeverityNumber: logsv1.SeverityNumber_SEVERITY_NUMBER_INFO,
-		SeverityText:   "INFO",
+		SeverityNumber: severity,
+		SeverityText:   severityText,
 		Body: &commonv1.AnyValue{
-			Value: &commonv1.AnyValue_StringValue{
-				StringValue: fmt.Sprintf("Attestation Summary: %s (Code: %d, Evidences: %d)",
-					attestation.SDKResponse.ResultMessage,
-					attestation.SDKResponse.ResultCode,
-					len(attestation.SDKResponse.Evidences)),
-			},
+			Value: &commonv1.AnyValue_StringValue{StringValue: bodyMessage},
 		},
 		Attributes: summaryAttributes,
 	}
