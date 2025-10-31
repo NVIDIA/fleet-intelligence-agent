@@ -1,6 +1,6 @@
 module github.com/NVIDIA/gpuhealth
 
-go 1.24.7
+go 1.24.9
 
 replace github.com/leptonai/gpud => gitlab-master.nvidia.com/gpu-health/gpud v0.8.0-beta.5.0.20251013201910-12f860fafd8a
 
@@ -119,7 +119,6 @@ require (
 	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
-	golang.org/x/telemetry v0.0.0-20251008203120-078029d740a8 // indirect
 	golang.org/x/text v0.30.0 // indirect
 	golang.org/x/time v0.7.0 // indirect
 	golang.org/x/tools v0.38.0 // indirect
