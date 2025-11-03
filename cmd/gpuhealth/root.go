@@ -58,14 +58,11 @@ func App() *cli.App {
 					Value: 0,
 				},
 				&cli.StringFlag{
-					Name:  "infiniband-expected-port-states",
-					Usage: "set the infiniband expected port states in JSON (leave empty for default, useful for testing)",
+					Name:   "infiniband-expected-port-states",
+					Usage:  "set the infiniband expected port states in JSON (leave empty for default, useful for testing)",
+					Hidden: true, // only for testing - auto-detected by default
 				},
 				&cli.StringFlag{
-					Name:  "nfs-checker-configs",
-					Usage: "set the NFS checker group configs in JSON (leave empty for default, useful for testing)",
-				},
-				cli.StringFlag{
 					Name:   "infiniband-class-root-dir",
 					Usage:  "sets the infiniband class root directory (leave empty for default)",
 					Value:  "",
@@ -92,10 +89,6 @@ func App() *cli.App {
 					Usage: "set the listen address",
 					Value: fmt.Sprintf("0.0.0.0:%d", config.DefaultHealthPort),
 				},
-				&cli.BoolFlag{
-					Name:  "pprof",
-					Usage: "enable pprof (default: false)",
-				},
 				&cli.DurationFlag{
 					Name:  "retention-period",
 					Usage: "set the time period to retain metrics for (once elapsed, old records are compacted/purged)",
@@ -112,14 +105,11 @@ func App() *cli.App {
 					Value: 0,
 				},
 				&cli.StringFlag{
-					Name:  "infiniband-expected-port-states",
-					Usage: "set the infiniband expected port states in JSON (leave empty for default, useful for testing)",
+					Name:   "infiniband-expected-port-states",
+					Usage:  "set the infiniband expected port states in JSON (leave empty for default, useful for testing)",
+					Hidden: true, // only for testing - auto-detected by default
 				},
 				&cli.StringFlag{
-					Name:  "nfs-checker-configs",
-					Usage: "set the NFS checker group configs in JSON (leave empty for default, useful for testing)",
-				},
-				cli.StringFlag{
 					Name:   "infiniband-class-root-dir",
 					Usage:  "sets the infiniband class root directory (leave empty for default)",
 					Value:  "",

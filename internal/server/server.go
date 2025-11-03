@@ -33,7 +33,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/leptonai/gpud/components"
-	"github.com/leptonai/gpud/components/all"
 	"github.com/leptonai/gpud/pkg/eventstore"
 	pkgfaultinjector "github.com/leptonai/gpud/pkg/fault-injector"
 	pkghost "github.com/leptonai/gpud/pkg/host"
@@ -45,11 +44,13 @@ import (
 	pkgmetricsscraper "github.com/leptonai/gpud/pkg/metrics/scraper"
 	pkgmetricsstore "github.com/leptonai/gpud/pkg/metrics/store"
 	pkgmetricssyncer "github.com/leptonai/gpud/pkg/metrics/syncer"
+	nvidiadcgm "github.com/leptonai/gpud/pkg/nvidia-query/dcgm"
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
 	"github.com/leptonai/gpud/pkg/sqlite"
 
 	"github.com/NVIDIA/gpuhealth/internal/config"
 	"github.com/NVIDIA/gpuhealth/internal/exporter"
+	"github.com/NVIDIA/gpuhealth/internal/registry"
 )
 
 // Server is a simplified health metrics exporter server
@@ -72,8 +73,8 @@ type Server struct {
 	machineID string
 }
 
-// New creates a new simplified health server for metrics export only
-func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config) (retServer *Server, retErr error) {
+// initializeDatabases opens and initializes database connections
+func initializeDatabases(ctx context.Context, config *config.Config) (*sql.DB, *sql.DB, error) {
 	stateFile := ":memory:"
 	if config.State != "" {
 		stateFile = config.State
@@ -81,15 +82,81 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 
 	dbRW, err := sqlite.Open(stateFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open state file (for read-write): %w", err)
+		return nil, nil, fmt.Errorf("failed to open state file (for read-write): %w", err)
 	}
+
 	dbRO, err := sqlite.Open(stateFile, sqlite.WithReadOnly(true))
 	if err != nil {
-		return nil, fmt.Errorf("failed to open state file (for read-only): %w", err)
+		return nil, nil, fmt.Errorf("failed to open state file (for read-only): %w", err)
 	}
 
 	if err := pkgmetadata.CreateTableMetadata(ctx, dbRW); err != nil {
-		return nil, fmt.Errorf("failed to create metadata table: %w", err)
+		return nil, nil, fmt.Errorf("failed to create metadata table: %w", err)
+	}
+
+	return dbRW, dbRO, nil
+}
+
+// initializeMachineID retrieves or creates a machine ID
+func initializeMachineID(ctx context.Context, dbRW, dbRO *sql.DB) (string, error) {
+	// Try to read existing machine ID from database
+	machineID, err := pkgmetadata.ReadMachineIDWithFallback(ctx, dbRW, dbRO)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("failed to read machine uid: %w", err)
+	}
+
+	// If no machine ID found in database, use system machine ID and store it persistently
+	if machineID == "" {
+		machineID = pkghost.MachineID()
+		if machineID == "" {
+			// Fallback to dynamic lookup if not cached
+			var err error
+			machineID, err = pkghost.GetMachineID(ctx)
+			if err != nil {
+				return "", fmt.Errorf("failed to get system machine ID: %w", err)
+			}
+		}
+		// Store the system machine ID in database for persistence across reboots
+		if err := pkgmetadata.SetMetadata(ctx, dbRW, pkgmetadata.MetadataKeyMachineID, machineID); err != nil {
+			return "", fmt.Errorf("failed to store system machine ID: %w", err)
+		}
+	}
+
+	return machineID, nil
+}
+
+// getHealthCheckInterval determines the health check interval from config
+func getHealthCheckInterval(config *config.Config) time.Duration {
+	healthCheckInterval := time.Minute // default
+	if config.HealthExporter != nil && config.HealthExporter.HealthCheckInterval.Duration > 0 {
+		healthCheckInterval = config.HealthExporter.HealthCheckInterval.Duration
+	}
+	return healthCheckInterval
+}
+
+// shouldEnableComponent determines if a component should be enabled based on configuration
+func shouldEnableComponent(name string, enabledByDefault bool, config *config.Config) bool {
+	shouldEnable := enabledByDefault
+
+	// If specific components are configured, check if this one is selected
+	if len(config.Components) > 0 && config.Components[0] != "*" && config.Components[0] != "all" {
+		shouldEnable = config.ShouldEnable(name)
+	}
+
+	// Explicit disable takes precedence
+	if config.ShouldDisable(name) {
+		shouldEnable = false
+	}
+
+	return shouldEnable
+}
+
+// New creates a new simplified health server for metrics export only
+func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config) (retServer *Server, retErr error) {
+	// Initialize database connections
+	dbRW, dbRO, err := initializeDatabases(ctx, config)
+	if err != nil {
+		return nil, err
 	}
 
 	s := &Server{
@@ -104,29 +171,11 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 		}
 	}()
 
-	// Try to read existing machine ID from database
-	machineID, err := pkgmetadata.ReadMachineIDWithFallback(ctx, dbRW, dbRO)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("failed to read machine uid: %w", err)
+	// Initialize machine ID
+	machineID, err := initializeMachineID(ctx, dbRW, dbRO)
+	if err != nil {
+		return nil, err
 	}
-
-	// If no machine ID found in database, use system machine ID and store it persistently
-	if machineID == "" {
-		machineID = pkghost.MachineID()
-		if machineID == "" {
-			// Fallback to dynamic lookup if not cached
-			var err error
-			machineID, err = pkghost.GetMachineID(ctx)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get system machine ID: %w", err)
-			}
-		}
-		// Store the system machine ID in database for persistence across reboots
-		if err := pkgmetadata.SetMetadata(ctx, dbRW, pkgmetadata.MetadataKeyMachineID, machineID); err != nil {
-			return nil, fmt.Errorf("failed to store system machine ID: %w", err)
-		}
-	}
-
 	s.machineID = machineID
 
 	// Initialize fault injector for testing
@@ -138,16 +187,20 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 		return nil, fmt.Errorf("failed to create NVML instance: %w", err)
 	}
 
+	// Initialize DCGM instance
+	dcgmInstance, err := nvidiadcgm.New()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create DCGM instance: %w", err)
+	}
+
 	// Create event store needed for health exporter
 	eventStore, err := eventstore.New(dbRW, dbRO, 24*time.Hour)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open events database: %w", err)
 	}
 
-	// Create reboot event store
+	// Create reboot event store and record reboot
 	rebootEventStore := pkghost.NewRebootEventStore(eventStore)
-
-	// Record reboot event once when creating the server instance
 	cctx, ccancel := context.WithTimeout(ctx, time.Minute)
 	err = rebootEventStore.RecordReboot(cctx)
 	ccancel()
@@ -155,41 +208,81 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 		log.Logger.Errorw("failed to record reboot", "error", err)
 	}
 
-	// Determine health check interval from config, with fallback to default
-	healthCheckInterval := time.Minute // default
-	if config.HealthExporter != nil && config.HealthExporter.HealthCheckInterval.Duration > 0 {
-		healthCheckInterval = config.HealthExporter.HealthCheckInterval.Duration
-	}
+	// Determine health check interval
+	healthCheckInterval := getHealthCheckInterval(config)
+
+	// Create shared DCGM caches
+	dcgmHealthCache := nvidiadcgm.NewHealthCache(ctx, dcgmInstance, healthCheckInterval)
+	log.Logger.Infow("DCGM health check cache configured", "healthCheckInterval", healthCheckInterval)
+
+	dcgmFieldValueCache := nvidiadcgm.NewFieldValueCache(ctx, dcgmInstance, healthCheckInterval)
+	log.Logger.Infow("DCGM field value cache created", "healthCheckInterval", healthCheckInterval)
+
+	dcgmPolicyViolationCache := nvidiadcgm.NewPolicyViolationCache(ctx, dcgmInstance)
+	log.Logger.Infow("DCGM policy violation cache created")
 
 	s.gpudInstance = &components.GPUdInstance{
-		RootCtx:             ctx,
-		MachineID:           machineID,
-		NVMLInstance:        nvmlInstance,
-		DBRW:                dbRW,
-		DBRO:                dbRO,
-		EventStore:          eventStore,
-		RebootEventStore:    rebootEventStore,
-		MountPoints:         []string{"/"},
-		MountTargets:        []string{"/var/lib/kubelet"},
-		HealthCheckInterval: healthCheckInterval,
+		RootCtx:                  ctx,
+		MachineID:                machineID,
+		NVMLInstance:             nvmlInstance,
+		DCGMInstance:             dcgmInstance,
+		DCGMHealthCache:          dcgmHealthCache,
+		DCGMFieldValueCache:      dcgmFieldValueCache,
+		DCGMPolicyViolationCache: dcgmPolicyViolationCache,
+		NVIDIAToolOverwrites:     config.NvidiaToolOverwrites,
+		DBRW:                     dbRW,
+		DBRO:                     dbRO,
+		EventStore:               eventStore,
+		RebootEventStore:         rebootEventStore,
+		MountPoints:              []string{"/"},
+		MountTargets:             []string{"/var/lib/kubelet"},
+		HealthCheckInterval:      healthCheckInterval,
 	}
 
 	// Register only enabled components for health monitoring
 	s.componentsRegistry = components.NewRegistry(s.gpudInstance)
-	for _, c := range all.All() {
-		name := c.Name
-
-		shouldEnable := config.ShouldEnable(name)
-		if config.ShouldDisable(name) {
-			shouldEnable = false
-		}
-
-		if shouldEnable {
+	for _, c := range registry.All() {
+		if shouldEnableComponent(c.Name, c.EnabledByDefault, config) {
 			s.componentsRegistry.MustRegister(c.InitFunc)
 		}
 	}
 
-	// Start components for health monitoring
+	// Start DCGM health cache before starting components
+	if dcgmHealthCache != nil {
+		if err := dcgmHealthCache.Start(); err != nil {
+			log.Logger.Errorw("failed to start DCGM health cache, DCGM health monitoring disabled", "error", err)
+		}
+	}
+
+	// Set up DCGM field watching after all components have registered their fields
+	if dcgmFieldValueCache != nil {
+		if err := dcgmFieldValueCache.SetupFieldWatching(); err != nil {
+			log.Logger.Errorw("failed to set up DCGM field watching, DCGM metrics collection unavailable", "error", err)
+		}
+	}
+
+	// Set up centralized DCGM policy violation watching
+	if dcgmPolicyViolationCache != nil {
+		if err := dcgmPolicyViolationCache.SetupPolicyWatching(); err != nil {
+			log.Logger.Errorw("failed to set up DCGM policy watching, DCGM policy violations undetected", "error", err)
+		}
+	}
+
+	// Start DCGM field value cache polling
+	if dcgmFieldValueCache != nil {
+		if err := dcgmFieldValueCache.Start(); err != nil {
+			log.Logger.Errorw("failed to start DCGM field value cache, DCGM metrics polling disabled", "error", err)
+		}
+	}
+
+	// Start DCGM policy violation cache distribution
+	if dcgmPolicyViolationCache != nil {
+		if err := dcgmPolicyViolationCache.Start(); err != nil {
+			log.Logger.Errorw("failed to start DCGM policy violation cache, DCGM policy violation monitoring disabled", "error", err)
+		}
+	}
+
+	// Start components for health monitoring (must be started after DCGM initialization)
 	for _, c := range s.componentsRegistry.All() {
 		if err = c.Start(); err != nil {
 			return nil, fmt.Errorf("failed to start component %s: %w", c.Name(), err)
@@ -256,17 +349,48 @@ func (s *Server) Stop() {
 		}
 	}
 
+	// Stop DCGM health cache polling to prevent goroutine leak
+	if s.gpudInstance != nil && s.gpudInstance.DCGMHealthCache != nil {
+		s.gpudInstance.DCGMHealthCache.Stop()
+		log.Logger.Debugw("stopped DCGM health cache")
+	}
+
+	// Stop DCGM field value cache polling to prevent goroutine leak
+	if s.gpudInstance != nil && s.gpudInstance.DCGMFieldValueCache != nil {
+		s.gpudInstance.DCGMFieldValueCache.Stop()
+		log.Logger.Debugw("stopped DCGM field value cache")
+	}
+
+	// Close DCGM policy violation cache to stop distributor and clear policies
+	if s.gpudInstance != nil && s.gpudInstance.DCGMPolicyViolationCache != nil {
+		if err := s.gpudInstance.DCGMPolicyViolationCache.Close(); err != nil {
+			log.Logger.Warnw("failed to close DCGM policy violation cache", "error", err)
+		} else {
+			log.Logger.Debugw("closed DCGM policy violation cache")
+		}
+	}
+
 	if s.componentsRegistry != nil {
-		for _, c := range s.componentsRegistry.All() {
-			c.Close()
+		for _, component := range s.componentsRegistry.All() {
+			if err := component.Close(); err != nil {
+				log.Logger.Errorf("failed to close plugin %v: %v", component.Name(), err)
+			}
 		}
 	}
 
 	if s.dbRW != nil {
-		s.dbRW.Close()
+		if cerr := s.dbRW.Close(); cerr != nil {
+			log.Logger.Debugw("failed to close read-write db", "error", cerr)
+		} else {
+			log.Logger.Debugw("successfully closed read-write db")
+		}
 	}
 	if s.dbRO != nil {
-		s.dbRO.Close()
+		if cerr := s.dbRO.Close(); cerr != nil {
+			log.Logger.Debugw("failed to close read-only db", "error", cerr)
+		} else {
+			log.Logger.Debugw("successfully closed read-only db")
+		}
 	}
 }
 

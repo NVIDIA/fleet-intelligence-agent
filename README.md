@@ -4,6 +4,10 @@ Lightweight GPU health monitoring and reporting agent for NVIDIA GPU infrastruct
 
 ## Overview
 
+**Prerequisites:**
+- NVIDIA DCGM (Data Center GPU Manager) - automatically installed from NVIDIA CUDA repositories
+- See [Installation Guide](docs/installation.md) for CUDA repository setup instructions
+
 **What It Monitors:**
 - GPU Metrics: Power, temperature, clocks, utilization, memory, Xid events
 - System Metrics: CPU, memory, disk, network usage

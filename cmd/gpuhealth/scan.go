@@ -10,11 +10,10 @@ import (
 
 	componentsnvidiagpucounts "github.com/leptonai/gpud/components/accelerator/nvidia/gpu-counts"
 	componentsinfiniband "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband"
-	componentsnfs "github.com/leptonai/gpud/components/nfs"
 	"github.com/leptonai/gpud/pkg/log"
-	pkgnfschecker "github.com/leptonai/gpud/pkg/nfs-checker"
 	"github.com/leptonai/gpud/pkg/nvidia-query/infiniband"
-	"github.com/leptonai/gpud/pkg/scan"
+
+	"github.com/NVIDIA/gpuhealth/internal/scan"
 )
 
 func scanCreateCommand() func(*cli.Context) error {
@@ -23,13 +22,12 @@ func scanCreateCommand() func(*cli.Context) error {
 			cliContext.String("log-level"),
 			cliContext.Int("gpu-count"),
 			cliContext.String("infiniband-expected-port-states"),
-			cliContext.String("nfs-checker-configs"),
 			cliContext.String("infiniband-class-root-dir"),
 		)
 	}
 }
 
-func cmdScan(logLevel string, gpuCount int, infinibandExpectedPortStates string, nfsCheckerConfigs string, ibClassRootDir string) error {
+func cmdScan(logLevel string, gpuCount int, infinibandExpectedPortStates string, ibClassRootDir string) error {
 	zapLvl, err := log.ParseLogLevel(logLevel)
 	if err != nil {
 		return err
@@ -56,17 +54,7 @@ func cmdScan(logLevel string, gpuCount int, infinibandExpectedPortStates string,
 		log.Logger.Infow("set infiniband expected port states", "infinibandExpectedPortStates", infinibandExpectedPortStates)
 	}
 
-	if len(nfsCheckerConfigs) > 0 {
-		groupConfigs := make(pkgnfschecker.Configs, 0)
-		if err := json.Unmarshal([]byte(nfsCheckerConfigs), &groupConfigs); err != nil {
-			return err
-		}
-		componentsnfs.SetDefaultConfigs(groupConfigs)
-
-		log.Logger.Infow("set nfs checker group configs", "groupConfigs", groupConfigs)
-	}
-
-	opts := []scan.OpOption{
+	opts := []scan.Option{
 		scan.WithInfinibandClassRootDir(ibClassRootDir),
 	}
 	if zapLvl.Level() <= zap.DebugLevel { // e.g., info, warn, error

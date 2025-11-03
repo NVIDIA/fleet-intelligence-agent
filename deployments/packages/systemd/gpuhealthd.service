@@ -1,6 +1,7 @@
 [Unit]
 Description=GPU Health Daemon
-After=network.target local-fs.target
+Wants=nvidia-dcgm.service
+After=network.target local-fs.target nvidia-dcgm.service
 
 [Service]
 EnvironmentFile=-/etc/default/gpuhealth

@@ -56,7 +56,6 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 		Address:         fmt.Sprintf(":%d", DefaultHealthPort),
 		RetentionPeriod: DefaultRetentionPeriod,
 		CompactPeriod:   DefaultCompactPeriod,
-		Pprof:           false, // Profiling disabled by default for health exporter
 		NvidiaToolOverwrites: nvidiacommon.ToolOverwrites{
 			InfinibandClassRootDir: options.InfinibandClassRootDir,
 		},
