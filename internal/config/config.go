@@ -45,9 +45,6 @@ type Config struct {
 	// Interval at which to compact the state database
 	CompactPeriod metav1.Duration `json:"compact_period"`
 
-	// Set true to enable profiler endpoints
-	Pprof bool `json:"pprof"`
-
 	// NVIDIA tool command paths to overwrite defaults
 	NvidiaToolOverwrites pkgconfigcommon.ToolOverwrites `json:"nvidia_tool_overwrites"`
 

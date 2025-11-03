@@ -16,9 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	componentsnvidiagpucounts "github.com/leptonai/gpud/components/accelerator/nvidia/gpu-counts"
 	componentsinfiniband "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband"
-	componentsnfs "github.com/leptonai/gpud/components/nfs"
 	"github.com/leptonai/gpud/pkg/log"
-	pkgnfschecker "github.com/leptonai/gpud/pkg/nfs-checker"
 	"github.com/leptonai/gpud/pkg/nvidia-query/infiniband"
 	"github.com/urfave/cli"
 	"go.uber.org/zap"
@@ -204,7 +202,6 @@ func runCommand(cliContext *cli.Context) error {
 	}
 
 	listenAddress := cliContext.String("listen-address")
-	pprof := cliContext.Bool("pprof")
 	retentionPeriod := cliContext.Duration("retention-period")
 
 	ibClassRootDir := cliContext.String("infiniband-class-root-dir")
@@ -212,7 +209,6 @@ func runCommand(cliContext *cli.Context) error {
 
 	gpuCount := cliContext.Int("gpu-count")
 	infinibandExpectedPortStates := cliContext.String("infiniband-expected-port-states")
-	nfsCheckerConfigs := cliContext.String("nfs-checker-configs")
 
 	// GPU Health Exporter configuration
 	offlineMode := cliContext.Bool("offline-mode")
@@ -255,16 +251,6 @@ func runCommand(cliContext *cli.Context) error {
 		log.Logger.Infow("set infiniband expected port states", "infinibandExpectedPortStates", infinibandExpectedPortStates)
 	}
 
-	if len(nfsCheckerConfigs) > 0 {
-		groupConfigs := make(pkgnfschecker.Configs, 0)
-		if err := json.Unmarshal([]byte(nfsCheckerConfigs), &groupConfigs); err != nil {
-			return err
-		}
-		componentsnfs.SetDefaultConfigs(groupConfigs)
-
-		log.Logger.Infow("set nfs checker group configs", "groupConfigs", groupConfigs)
-	}
-
 	configOpts := []config.OpOption{
 		config.WithInfinibandClassRootDir(ibClassRootDir),
 	}
@@ -284,9 +270,6 @@ func runCommand(cliContext *cli.Context) error {
 
 	if listenAddress != "" {
 		cfg.Address = listenAddress
-	}
-	if pprof {
-		cfg.Pprof = true
 	}
 
 	if retentionPeriod > 0 {
