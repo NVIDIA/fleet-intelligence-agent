@@ -91,7 +91,7 @@ func App() *cli.App {
 				},
 				&cli.DurationFlag{
 					Name:  "retention-period",
-					Usage: "set the time period to retain metrics for (once elapsed, old records are compacted/purged)",
+					Usage: "set the time period to retain metrics for (once elapsed, old records are automatically purged)",
 					Value: config.DefaultRetentionPeriod.Duration,
 				},
 				cli.StringFlag{

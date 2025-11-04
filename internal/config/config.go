@@ -39,11 +39,8 @@ type Config struct {
 	State string `json:"state"`
 
 	// Amount of time to retain health states/metrics
-	// Once elapsed, old data is purged/compacted
+	// Once elapsed, old data is automatically purged
 	RetentionPeriod metav1.Duration `json:"retention_period"`
-
-	// Interval at which to compact the state database
-	CompactPeriod metav1.Duration `json:"compact_period"`
 
 	// NVIDIA tool command paths to overwrite defaults
 	NvidiaToolOverwrites pkgconfigcommon.ToolOverwrites `json:"nvidia_tool_overwrites"`
