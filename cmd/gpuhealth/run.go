@@ -276,8 +276,6 @@ func runCommand(cliContext *cli.Context) error {
 		cfg.RetentionPeriod = metav1.Duration{Duration: retentionPeriod}
 	}
 
-	cfg.CompactPeriod = config.DefaultCompactPeriod
-
 	if components != "" {
 		cfg.Components = strings.Split(components, ",")
 	}

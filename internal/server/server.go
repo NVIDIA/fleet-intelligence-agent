@@ -194,7 +194,8 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 	}
 
 	// Create event store needed for health exporter
-	eventStore, err := eventstore.New(dbRW, dbRO, 24*time.Hour)
+	log.Logger.Infow("initializing event store", "retention", config.RetentionPeriod.Duration)
+	eventStore, err := eventstore.New(dbRW, dbRO, config.RetentionPeriod.Duration)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open events database: %w", err)
 	}
@@ -298,7 +299,10 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 	if err != nil {
 		return nil, fmt.Errorf("failed to create metrics store: %w", err)
 	}
-	syncer := pkgmetricssyncer.NewSyncer(ctx, promScraper, metricsSQLiteStore, time.Minute, time.Minute, 24*time.Hour)
+	// Purge metrics every 5 minutes (reasonable interval to balance overhead and timely cleanup)
+	metricsPurgeInterval := 5 * time.Minute
+	log.Logger.Infow("initializing metrics syncer", "scrapeInterval", time.Minute, "purgeInterval", metricsPurgeInterval, "retention", config.RetentionPeriod.Duration)
+	syncer := pkgmetricssyncer.NewSyncer(ctx, promScraper, metricsSQLiteStore, time.Minute, metricsPurgeInterval, config.RetentionPeriod.Duration)
 	syncer.Start()
 
 	promRecorder := pkgmetricsrecorder.NewPrometheusRecorder(ctx, 15*time.Minute, dbRO)
@@ -325,9 +329,6 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 			log.Logger.Errorw("failed to start health exporter", "error", err)
 		}
 	}
-
-	// Start database compaction
-	go s.doCompact(ctx, dbRW, config.CompactPeriod.Duration)
 
 	// Start the HTTP server
 	go s.startServer(ctx, nvmlInstance)
@@ -443,29 +444,6 @@ func (s *Server) startServer(ctx context.Context, nvmlInstance nvidianvml.Instan
 	if err := srv.ListenAndServe(); err != nil {
 		log.Logger.Warnw("gpuhealth serve failed", "address", s.config.Address, "error", err)
 		stdos.Exit(1)
-	}
-}
-
-// doCompact periodically compacts the database
-func (s *Server) doCompact(ctx context.Context, db *sql.DB, interval time.Duration) {
-	if interval <= 0 {
-		log.Logger.Debugw("compact period is disabled")
-		return
-	}
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			log.Logger.Debugw("compacting database")
-			if _, err := db.ExecContext(ctx, "VACUUM"); err != nil {
-				log.Logger.Warnw("failed to compact database", "error", err)
-			}
-		}
 	}
 }
 

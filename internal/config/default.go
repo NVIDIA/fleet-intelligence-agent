@@ -37,11 +37,8 @@ const (
 )
 
 var (
-	// DefaultRetentionPeriod - keep health data for 3 hours by default
-	DefaultRetentionPeriod = metav1.Duration{Duration: 3 * time.Hour}
-
-	// DefaultCompactPeriod - database compaction disabled by default to avoid performance impact
-	DefaultCompactPeriod = metav1.Duration{Duration: 0}
+	// DefaultRetentionPeriod - keep health data for 24 hours by default
+	DefaultRetentionPeriod = metav1.Duration{Duration: 24 * time.Hour}
 )
 
 // Default creates a default health configuration
@@ -55,7 +52,6 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 		APIVersion:      DefaultAPIVersion,
 		Address:         fmt.Sprintf(":%d", DefaultHealthPort),
 		RetentionPeriod: DefaultRetentionPeriod,
-		CompactPeriod:   DefaultCompactPeriod,
 		NvidiaToolOverwrites: nvidiacommon.ToolOverwrites{
 			InfinibandClassRootDir: options.InfinibandClassRootDir,
 		},
