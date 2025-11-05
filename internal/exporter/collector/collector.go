@@ -259,6 +259,12 @@ func (c *collector) collectComponentData(data *HealthData) error {
 			reason = firstState.Reason
 			timeValue = firstState.Time
 			extraInfo = firstState.ExtraInfo
+
+			if extraInfoMap, ok := extraInfo.(map[string]interface{}); ok {
+				if dataValue, exists := extraInfoMap["data"]; exists {
+					extraInfo = dataValue
+				}
+			}
 		}
 
 		componentData[componentName] = map[string]interface{}{
