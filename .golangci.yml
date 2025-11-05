@@ -1,38 +1,54 @@
-linters-settings:
-  govet:
-    shadow: false
-  gocyclo:
-    min-complexity: 32
-  misspell:
-    locale: US
-  goimports:
-    local-prefixes: github.com/NVIDIA/gpuhealth
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
-    disabled-checks:
-      - ifElseChain
-      - wrapperFunc
-      - sloppyReassign
-      - rangeValCopy
-
+version: "2"
+run:
+  go: 1.24.9
 linters:
-  disable-all: true
+  default: none
   enable:
     - errcheck
-    - gosimple
+    - gocritic
+    - gocyclo
     - govet
     - ineffassign
+    - misspell
     - staticcheck
+    - unconvert
     - unused
+  settings:
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+        - wrapperFunc
+        - sloppyReassign
+        - rangeValCopy
+      enabled-tags:
+        - diagnostic
+        - performance
+    gocyclo:
+      min-complexity: 32
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
     - gofmt
     - goimports
-    - misspell
-    - unconvert
-    - gocyclo
-    - gocritic
-
-run:
-  timeout: 5m
-  go: '1.24.9'
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/NVIDIA/gpuhealth
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
