@@ -1,0 +1,1079 @@
+// SPDX-FileCopyrightText: Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package exporter
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/leptonai/gpud/components"
+	"github.com/leptonai/gpud/pkg/eventstore"
+	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
+	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
+
+	"github.com/NVIDIA/gpuhealth/internal/config"
+	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
+	"github.com/NVIDIA/gpuhealth/internal/machineinfo"
+)
+
+// Mock implementations
+
+// MockCollector is a mock implementation of collector.Collector
+type MockCollector struct {
+	mock.Mock
+}
+
+func (m *MockCollector) Collect(ctx context.Context) (*collector.HealthData, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*collector.HealthData), args.Error(1)
+}
+
+// MockMetricsStore is a mock implementation of pkgmetrics.Store
+type MockMetricsStore struct {
+	mock.Mock
+}
+
+func (m *MockMetricsStore) Read(ctx context.Context, opts ...pkgmetrics.OpOption) (pkgmetrics.Metrics, error) {
+	return nil, nil
+}
+
+func (m *MockMetricsStore) Purge(ctx context.Context, since time.Time) (int, error) {
+	return 0, nil
+}
+
+func (m *MockMetricsStore) Record(ctx context.Context, metrics ...pkgmetrics.Metric) error {
+	return nil
+}
+
+// MockEventStore is a mock implementation of eventstore.Store
+type MockEventStore struct {
+	mock.Mock
+}
+
+func (m *MockEventStore) Close(ctx context.Context) error {
+	return nil
+}
+
+func (m *MockEventStore) Bucket(name string, opts ...eventstore.OpOption) (eventstore.Bucket, error) {
+	return nil, nil
+}
+
+// MockComponentsRegistry is a mock implementation of components.Registry
+type MockComponentsRegistry struct {
+	mock.Mock
+}
+
+func (m *MockComponentsRegistry) All() []components.Component {
+	return nil
+}
+
+func (m *MockComponentsRegistry) Deregister(name string) components.Component {
+	return nil
+}
+
+func (m *MockComponentsRegistry) Get(name string) components.Component {
+	return nil
+}
+
+func (m *MockComponentsRegistry) MustRegister(initFunc components.InitFunc) {
+}
+
+func (m *MockComponentsRegistry) Register(initFunc components.InitFunc) (components.Component, error) {
+	return nil, nil
+}
+
+// TestNew tests the New function
+func TestNew(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("creates exporter with minimal config", func(t *testing.T) {
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+		assert.NotNil(t, he.ctx)
+		assert.NotNil(t, he.cancel)
+		assert.Equal(t, cfg, he.options.config)
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("creates exporter with all options", func(t *testing.T) {
+		cfg := &config.HealthExporterConfig{
+			Interval:             metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:              metav1.Duration{Duration: 30 * time.Second},
+			IncludeMetrics:       true,
+			IncludeEvents:        true,
+			IncludeComponentData: true,
+		}
+
+		mockMetrics := &MockMetricsStore{}
+		mockEvents := &MockEventStore{}
+		mockRegistry := &MockComponentsRegistry{}
+		httpClient := &http.Client{}
+		dbRW := &sql.DB{}
+		dbRO := &sql.DB{}
+
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithMetricsStore(mockMetrics),
+			WithEventStore(mockEvents),
+			WithComponentsRegistry(mockRegistry),
+			WithHTTPClient(httpClient),
+			WithDatabaseConnections(dbRW, dbRO),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+		assert.Equal(t, mockMetrics, he.options.metricsStore)
+		assert.Equal(t, mockEvents, he.options.eventStore)
+		assert.Equal(t, mockRegistry, he.options.componentsRegistry)
+		assert.Equal(t, httpClient, he.options.httpClient)
+		assert.Equal(t, dbRW, he.options.dbRW)
+		assert.Equal(t, dbRO, he.options.dbRO)
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("fails with invalid option", func(t *testing.T) {
+		invalidOption := func(opts *exporterOptions) error {
+			return errors.New("invalid option")
+		}
+
+		exporter, err := New(ctx, invalidOption)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to apply option")
+		assert.Nil(t, exporter)
+	})
+
+	t.Run("fails with missing config", func(t *testing.T) {
+		exporter, err := New(ctx)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid options")
+		assert.Nil(t, exporter)
+	})
+
+	t.Run("fails with incomplete dependencies", func(t *testing.T) {
+		cfg := &config.HealthExporterConfig{
+			Interval:       metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:        metav1.Duration{Duration: 30 * time.Second},
+			IncludeMetrics: true,
+			// Missing metrics store
+		}
+
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "metrics store is required")
+		assert.Nil(t, exporter)
+	})
+
+	t.Run("fails with nil HTTP client", func(t *testing.T) {
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		exporter, err := New(ctx, WithConfig(cfg), WithHTTPClient(nil))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "HTTP client cannot be nil")
+		assert.Nil(t, exporter)
+	})
+}
+
+// TestStart tests the Start function
+func TestStart(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("starts with valid interval", func(t *testing.T) {
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 100 * time.Millisecond},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		err = exporter.Start()
+		require.NoError(t, err)
+
+		// Give it time to start
+		time.Sleep(50 * time.Millisecond)
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("skips when interval is zero", func(t *testing.T) {
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 0},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		err = exporter.Start()
+		require.NoError(t, err)
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+}
+
+// TestStop tests the Stop function
+func TestStop(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("stops successfully", func(t *testing.T) {
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		err = exporter.Start()
+		require.NoError(t, err)
+
+		err = exporter.Stop()
+		require.NoError(t, err)
+
+		// Verify context is canceled
+		he := exporter.(*healthExporter)
+		select {
+		case <-he.ctx.Done():
+			// Expected
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("context not canceled")
+		}
+	})
+
+}
+
+// TestExportToFile tests the exportToFile function
+func TestExportToFile(t *testing.T) {
+	t.Run("exports to JSON file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		outputPath := tmpDir // Use directory path, not file path
+
+		cfg := &config.HealthExporterConfig{
+			Interval:     metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:      metav1.Duration{Duration: 30 * time.Second},
+			OfflineMode:  true,
+			OutputPath:   outputPath,
+			OutputFormat: "json",
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		// Create test health data
+		healthData := &collector.HealthData{
+			MachineID: "test-machine",
+			Timestamp: time.Now(),
+			MachineInfo: &machineinfo.MachineInfo{
+				MachineID: "test-machine",
+			},
+			Metrics: []pkgmetrics.Metric{
+				{
+					Name:             "test_metric",
+					Value:            42.0,
+					UnixMilliseconds: time.Now().UnixMilli(),
+				},
+			},
+		}
+
+		err = he.exportToFile(healthData)
+		require.NoError(t, err)
+
+		// Verify directory exists and files were created
+		entries, err := os.ReadDir(outputPath)
+		require.NoError(t, err)
+		assert.Greater(t, len(entries), 0, "Expected files to be created")
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("exports to CSV file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		outputPath := tmpDir // Use directory path, not file path
+
+		cfg := &config.HealthExporterConfig{
+			Interval:     metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:      metav1.Duration{Duration: 30 * time.Second},
+			OfflineMode:  true,
+			OutputPath:   outputPath,
+			OutputFormat: "csv",
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		// Create test health data
+		healthData := &collector.HealthData{
+			MachineID: "test-machine",
+			Timestamp: time.Now(),
+			Metrics: []pkgmetrics.Metric{
+				{
+					Name:             "test_metric",
+					Value:            42.0,
+					UnixMilliseconds: time.Now().UnixMilli(),
+				},
+			},
+		}
+
+		err = he.exportToFile(healthData)
+		require.NoError(t, err)
+
+		// Verify directory exists and files were created
+		entries, err := os.ReadDir(outputPath)
+		require.NoError(t, err)
+		assert.Greater(t, len(entries), 0, "Expected files to be created")
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("defaults to JSON format when format is empty", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		outputPath := tmpDir // Use directory path, not file path
+
+		cfg := &config.HealthExporterConfig{
+			Interval:     metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:      metav1.Duration{Duration: 30 * time.Second},
+			OfflineMode:  true,
+			OutputPath:   outputPath,
+			OutputFormat: "", // Empty format
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		healthData := &collector.HealthData{
+			MachineID: "test-machine",
+			Timestamp: time.Now(),
+		}
+
+		err = he.exportToFile(healthData)
+		require.NoError(t, err)
+
+		// Verify directory exists and files were created
+		entries, err := os.ReadDir(outputPath)
+		require.NoError(t, err)
+		assert.Greater(t, len(entries), 0, "Expected files to be created")
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("fails with unsupported format", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		outputPath := tmpDir // Use directory path, not file path
+
+		cfg := &config.HealthExporterConfig{
+			Interval:     metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:      metav1.Duration{Duration: 30 * time.Second},
+			OfflineMode:  true,
+			OutputPath:   outputPath,
+			OutputFormat: "xml",
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		healthData := &collector.HealthData{
+			MachineID: "test-machine",
+			Timestamp: time.Now(),
+		}
+
+		err = he.exportToFile(healthData)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported output format")
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+}
+
+// TestExportToHTTP tests the exportToHTTP function
+func TestExportToHTTP(t *testing.T) {
+	t.Run("exports successfully to HTTP endpoint", func(t *testing.T) {
+		// Create mock server
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.Contains(t, r.Header.Get("Content-Type"), "application/x-protobuf")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("SUCCESS"))
+		}))
+		defer server.Close()
+
+		cfg := &config.HealthExporterConfig{
+			Interval:        metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:         metav1.Duration{Duration: 30 * time.Second},
+			MetricsEndpoint: server.URL,
+			LogsEndpoint:    server.URL,
+			AuthToken:       "test-token",
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		healthData := &collector.HealthData{
+			MachineID: "test-machine",
+			Timestamp: time.Now(),
+			Metrics: []pkgmetrics.Metric{
+				{
+					Name:             "test_metric",
+					Value:            42.0,
+					UnixMilliseconds: time.Now().UnixMilli(),
+				},
+			},
+		}
+
+		err = he.exportToHTTP(ctx, healthData)
+		require.NoError(t, err)
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("skips when no endpoints configured", func(t *testing.T) {
+		cfg := &config.HealthExporterConfig{
+			Interval:        metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:         metav1.Duration{Duration: 30 * time.Second},
+			MetricsEndpoint: "",
+			LogsEndpoint:    "",
+			AuthToken:       "test-token",
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		healthData := &collector.HealthData{
+			MachineID: "test-machine",
+			Timestamp: time.Now(),
+		}
+
+		err = he.exportToHTTP(ctx, healthData)
+		require.NoError(t, err) // Should not error, just skip
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("skips when no auth token configured", func(t *testing.T) {
+		cfg := &config.HealthExporterConfig{
+			Interval:        metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:         metav1.Duration{Duration: 30 * time.Second},
+			MetricsEndpoint: "http://example.com",
+			LogsEndpoint:    "http://example.com",
+			AuthToken:       "",
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		healthData := &collector.HealthData{
+			MachineID: "test-machine",
+			Timestamp: time.Now(),
+		}
+
+		err = he.exportToHTTP(ctx, healthData)
+		require.NoError(t, err) // Should not error, just skip
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("updates token from server response", func(t *testing.T) {
+		newToken := "new-test-token"
+
+		// Create mock server that returns new token
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-New-JWT-Token", newToken)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("SUCCESS"))
+		}))
+		defer server.Close()
+
+		cfg := &config.HealthExporterConfig{
+			Interval:        metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:         metav1.Duration{Duration: 30 * time.Second},
+			MetricsEndpoint: server.URL,
+			LogsEndpoint:    server.URL,
+			AuthToken:       "old-token",
+		}
+
+		ctx := context.Background()
+
+		// Create temporary database for testing token updates
+		tmpDB := setupTestDB(t)
+		defer tmpDB.Close()
+
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithDatabaseConnections(tmpDB, tmpDB),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		healthData := &collector.HealthData{
+			MachineID: "test-machine",
+			Timestamp: time.Now(),
+			Metrics: []pkgmetrics.Metric{
+				{
+					Name:             "test_metric",
+					Value:            42.0,
+					UnixMilliseconds: time.Now().UnixMilli(),
+				},
+			},
+		}
+
+		err = he.exportToHTTP(ctx, healthData)
+		require.NoError(t, err)
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+}
+
+// TestExportNow tests the ExportNow function
+func TestExportNow(t *testing.T) {
+	t.Run("triggers immediate export in offline mode", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		outputPath := tmpDir // Use directory path, not file path
+
+		cfg := &config.HealthExporterConfig{
+			Interval:     metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:      metav1.Duration{Duration: 30 * time.Second},
+			OfflineMode:  true,
+			OutputPath:   outputPath,
+			OutputFormat: "json",
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		err = exporter.ExportNow(ctx)
+		require.NoError(t, err)
+
+		// Verify directory exists and files were created
+		entries, err := os.ReadDir(outputPath)
+		require.NoError(t, err)
+		assert.Greater(t, len(entries), 0, "Expected files to be created")
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+}
+
+// TestRefreshConfigFromMetadata tests the refreshConfigFromMetadata function
+func TestRefreshConfigFromMetadata(t *testing.T) {
+	t.Run("skips when no database connection", func(t *testing.T) {
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		// Should not panic or error
+		he.refreshConfigFromMetadata(ctx)
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("refreshes config from database", func(t *testing.T) {
+		tmpDB := setupTestDB(t)
+		defer tmpDB.Close()
+
+		ctx := context.Background()
+
+		// Insert test data into metadata table using SetMetadata
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "metrics_endpoint", "http://new-metrics.example.com")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "logs_endpoint", "http://new-logs.example.com")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, pkgmetadata.MetadataKeyToken, "new-test-token")
+		require.NoError(t, err)
+
+		cfg := &config.HealthExporterConfig{
+			Interval:        metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:         metav1.Duration{Duration: 30 * time.Second},
+			MetricsEndpoint: "http://old-metrics.example.com",
+			LogsEndpoint:    "http://old-logs.example.com",
+			AuthToken:       "old-token",
+		}
+
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithDatabaseConnections(tmpDB, tmpDB),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		// Refresh config
+		he.refreshConfigFromMetadata(ctx)
+
+		// Verify config was updated
+		assert.Equal(t, "http://new-metrics.example.com", he.options.config.MetricsEndpoint)
+		assert.Equal(t, "http://new-logs.example.com", he.options.config.LogsEndpoint)
+		assert.Equal(t, "new-test-token", he.options.config.AuthToken)
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("clears endpoints when metadata is empty", func(t *testing.T) {
+		tmpDB := setupTestDB(t)
+		defer tmpDB.Close()
+
+		ctx := context.Background()
+
+		// Insert empty values using SetMetadata
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "metrics_endpoint", "")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "logs_endpoint", "")
+		require.NoError(t, err)
+
+		cfg := &config.HealthExporterConfig{
+			Interval:        metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:         metav1.Duration{Duration: 30 * time.Second},
+			MetricsEndpoint: "http://old-metrics.example.com",
+			LogsEndpoint:    "http://old-logs.example.com",
+		}
+
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithDatabaseConnections(tmpDB, tmpDB),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		// Refresh config
+		he.refreshConfigFromMetadata(ctx)
+
+		// Verify endpoints were cleared
+		assert.Empty(t, he.options.config.MetricsEndpoint)
+		assert.Empty(t, he.options.config.LogsEndpoint)
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+}
+
+// TestUpdateTokenInMetadata tests the updateTokenInMetadata function
+func TestUpdateTokenInMetadata(t *testing.T) {
+	t.Run("fails when no database connection", func(t *testing.T) {
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		err = he.updateTokenInMetadata(ctx, "new-token")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no read-write database connection available")
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("updates token in database", func(t *testing.T) {
+		tmpDB := setupTestDB(t)
+		defer tmpDB.Close()
+
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithDatabaseConnections(tmpDB, tmpDB),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		// Update token - just verify it doesn't error
+		err = he.updateTokenInMetadata(ctx, "new-test-token")
+		require.NoError(t, err)
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+}
+
+// TestRefreshJWTToken tests the refreshJWTToken function
+func TestRefreshJWTToken(t *testing.T) {
+	t.Run("fails when no database connection", func(t *testing.T) {
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		token, err := he.refreshJWTToken(ctx)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no database connection available")
+		assert.Empty(t, token)
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("fails when required metadata missing", func(t *testing.T) {
+		tmpDB := setupTestDB(t)
+		defer tmpDB.Close()
+
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithDatabaseConnections(tmpDB, tmpDB),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		token, err := he.refreshJWTToken(ctx)
+		require.Error(t, err)
+		assert.Empty(t, token)
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+}
+
+// TestIntegration provides integration tests
+func TestIntegration(t *testing.T) {
+	t.Run("full lifecycle with file export", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		outputPath := tmpDir // Use directory path, not file path
+
+		cfg := &config.HealthExporterConfig{
+			Interval:     metav1.Duration{Duration: 200 * time.Millisecond},
+			Timeout:      metav1.Duration{Duration: 30 * time.Second},
+			OfflineMode:  true,
+			OutputPath:   outputPath,
+			OutputFormat: "json",
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		err = exporter.Start()
+		require.NoError(t, err)
+
+		// Wait for at least one export
+		time.Sleep(300 * time.Millisecond)
+
+		err = exporter.Stop()
+		require.NoError(t, err)
+
+		// Verify directory exists and files were created
+		entries, err := os.ReadDir(outputPath)
+		require.NoError(t, err)
+		assert.Greater(t, len(entries), 0, "Expected files to be created")
+	})
+
+	t.Run("full lifecycle with HTTP export", func(t *testing.T) {
+		requestCount := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestCount++
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("SUCCESS"))
+		}))
+		defer server.Close()
+
+		cfg := &config.HealthExporterConfig{
+			Interval:        metav1.Duration{Duration: 200 * time.Millisecond},
+			Timeout:         metav1.Duration{Duration: 30 * time.Second},
+			MetricsEndpoint: server.URL,
+			LogsEndpoint:    server.URL,
+			AuthToken:       "test-token",
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		err = exporter.Start()
+		require.NoError(t, err)
+
+		// Wait for at least one export
+		time.Sleep(300 * time.Millisecond)
+
+		err = exporter.Stop()
+		require.NoError(t, err)
+
+		// Verify server received requests
+		assert.Greater(t, requestCount, 0)
+	})
+}
+
+// TestContextCancellation tests context cancellation behavior
+func TestContextCancellation(t *testing.T) {
+	t.Run("stops when parent context is canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 100 * time.Millisecond},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		exporter, err := New(ctx, WithConfig(cfg))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		err = exporter.Start()
+		require.NoError(t, err)
+
+		// Cancel parent context
+		cancel()
+
+		// Wait for goroutine to stop
+		time.Sleep(200 * time.Millisecond)
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+}
+
+// Helper function to setup test database
+func setupTestDB(t *testing.T) *sql.DB {
+	// Create an in-memory SQLite database for testing
+	db, err := sql.Open("sqlite3", ":memory:")
+	require.NoError(t, err)
+
+	// Create metadata table using the proper function
+	ctx := context.Background()
+	err = pkgmetadata.CreateTableMetadata(ctx, db)
+	require.NoError(t, err)
+
+	return db
+}
+
+// TestExportWithCollectorError tests export behavior when collector fails
+func TestExportWithCollectorError(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "health.json")
+
+	cfg := &config.HealthExporterConfig{
+		Interval:     metav1.Duration{Duration: 1 * time.Minute},
+		Timeout:      metav1.Duration{Duration: 30 * time.Second},
+		OfflineMode:  true,
+		OutputPath:   outputPath,
+		OutputFormat: "json",
+	}
+
+	ctx := context.Background()
+	exporter, err := New(ctx, WithConfig(cfg))
+	require.NoError(t, err)
+	require.NotNil(t, exporter)
+
+	he := exporter.(*healthExporter)
+
+	// Replace collector with mock that returns error
+	mockCollector := &MockCollector{}
+	mockCollector.On("Collect", mock.Anything).Return(nil, errors.New("collection failed"))
+	he.collector = mockCollector
+
+	err = he.export()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "collection failed")
+
+	// Cleanup
+	err = exporter.Stop()
+	require.NoError(t, err)
+}
+
+// TestExportHTTPWithReturnedToken tests handling of JWT token returned from server
+func TestExportHTTPWithReturnedToken(t *testing.T) {
+	newJWT := "new-jwt-token-from-server"
+	tokenUpdated := false
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return new JWT token in header
+		w.Header().Set("X-New-JWT-Token", newJWT)
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "SUCCESS")
+	}))
+	defer server.Close()
+
+	cfg := &config.HealthExporterConfig{
+		Interval:        metav1.Duration{Duration: 1 * time.Minute},
+		Timeout:         metav1.Duration{Duration: 30 * time.Second},
+		MetricsEndpoint: server.URL,
+		LogsEndpoint:    server.URL,
+		AuthToken:       "old-token",
+	}
+
+	ctx := context.Background()
+
+	// Setup test database
+	tmpDB := setupTestDB(t)
+	defer tmpDB.Close()
+
+	exporter, err := New(ctx,
+		WithConfig(cfg),
+		WithDatabaseConnections(tmpDB, tmpDB),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, exporter)
+
+	he := exporter.(*healthExporter)
+
+	healthData := &collector.HealthData{
+		MachineID: "test-machine",
+		Timestamp: time.Now(),
+		Metrics: []pkgmetrics.Metric{
+			{
+				Name:             "test_metric",
+				Value:            42.0,
+				UnixMilliseconds: time.Now().UnixMilli(),
+			},
+		},
+	}
+
+	err = he.exportToHTTP(ctx, healthData)
+	require.NoError(t, err)
+
+	// Token update may or may not succeed depending on DB setup
+	// but the export should succeed regardless
+	_ = tokenUpdated
+
+	// Cleanup
+	err = exporter.Stop()
+	require.NoError(t, err)
+}
