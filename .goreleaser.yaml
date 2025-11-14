@@ -56,11 +56,10 @@ builds:
 # Archive configuration
 archives:
   - id: gpuhealth-archive
-    name_template: "gpuhealth_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "gpuhealth-{{ .Os }}-{{ if eq .Arch \"amd64\" }}x86_64{{ else if eq .Arch \"arm64\" }}sbsa{{ else }}{{ .Arch }}{{ end }}-{{ .Version }}"
+    wrap_in_directory: gpuhealth
     files:
-      - README.md
       - LICENSE
-      - CONTRIBUTING.md
 
 # Linux package configuration
 nfpms:
@@ -150,8 +149,10 @@ checksum:
   name_template: 'checksums.txt'
 
 # Snapshot configuration
+# Snapshot builds get a suffix with commit hash
+# These are for testing only and NOT uploaded to Artifactory/kitmaker
 snapshot:
-  version_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-{{ .ShortCommit }}"
 
 # GitHub release configuration
 release:
