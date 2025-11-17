@@ -532,7 +532,7 @@ func TestExportToHTTP(t *testing.T) {
 		}
 
 		err = he.exportToHTTP(ctx, healthData)
-		require.NoError(t, err) // Should not error, just skip
+		require.NoError(t, err) // Should not error, just skip gracefully
 
 		// Cleanup
 		err = exporter.Stop()
@@ -561,7 +561,7 @@ func TestExportToHTTP(t *testing.T) {
 		}
 
 		err = he.exportToHTTP(ctx, healthData)
-		require.NoError(t, err) // Should not error, just skip
+		require.NoError(t, err) // Should not error, just skip gracefully
 
 		// Cleanup
 		err = exporter.Stop()
