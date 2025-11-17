@@ -143,7 +143,6 @@ func (e *healthExporter) Start() error {
 				if err := e.export(); err != nil {
 					log.Logger.Errorw("Export failed", "error", err)
 				} else {
-					log.Logger.Infow("Successfully exported health data", "timestamp", time.Now().UTC())
 					e.lastExport = time.Now().UTC()
 				}
 			}
@@ -213,6 +212,8 @@ func (e *healthExporter) exportToFile(data *collector.HealthData) error {
 		return fmt.Errorf("unsupported output format: %s", outputFormat)
 	}
 
+	// Log the timestamp of the export on successful export
+	log.Logger.Infow("Successfully exported health data to file", "timestamp", time.Now().UTC())
 	return nil
 }
 
@@ -233,6 +234,9 @@ func (e *healthExporter) exportToHTTP(ctx context.Context, data *collector.Healt
 	if err != nil {
 		return fmt.Errorf("failed to send data: %w", err)
 	}
+
+	// Log the timestamp of the export on successful export - this won't be logged if not enrolled
+	log.Logger.Infow("Successfully exported health data to", "timestamp", time.Now().UTC())
 
 	// If we received a new JWT token, update it in metadata and config
 	if newToken != "" && newToken != e.options.config.AuthToken {

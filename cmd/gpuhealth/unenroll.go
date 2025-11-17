@@ -55,8 +55,8 @@ func unenrollCommand(c *cli.Context) error {
 
 // removeEnrollmentMetadata removes all enrollment-related metadata from the database
 func removeEnrollmentMetadata(ctx context.Context, dbRW *sql.DB) error {
-	// List of metadata keys to clear (set to empty string)
-	keysToClear := []string{
+	// List of metadata keys to delete
+	keysToDelete := []string{
 		pkgmetadata.MetadataKeyToken,
 		"sak_token",
 		"enroll_endpoint",
@@ -65,15 +65,24 @@ func removeEnrollmentMetadata(ctx context.Context, dbRW *sql.DB) error {
 		"nonce_endpoint",
 	}
 
-	// Clear each metadata entry by setting it to empty string
-	for _, key := range keysToClear {
-		if err := pkgmetadata.SetMetadata(ctx, dbRW, key, ""); err != nil {
-			log.Logger.Errorw("Failed to clear metadata key", "key", key, "error", err)
-			return fmt.Errorf("failed to clear metadata key %s: %w", key, err)
-		} else {
-			log.Logger.Infow("Cleared metadata key", "key", key)
-		}
+	// Build batch delete query
+	query := "DELETE FROM gpud_metadata WHERE key IN (?, ?, ?, ?, ?, ?)"
+
+	// Convert string slice to []interface{} for ExecContext
+	args := make([]interface{}, len(keysToDelete))
+	for i, key := range keysToDelete {
+		args[i] = key
 	}
+
+	// Execute batch delete
+	result, err := dbRW.ExecContext(ctx, query, args...)
+	if err != nil {
+		log.Logger.Errorw("Failed to delete enrollment metadata", "error", err)
+		return fmt.Errorf("failed to delete enrollment metadata: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	log.Logger.Infow("Deleted enrollment metadata", "rows_deleted", rowsAffected)
 
 	return nil
 }
