@@ -263,7 +263,14 @@ func (c *collector) collectComponentData(data *HealthData) error {
 			if extraInfoMap, ok := extraInfo.(map[string]interface{}); ok {
 				if dataValue, exists := extraInfoMap["data"]; exists {
 					extraInfo = dataValue
+				} else {
+					// Empty map case for extra info
+					// Without this, the extra info is serialized as "map[]" which is invalid JSON/JSONB
+					extraInfo = "{}"
 				}
+			} else {
+				// Could be nil or not a map
+				extraInfo = "{}"
 			}
 		}
 
