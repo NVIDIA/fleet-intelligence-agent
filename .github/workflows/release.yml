@@ -67,7 +67,7 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
           COMMIT_SHORT=$(git rev-parse --short=7 HEAD)
           BRANCH="release"
-          SOURCE="${{ github.repository }}"
+          SOURCE="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz"
           
           # Check if version contains hyphen (pre-release)
           if [[ "$VERSION" == *"-"* ]]; then
@@ -107,7 +107,7 @@ jobs:
         run: |
           jf rt upload \
             "dist/gpuhealth-linux-x86_64-${{ steps.version.outputs.version }}.tar.gz" \
-            "sw-dgxc-gpuhealth-generic-local/" \
+            "sw-dgxc-gpuhealth-generic-local/KITMAKER/release/gpuhealth/linux-x86_64/${{ steps.version.outputs.version }}/" \
             --flat=true \
             --target-props "component_name=gpuhealth;branch=${{ steps.version.outputs.branch }};os=linux;arch=x86_64;platform=linux-x86_64;version=${{ steps.version.outputs.version }};changelist=${{ steps.version.outputs.commit }};source=${{ steps.version.outputs.source }};category=toolkit"
       
@@ -116,7 +116,7 @@ jobs:
         run: |
           jf rt upload \
             "dist/gpuhealth-linux-sbsa-${{ steps.version.outputs.version }}.tar.gz" \
-            "sw-dgxc-gpuhealth-generic-local/" \
+            "sw-dgxc-gpuhealth-generic-local/KITMAKER/release/gpuhealth/linux-sbsa/${{ steps.version.outputs.version }}/" \
             --flat=true \
             --target-props "component_name=gpuhealth;branch=${{ steps.version.outputs.branch }};os=linux;arch=sbsa;platform=linux-sbsa;version=${{ steps.version.outputs.version }};changelist=${{ steps.version.outputs.commit }};source=${{ steps.version.outputs.source }};category=toolkit"
       
@@ -134,5 +134,7 @@ jobs:
             echo "Artifactory upload skipped (pre-release versions not uploaded to kitmaker)" >> $GITHUB_STEP_SUMMARY
           else
             echo "GitHub release created" >> $GITHUB_STEP_SUMMARY
-            echo "Artifacts uploaded to Artifactory: \`sw-dgxc-gpuhealth-generic-local/\`" >> $GITHUB_STEP_SUMMARY
+            echo "Artifacts uploaded to Artifactory:" >> $GITHUB_STEP_SUMMARY
+            echo "- \`sw-dgxc-gpuhealth-generic-local/KITMAKER/release/gpuhealth/linux-x86_64/${{ steps.version.outputs.version }}/\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`sw-dgxc-gpuhealth-generic-local/KITMAKER/release/gpuhealth/linux-sbsa/${{ steps.version.outputs.version }}/\`" >> $GITHUB_STEP_SUMMARY
           fi
