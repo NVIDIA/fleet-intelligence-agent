@@ -31,12 +31,12 @@ import (
 	componentsacceleratornvidiainfiniband "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband"
 	nvidiacommon "github.com/leptonai/gpud/pkg/config/common"
 	"github.com/leptonai/gpud/pkg/log"
-	pkgmachineinfo "github.com/leptonai/gpud/pkg/machine-info"
 	nvidiadcgm "github.com/leptonai/gpud/pkg/nvidia-query/dcgm"
 	nvidiainfiniband "github.com/leptonai/gpud/pkg/nvidia-query/infiniband"
 	infinibandclass "github.com/leptonai/gpud/pkg/nvidia-query/infiniband/class"
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
 
+	"github.com/NVIDIA/gpuhealth/internal/machineinfo"
 	"github.com/NVIDIA/gpuhealth/internal/registry"
 )
 
@@ -110,7 +110,7 @@ func Scan(ctx context.Context, opts ...Option) error {
 		return err
 	}
 
-	mi, err := pkgmachineinfo.GetMachineInfo(nvmlInstance)
+	mi, err := machineinfo.GetMachineInfo(nvmlInstance)
 	if err != nil {
 		return err
 	}
