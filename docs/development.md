@@ -11,7 +11,7 @@ cd gpuhealth
 
 ### Prerequisites
 
-- **Go**: 1.24.9
+- **Go**: 1.24.10
 - **GoReleaser**: For building packages (install from [goreleaser.com](https://goreleaser.com/install/))
 - **For ARM64 cross-compilation** (optional): `gcc-aarch64-linux-gnu` and `g++-aarch64-linux-gnu`
 
