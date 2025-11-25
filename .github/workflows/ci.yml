@@ -11,6 +11,7 @@ env:
   GOPRIVATE: gitlab-master.nvidia.com/*
   GONOPROXY: gitlab-master.nvidia.com/*
   GONOSUMDB: gitlab-master.nvidia.com/*
+  GOCACHE: /tmp/go-build-cache
 
 jobs:
   secret-detection:
@@ -69,6 +70,12 @@ jobs:
         run: |
           git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
 
+      - name: Clean Go cache
+        run: |
+          go clean -cache -modcache -testcache || true
+          rm -rf $GOCACHE || true
+          mkdir -p $GOCACHE
+
       - name: Download dependencies
         run: go mod download
 
@@ -101,6 +108,12 @@ jobs:
       - name: Configure Git for private repositories
         run: |
           git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
+
+      - name: Clean Go cache
+        run: |
+          go clean -cache -modcache -testcache || true
+          rm -rf $GOCACHE || true
+          mkdir -p $GOCACHE
 
       - name: Download dependencies
         run: go mod download
@@ -141,11 +154,11 @@ jobs:
         run: |
           git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
 
-      - name: Install cross-compilation tools (ARM64)
-        if: matrix.goarch == 'arm64'
+      - name: Clean Go cache
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          go clean -cache -modcache -testcache || true
+          rm -rf $GOCACHE || true
+          mkdir -p $GOCACHE
 
       - name: Download dependencies
         run: go mod download
@@ -197,6 +210,12 @@ jobs:
       - name: Configure Git for private repositories
         run: |
           git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
+
+      - name: Clean Go cache
+        run: |
+          go clean -cache -modcache -testcache || true
+          rm -rf $GOCACHE || true
+          mkdir -p $GOCACHE
 
       - name: Download dependencies
         run: go mod download
