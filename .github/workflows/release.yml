@@ -17,7 +17,7 @@ permissions:
 jobs:
   release:
     name: Create Release
-    runs-on: self-hosted
+    runs-on: [self-hosted, rocky8]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -32,11 +32,6 @@ jobs:
       - name: Configure Git for private repositories
         run: |
           git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
-
-      - name: Install cross-compilation tools for ARM64
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
       - name: Download dependencies
         run: go mod download
