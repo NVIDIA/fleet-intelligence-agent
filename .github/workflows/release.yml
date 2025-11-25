@@ -10,6 +10,7 @@ env:
   GOPRIVATE: gitlab-master.nvidia.com/*
   GONOPROXY: gitlab-master.nvidia.com/*
   GONOSUMDB: gitlab-master.nvidia.com/*
+  GOCACHE: /tmp/go-build-cache
 
 permissions:
   contents: write  # Needed for creating GitHub releases
