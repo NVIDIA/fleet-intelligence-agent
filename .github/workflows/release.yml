@@ -88,13 +88,12 @@ jobs:
       - name: Configure JFrog CLI
         if: steps.version.outputs.is_prerelease == 'false'
         run: |
-          if ! jf config show nvidia &>/dev/null; then
-            jf config add nvidia \
-              --url="${{ secrets.ARTIFACTORY_URL }}" \
-              --user="${{ secrets.ARTIFACTORY_USER }}" \
-              --password="${{ secrets.ARTIFACTORY_TOKEN }}" \
-              --interactive=false
-          fi
+          jf config add nvidia \
+            --url="${{ secrets.ARTIFACTORY_URL }}" \
+            --user="${{ secrets.ARTIFACTORY_USER }}" \
+            --access-token="${{ secrets.ARTIFACTORY_TOKEN }}" \
+            --interactive=false \
+            --overwrite
           jf config use nvidia
       
       - name: Upload x86_64 tarball to Artifactory
