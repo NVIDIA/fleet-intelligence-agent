@@ -81,9 +81,14 @@ jobs:
       
       - name: Setup JFrog CLI
         if: steps.version.outputs.is_prerelease == 'false'
-        uses: jfrog/setup-jfrog-cli@v4
-        with:
-          version: latest
+        run: |
+          if ! command -v jf &> /dev/null; then
+            echo "Installing JFrog CLI..."
+            curl -fL https://install.jfrog.io | sh
+          else
+            echo "JFrog CLI already installed"
+          fi
+          jf --version
       
       - name: Configure JFrog CLI
         if: steps.version.outputs.is_prerelease == 'false'
