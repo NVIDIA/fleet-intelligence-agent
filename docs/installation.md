@@ -33,12 +33,20 @@ sudo apt-get update
 ### RHEL/Rocky/AlmaLinux Systems
 
 ```bash
+# RHEL/Rocky/AlmaLinux 8 (x86_64)
+sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
+sudo dnf clean all
+
 # RHEL/Rocky/AlmaLinux 9 (x86_64)
 sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo
 sudo dnf clean all
 
 # RHEL/Rocky/AlmaLinux 10 (x86_64)
 sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel10/x86_64/cuda-rhel10.repo
+sudo dnf clean all
+
+# RHEL/Rocky/AlmaLinux 8 (ARM64)
+sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/sbsa/cuda-rhel8.repo
 sudo dnf clean all
 
 # RHEL/Rocky/AlmaLinux 9 (ARM64)
@@ -111,9 +119,9 @@ sudo cp bin/gpuhealth /usr/local/bin/
 | OS Family | Supported Versions | Architecture |
 |-----------|-------------------|--------------|
 | Ubuntu | 22.04, 24.04 | x86_64, ARM64 |
-| RHEL | 9, 10 | x86_64, ARM64 |
-| Rocky Linux | 9, 10 | x86_64, ARM64 |
-| AlmaLinux | 9, 10 | x86_64, ARM64 |
+| RHEL | 8, 9, 10 | x86_64, ARM64 |
+| Rocky Linux | 8, 9, 10 | x86_64, ARM64 |
+| AlmaLinux | 8, 9, 10 | x86_64, ARM64 |
 | Amazon Linux | 2023 | x86_64, ARM64 |
 
 **Note**: The agent may run on other Linux distributions, but only the distributions listed above are officially supported and tested. Compatibility with other distributions is not guaranteed.
