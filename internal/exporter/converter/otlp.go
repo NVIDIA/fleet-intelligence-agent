@@ -547,7 +547,7 @@ func (c *otlpConverter) convertAttestationToOTLPLogs(data *collector.HealthData)
 	}
 
 	summaryLogRecord := &logsv1.LogRecord{
-		TimeUnixNano:   uint64(attestation.NonceRefreshTimestamp.UnixNano()),
+		TimeUnixNano:   uint64(data.Timestamp.UnixNano()),
 		SeverityNumber: severity,
 		SeverityText:   severityText,
 		Body: &commonv1.AnyValue{
@@ -617,7 +617,7 @@ func (c *otlpConverter) convertAttestationToOTLPLogs(data *collector.HealthData)
 		}
 
 		evidenceLogRecord := &logsv1.LogRecord{
-			TimeUnixNano:   uint64(attestation.NonceRefreshTimestamp.UnixNano()),
+			TimeUnixNano:   uint64(data.Timestamp.UnixNano()),
 			SeverityNumber: logsv1.SeverityNumber_SEVERITY_NUMBER_INFO,
 			SeverityText:   "INFO",
 			Body: &commonv1.AnyValue{
