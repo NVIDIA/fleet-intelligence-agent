@@ -89,7 +89,7 @@ goreleaser release --snapshot --clean
 
 This creates in the `dist/` directory:
 - `.deb` packages for Debian/Ubuntu (amd64, arm64)
-- `.rpm` packages for RHEL/Rocky/AlmaLinux (x86_64, aarch64)
+- `.rpm` packages for RHEL/Rocky/AlmaLinux 8, 9, 10 (x86_64, aarch64)
 - Binary tarballs for direct installation
 - Checksums and metadata
 
@@ -108,7 +108,7 @@ git push origin v0.2.0
 The GitHub Actions workflow will:
 - Build packages for all supported platforms (amd64, arm64)
 - Create `.deb` packages for Ubuntu
-- Create `.rpm` packages for RHEL/Rocky/AlmaLinux
+- Create `.rpm` packages for RHEL/Rocky/AlmaLinux 8, 9, 10
 - Generate binary tarballs
 - Publish the release with all artifacts to GitHub Releases
 
