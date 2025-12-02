@@ -494,7 +494,7 @@ func TestDefaultWithHealthExporter(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.NotNil(t, cfg.HealthExporter)
-		assert.True(t, cfg.HealthExporter.AttestationEnabled)
+		assert.False(t, cfg.HealthExporter.AttestationEnabled) // Attestation should be disabled by default
 		assert.Equal(t, metav1.Duration{Duration: 24 * time.Hour}, cfg.HealthExporter.AttestationInterval)
 		assert.Equal(t, metav1.Duration{Duration: 1 * time.Minute}, cfg.HealthExporter.Interval)
 		assert.Equal(t, metav1.Duration{Duration: 30 * time.Second}, cfg.HealthExporter.Timeout)

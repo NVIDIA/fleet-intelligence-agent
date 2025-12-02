@@ -116,6 +116,16 @@ func configureHealthExporterFromEnv(cfg *config.Config) error {
 		}
 	}
 
+	// GPUHEALTH_ATTESTATION_ENABLED - Enable/disable attestation
+	if attestationEnabled := os.Getenv("GPUHEALTH_ATTESTATION_ENABLED"); attestationEnabled != "" {
+		if val, err := strconv.ParseBool(attestationEnabled); err == nil {
+			cfg.HealthExporter.AttestationEnabled = val
+			log.Logger.Infow("set attestation enabled from env", "attestation_enabled", val)
+		} else {
+			return fmt.Errorf("invalid GPUHEALTH_ATTESTATION_ENABLED value: %v", attestationEnabled)
+		}
+	}
+
 	// GPUHEALTH_ATTESTATION_INTERVAL - Attestation interval
 	if interval := os.Getenv("GPUHEALTH_ATTESTATION_INTERVAL"); interval != "" {
 		if duration, err := time.ParseDuration(interval); err == nil {
