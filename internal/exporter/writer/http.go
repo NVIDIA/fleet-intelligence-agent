@@ -93,7 +93,7 @@ func (w *httpWriter) Send(ctx context.Context, data *collector.HealthData, metri
 			return "", fmt.Errorf("failed to marshal OTLP metrics data: %w", err)
 		}
 
-		token, err := w.sendOTLPRequestWithRetry(ctx, metricsBytes, "metrics", data.CollectionID, metricsEndpoint, maxRetries, authToken)
+		token, err := w.sendOTLPRequestWithRetry(ctx, metricsBytes, "metrics", data.CollectionID, data.MachineID, metricsEndpoint, maxRetries, authToken)
 		if err != nil {
 			log.Logger.Errorw("Failed to send metrics data after all retries",
 				"collection_id", data.CollectionID,
@@ -112,7 +112,7 @@ func (w *httpWriter) Send(ctx context.Context, data *collector.HealthData, metri
 			return newToken, fmt.Errorf("failed to marshal OTLP logs data: %w", err)
 		}
 
-		token, err := w.sendOTLPRequestWithRetry(ctx, logsBytes, "logs", data.CollectionID, logsEndpoint, maxRetries, authToken)
+		token, err := w.sendOTLPRequestWithRetry(ctx, logsBytes, "logs", data.CollectionID, data.MachineID, logsEndpoint, maxRetries, authToken)
 		if err != nil {
 			return newToken, fmt.Errorf("failed to send critical logs data (includes events): %w", err)
 		} else if token != "" {
@@ -125,7 +125,7 @@ func (w *httpWriter) Send(ctx context.Context, data *collector.HealthData, metri
 }
 
 // sendOTLPRequestWithRetry sends the OTLP data with retry logic
-func (w *httpWriter) sendOTLPRequestWithRetry(ctx context.Context, reqData []byte, dataType, collectionID, endpoint string, maxRetries int, authToken string) (string, error) {
+func (w *httpWriter) sendOTLPRequestWithRetry(ctx context.Context, reqData []byte, dataType, collectionID, machineID, endpoint string, maxRetries int, authToken string) (string, error) {
 	if maxRetries <= 0 {
 		maxRetries = 1 // At least one attempt
 	}
@@ -135,7 +135,7 @@ func (w *httpWriter) sendOTLPRequestWithRetry(ctx context.Context, reqData []byt
 	jwtRefreshAttempted := false
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		token, err := w.sendOTLPRequest(ctx, reqData, dataType, collectionID, endpoint, currentAuthToken)
+		token, err := w.sendOTLPRequest(ctx, reqData, dataType, collectionID, machineID, endpoint, currentAuthToken)
 		if err == nil {
 			if attempt > 1 {
 				log.Logger.Infow("Request succeeded after retries",
@@ -210,14 +210,8 @@ func (w *httpWriter) sendOTLPRequestWithRetry(ctx context.Context, reqData []byt
 }
 
 // sendOTLPRequest sends a single OTLP request
-func (w *httpWriter) sendOTLPRequest(ctx context.Context, reqData []byte, dataType, collectionID, endpoint string, authToken string) (string, error) {
+func (w *httpWriter) sendOTLPRequest(ctx context.Context, reqData []byte, dataType, collectionID, machineID, endpoint string, authToken string) (string, error) {
 	contentType := "application/x-protobuf"
-
-	// Get machine ID for HTTP header
-	machineID, err := collector.GetMachineID(ctx)
-	if err != nil {
-		return "", fmt.Errorf("failed to get machine ID: %w", err)
-	}
 
 	// Create HTTP request
 	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewBuffer(reqData))
