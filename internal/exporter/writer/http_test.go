@@ -604,7 +604,7 @@ func TestHTTPWriter_sendOTLPRequest(t *testing.T) {
 	writer := NewHTTPWriter(httpClient, otlpConverter).(*httpWriter)
 
 	ctx := context.Background()
-	token, err := writer.sendOTLPRequest(ctx, reqData, "metrics", "test-collection-id", server.URL, "test-token")
+	token, err := writer.sendOTLPRequest(ctx, reqData, "metrics", "test-collection-id", "test-machine-id", server.URL, "test-token")
 
 	require.NoError(t, err)
 	assert.Empty(t, token)
