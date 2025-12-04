@@ -121,7 +121,7 @@ func TestNew(t *testing.T) {
 			Timeout:  metav1.Duration{Duration: 30 * time.Second},
 		}
 
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -158,6 +158,7 @@ func TestNew(t *testing.T) {
 			WithComponentsRegistry(mockRegistry),
 			WithHTTPClient(httpClient),
 			WithDatabaseConnections(dbRW, dbRO),
+			WithMachineID("test-machine-id"),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
@@ -201,7 +202,7 @@ func TestNew(t *testing.T) {
 			// Missing metrics store
 		}
 
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "metrics store is required")
 		assert.Nil(t, exporter)
@@ -213,7 +214,7 @@ func TestNew(t *testing.T) {
 			Timeout:  metav1.Duration{Duration: 30 * time.Second},
 		}
 
-		exporter, err := New(ctx, WithConfig(cfg), WithHTTPClient(nil))
+		exporter, err := New(ctx, WithConfig(cfg), WithHTTPClient(nil), WithMachineID("test-machine-id"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "HTTP client cannot be nil")
 		assert.Nil(t, exporter)
@@ -230,7 +231,7 @@ func TestStart(t *testing.T) {
 			Timeout:  metav1.Duration{Duration: 30 * time.Second},
 		}
 
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -251,7 +252,7 @@ func TestStart(t *testing.T) {
 			Timeout:  metav1.Duration{Duration: 30 * time.Second},
 		}
 
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -275,7 +276,7 @@ func TestStop(t *testing.T) {
 			Timeout:  metav1.Duration{Duration: 30 * time.Second},
 		}
 
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -312,7 +313,7 @@ func TestExportToFile(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -360,7 +361,7 @@ func TestExportToFile(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -405,7 +406,7 @@ func TestExportToFile(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -442,7 +443,7 @@ func TestExportToFile(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -484,7 +485,7 @@ func TestExportToHTTP(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -520,7 +521,7 @@ func TestExportToHTTP(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -549,7 +550,7 @@ func TestExportToHTTP(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -596,6 +597,7 @@ func TestExportToHTTP(t *testing.T) {
 		exporter, err := New(ctx,
 			WithConfig(cfg),
 			WithDatabaseConnections(tmpDB, tmpDB),
+			WithMachineID("test-machine-id"),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
@@ -638,7 +640,7 @@ func TestExportNow(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -665,7 +667,7 @@ func TestRefreshConfigFromMetadata(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -704,6 +706,7 @@ func TestRefreshConfigFromMetadata(t *testing.T) {
 		exporter, err := New(ctx,
 			WithConfig(cfg),
 			WithDatabaseConnections(tmpDB, tmpDB),
+			WithMachineID("test-machine-id"),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
@@ -745,6 +748,7 @@ func TestRefreshConfigFromMetadata(t *testing.T) {
 		exporter, err := New(ctx,
 			WithConfig(cfg),
 			WithDatabaseConnections(tmpDB, tmpDB),
+			WithMachineID("test-machine-id"),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
@@ -773,7 +777,7 @@ func TestUpdateTokenInMetadata(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -801,6 +805,7 @@ func TestUpdateTokenInMetadata(t *testing.T) {
 		exporter, err := New(ctx,
 			WithConfig(cfg),
 			WithDatabaseConnections(tmpDB, tmpDB),
+			WithMachineID("test-machine-id"),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
@@ -826,7 +831,7 @@ func TestRefreshJWTToken(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -855,6 +860,7 @@ func TestRefreshJWTToken(t *testing.T) {
 		exporter, err := New(ctx,
 			WithConfig(cfg),
 			WithDatabaseConnections(tmpDB, tmpDB),
+			WithMachineID("test-machine-id"),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
@@ -886,7 +892,7 @@ func TestIntegration(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -923,7 +929,7 @@ func TestIntegration(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -951,7 +957,7 @@ func TestContextCancellation(t *testing.T) {
 			Timeout:  metav1.Duration{Duration: 30 * time.Second},
 		}
 
-		exporter, err := New(ctx, WithConfig(cfg))
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
 
@@ -998,7 +1004,7 @@ func TestExportWithCollectorError(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	exporter, err := New(ctx, WithConfig(cfg))
+	exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
 	require.NoError(t, err)
 	require.NotNil(t, exporter)
 
@@ -1048,6 +1054,7 @@ func TestExportHTTPWithReturnedToken(t *testing.T) {
 	exporter, err := New(ctx,
 		WithConfig(cfg),
 		WithDatabaseConnections(tmpDB, tmpDB),
+		WithMachineID("test-machine-id"),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, exporter)

@@ -25,7 +25,6 @@ import (
 
 	"github.com/leptonai/gpud/components"
 	"github.com/leptonai/gpud/pkg/eventstore"
-	pkghost "github.com/leptonai/gpud/pkg/host"
 	"github.com/leptonai/gpud/pkg/log"
 	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
@@ -34,16 +33,6 @@ import (
 	"github.com/NVIDIA/gpuhealth/internal/config"
 	"github.com/NVIDIA/gpuhealth/internal/machineinfo"
 )
-
-// GetMachineID gets machine ID from system (no database dependencies)
-func GetMachineID(ctx context.Context) (string, error) {
-	machineID := pkghost.MachineID()
-	if machineID == "" {
-		// Fallback to dynamic lookup if not cached
-		return pkghost.GetMachineID(ctx)
-	}
-	return machineID, nil
-}
 
 // GenerateCollectionID generates a unique identifier for a data collection cycle
 func GenerateCollectionID() string {
@@ -78,6 +67,7 @@ type collector struct {
 	nvmlInstance              nvidianvml.Instance
 	attestationManager        *attestation.Manager
 	lastAttestationCollection time.Time
+	machineID                 string // Agent's stable identity from server initialization
 }
 
 // New creates a new health data collector
@@ -88,6 +78,7 @@ func New(
 	componentsRegistry components.Registry,
 	nvmlInstance nvidianvml.Instance,
 	attestationManager *attestation.Manager,
+	machineID string,
 ) Collector {
 	return &collector{
 		config:             config,
@@ -96,6 +87,7 @@ func New(
 		componentsRegistry: componentsRegistry,
 		nvmlInstance:       nvmlInstance,
 		attestationManager: attestationManager,
+		machineID:          machineID,
 	}
 }
 
@@ -105,14 +97,14 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 
 	collectionID := GenerateCollectionID()
 
-	machineID, err := GetMachineID(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get machine ID: %w", err)
+	// Use the machine ID provided by server initialization
+	if c.machineID == "" {
+		return nil, fmt.Errorf("machine ID not initialized - collector must be created with a valid machine ID")
 	}
 
 	data := &HealthData{
 		CollectionID: collectionID,
-		MachineID:    machineID,
+		MachineID:    c.machineID,
 		Timestamp:    time.Now().UTC(),
 	}
 

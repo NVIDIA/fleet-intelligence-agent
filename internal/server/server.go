@@ -30,6 +30,7 @@ import (
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/leptonai/gpud/components"
@@ -98,6 +99,8 @@ func initializeDatabases(ctx context.Context, config *config.Config) (*sql.DB, *
 }
 
 // initializeMachineID retrieves or creates a machine ID
+// This establishes the agent's stable identity for metrics reporting.
+// Priority: DB (persisted) → dmidecode (hardware UUID) → random UUID
 func initializeMachineID(ctx context.Context, dbRW, dbRO *sql.DB) (string, error) {
 	// Try to read existing machine ID from database
 	machineID, err := pkgmetadata.ReadMachineIDWithFallback(ctx, dbRW, dbRO)
@@ -105,21 +108,27 @@ func initializeMachineID(ctx context.Context, dbRW, dbRO *sql.DB) (string, error
 		return "", fmt.Errorf("failed to read machine uid: %w", err)
 	}
 
-	// If no machine ID found in database, use system machine ID and store it persistently
+	// If no machine ID found in database, initialize a new one
 	if machineID == "" {
-		machineID = pkghost.MachineID()
-		if machineID == "" {
-			// Fallback to dynamic lookup if not cached
-			var err error
-			machineID, err = pkghost.GetMachineID(ctx)
-			if err != nil {
-				return "", fmt.Errorf("failed to get system machine ID: %w", err)
-			}
+		// First, try to get hardware UUID from dmidecode
+		machineID, err = pkghost.GetDmidecodeUUID(ctx)
+		if err != nil || machineID == "" {
+			// If dmidecode fails (permissions, not available, etc.), generate a random UUID
+			machineID = uuid.New().String()
+			log.Logger.Warnw("Failed to get hardware UUID, generated random agent ID",
+				"error", err,
+				"generated_id", machineID)
+		} else {
+			log.Logger.Infow("Initialized agent ID from hardware UUID", "machine_id", machineID)
 		}
-		// Store the system machine ID in database for persistence across reboots
+
+		// Store the machine ID in database for persistence
 		if err := pkgmetadata.SetMetadata(ctx, dbRW, pkgmetadata.MetadataKeyMachineID, machineID); err != nil {
-			return "", fmt.Errorf("failed to store system machine ID: %w", err)
+			return "", fmt.Errorf("failed to store machine ID in database: %w", err)
 		}
+		log.Logger.Infow("Persisted agent ID to database", "machine_id", machineID)
+	} else {
+		log.Logger.Infow("Using persisted agent ID from database", "machine_id", machineID)
 	}
 
 	return machineID, nil
@@ -319,6 +328,7 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 			exporter.WithComponentsRegistry(s.componentsRegistry),
 			exporter.WithNVMLInstance(nvmlInstance),
 			exporter.WithDatabaseConnections(dbRW, dbRO),
+			exporter.WithMachineID(machineID),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create health exporter: %w", err)
