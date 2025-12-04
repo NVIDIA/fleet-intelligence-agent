@@ -46,6 +46,7 @@ type exporterOptions struct {
 	timeout            time.Duration
 	dbRW               *sql.DB // Read-write database connection
 	dbRO               *sql.DB // Read-only database connection
+	machineID          string  // Agent's stable identity from server initialization
 }
 
 // WithConfig sets the health exporter configuration
@@ -129,6 +130,18 @@ func WithDatabaseConnections(dbRW, dbRO *sql.DB) ExporterOption {
 	}
 }
 
+// WithMachineID sets the machine ID for the exporter
+// This should be the stable agent identity initialized by the server
+func WithMachineID(machineID string) ExporterOption {
+	return func(c *exporterOptions) error {
+		if machineID == "" {
+			return errors.New("machine ID cannot be empty")
+		}
+		c.machineID = machineID
+		return nil
+	}
+}
+
 // validateConfig validates the exporter options and required dependencies
 func (c *exporterOptions) validate() error {
 	if c.config == nil {
@@ -150,6 +163,11 @@ func (c *exporterOptions) validate() error {
 
 	if c.config.IncludeMachineInfo && c.nvmlInstance == nil {
 		return errors.New("NVML instance is required when IncludeMachineInfo is enabled")
+	}
+
+	// Machine ID is always required - it should be set by server via WithMachineID
+	if c.machineID == "" {
+		return errors.New("machine ID is required - must be set via WithMachineID()")
 	}
 
 	return nil

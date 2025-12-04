@@ -91,6 +91,7 @@ func New(ctx context.Context, opts ...ExporterOption) (Exporter, error) {
 		options.componentsRegistry,
 		options.nvmlInstance,
 		attestationManager,
+		options.machineID,
 	)
 
 	otlpConverter := converter.NewOTLPConverter()

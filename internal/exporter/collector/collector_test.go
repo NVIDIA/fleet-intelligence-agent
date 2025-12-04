@@ -298,6 +298,7 @@ func createTestCollector(attestationManager *attestation.Manager) Collector {
 		nil, // componentsRegistry
 		nil, // nvmlInstance
 		attestationManager,
+		"test-machine-id",
 	)
 }
 
@@ -316,18 +317,8 @@ func createTestCollectorWithNilAttestation() Collector {
 		nil, // componentsRegistry
 		nil, // nvmlInstance
 		nil, // attestationManager (nil for testing)
+		"test-machine-id",
 	)
-}
-
-func TestGetMachineID(t *testing.T) {
-	ctx := context.Background()
-
-	machineID, err := GetMachineID(ctx)
-
-	// Should succeed (may be empty in test environments without proper system config)
-	require.NoError(t, err)
-	// In real systems, machine ID will be populated. In test env, it may be empty.
-	t.Logf("Machine ID: %s", machineID)
 }
 
 func TestGenerateCollectionID(t *testing.T) {
@@ -363,7 +354,7 @@ func TestNew(t *testing.T) {
 	}
 	attestationManager := attestation.NewManager(ctx, nil, 20*time.Second)
 
-	c := New(config, nil, nil, nil, nil, attestationManager)
+	c := New(config, nil, nil, nil, nil, attestationManager, "test-machine-id")
 
 	assert.NotNil(t, c, "Collector should be created")
 
@@ -381,7 +372,7 @@ func TestCollector_Collect_BasicFlow(t *testing.T) {
 		AttestationEnabled:   false,
 	}
 
-	collector := New(cfg, nil, nil, nil, nil, nil)
+	collector := New(cfg, nil, nil, nil, nil, nil, "test-machine-id")
 	data, err := collector.Collect(ctx)
 
 	require.NoError(t, err)
@@ -407,7 +398,7 @@ func TestCollector_CollectMachineInfo_NoNVML(t *testing.T) {
 		IncludeMachineInfo: true,
 	}
 
-	collector := New(cfg, nil, nil, nil, nil, nil)
+	collector := New(cfg, nil, nil, nil, nil, nil, "test-machine-id")
 	data, err := collector.Collect(ctx)
 
 	// Should still succeed but machine info will not be collected
@@ -425,7 +416,7 @@ func TestCollector_CollectMetrics_NoStore(t *testing.T) {
 		MetricsLookback: metav1.Duration{Duration: 5 * time.Minute},
 	}
 
-	collector := New(cfg, nil, nil, nil, nil, nil)
+	collector := New(cfg, nil, nil, nil, nil, nil, "test-machine-id")
 	data, err := collector.Collect(ctx)
 
 	// Should still succeed but metrics will not be collected
@@ -461,7 +452,7 @@ func TestCollector_CollectMetrics_WithStore(t *testing.T) {
 		},
 	}
 
-	collector := New(cfg, mockStore, nil, nil, nil, nil)
+	collector := New(cfg, mockStore, nil, nil, nil, nil, "test-machine-id")
 	data, err := collector.Collect(ctx)
 
 	require.NoError(t, err)
@@ -485,7 +476,7 @@ func TestCollector_CollectMetrics_StoreError(t *testing.T) {
 		shouldError: true,
 	}
 
-	collector := New(cfg, mockStore, nil, nil, nil, nil)
+	collector := New(cfg, mockStore, nil, nil, nil, nil, "test-machine-id")
 	data, err := collector.Collect(ctx)
 
 	// Should still succeed (error is logged but doesn't fail collection)
@@ -503,7 +494,7 @@ func TestCollector_CollectEvents_NoStoreOrRegistry(t *testing.T) {
 		EventsLookback: metav1.Duration{Duration: 5 * time.Minute},
 	}
 
-	collector := New(cfg, nil, nil, nil, nil, nil)
+	collector := New(cfg, nil, nil, nil, nil, nil, "test-machine-id")
 	data, err := collector.Collect(ctx)
 
 	// Should still succeed but events will not be collected
@@ -539,7 +530,7 @@ func TestCollector_CollectEvents_WithComponents(t *testing.T) {
 	}
 	mockEventStore := &mockEventStore{}
 
-	collector := New(cfg, nil, mockEventStore, mockRegistry, nil, nil)
+	collector := New(cfg, nil, mockEventStore, mockRegistry, nil, nil, "test-machine-id")
 	data, err := collector.Collect(ctx)
 
 	require.NoError(t, err)
@@ -564,7 +555,7 @@ func TestCollector_CollectEvents_NoComponents(t *testing.T) {
 	}
 	mockEventStore := &mockEventStore{}
 
-	collector := New(cfg, nil, mockEventStore, mockRegistry, nil, nil)
+	collector := New(cfg, nil, mockEventStore, mockRegistry, nil, nil, "test-machine-id")
 	data, err := collector.Collect(ctx)
 
 	// Should still succeed
@@ -592,7 +583,7 @@ func TestCollector_CollectEvents_ComponentError(t *testing.T) {
 	}
 	mockEventStore := &mockEventStore{}
 
-	collector := New(cfg, nil, mockEventStore, mockRegistry, nil, nil)
+	collector := New(cfg, nil, mockEventStore, mockRegistry, nil, nil, "test-machine-id")
 	data, err := collector.Collect(ctx)
 
 	// Should still succeed (component errors are logged but don't fail collection)
@@ -609,7 +600,7 @@ func TestCollector_CollectComponentData_NoRegistry(t *testing.T) {
 		IncludeComponentData: true,
 	}
 
-	collector := New(cfg, nil, nil, nil, nil, nil)
+	collector := New(cfg, nil, nil, nil, nil, nil, "test-machine-id")
 	data, err := collector.Collect(ctx)
 
 	// Should still succeed
@@ -643,7 +634,7 @@ func TestCollector_CollectComponentData_WithComponents(t *testing.T) {
 		components: []components.Component{mockComp},
 	}
 
-	collector := New(cfg, nil, nil, mockRegistry, nil, nil)
+	collector := New(cfg, nil, nil, mockRegistry, nil, nil, "test-machine-id")
 	data, err := collector.Collect(ctx)
 
 	require.NoError(t, err)
@@ -675,7 +666,7 @@ func TestCollector_CollectComponentData_NoHealthStates(t *testing.T) {
 		components: []components.Component{mockComp},
 	}
 
-	collector := New(cfg, nil, nil, mockRegistry, nil, nil)
+	collector := New(cfg, nil, nil, mockRegistry, nil, nil, "test-machine-id")
 	data, err := collector.Collect(ctx)
 
 	require.NoError(t, err)
@@ -729,7 +720,7 @@ func TestCollector_AllFeaturesEnabled(t *testing.T) {
 
 	mockEventStore := &mockEventStore{}
 
-	collector := New(cfg, mockMetricsStore, mockEventStore, mockRegistry, nil, attestationManager)
+	collector := New(cfg, mockMetricsStore, mockEventStore, mockRegistry, nil, attestationManager, "test-machine-id")
 	data, err := collector.Collect(ctx)
 
 	require.NoError(t, err)

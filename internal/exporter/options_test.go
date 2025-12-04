@@ -245,6 +245,7 @@ func TestExporterOptionsValidate(t *testing.T) {
 						IncludeComponentData: false,
 						IncludeMachineInfo:   false,
 					},
+					machineID: "test-machine-id",
 				}
 			},
 			wantErr: false,

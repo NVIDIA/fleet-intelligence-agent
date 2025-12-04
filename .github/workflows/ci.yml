@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 env:
-  GO_VERSION: '1.24.10'
+  GO_VERSION: '1.24.11'
   GOPRIVATE: gitlab-master.nvidia.com/*
   GONOPROXY: gitlab-master.nvidia.com/*
   GONOSUMDB: gitlab-master.nvidia.com/*
