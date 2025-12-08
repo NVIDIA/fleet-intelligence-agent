@@ -81,6 +81,7 @@ func machineInfoCommand(cliContext *cli.Context) error {
 	if providerInfo == nil {
 		fmt.Printf("%s failed to find provider (%v)\n", cmdutil.WarningSign, err)
 	} else {
+		machineinfo.PopulatePrivateIPFromMachineInfo(providerInfo, machineInfo)
 		fmt.Printf("%s successfully found provider %s\n", cmdutil.CheckMark, providerInfo.Provider)
 		providerInfo.RenderTable(os.Stdout)
 	}

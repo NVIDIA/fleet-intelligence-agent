@@ -163,3 +163,25 @@ func (i *MachineInfo) RenderTable(wr io.Writer) {
 func GetProvider(publicIP string) *providers.Info {
 	return pkgmachineinfo.GetProvider(publicIP)
 }
+
+// PopulatePrivateIPFromMachineInfo populates the provider's private IP from machine info
+// if it's not already set. It uses the first private IPv4 address found.
+func PopulatePrivateIPFromMachineInfo(providerInfo *providers.Info, machineInfo *MachineInfo) {
+	if providerInfo == nil || providerInfo.PrivateIP != "" {
+		return
+	}
+
+	if machineInfo == nil || machineInfo.NICInfo == nil {
+		return
+	}
+
+	for _, iface := range machineInfo.NICInfo.PrivateIPInterfaces {
+		if iface.IP == "" {
+			continue
+		}
+		if iface.Addr.IsPrivate() && iface.Addr.Is4() {
+			providerInfo.PrivateIP = iface.IP
+			return
+		}
+	}
+}
