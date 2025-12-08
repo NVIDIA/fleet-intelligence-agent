@@ -17,12 +17,14 @@ package machineinfo
 
 import (
 	"bytes"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
 
 	apiv1 "github.com/leptonai/gpud/api/v1"
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
+	"github.com/leptonai/gpud/pkg/providers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -513,4 +515,122 @@ func TestRenderTable_EmptyNICList(t *testing.T) {
 	assert.NotEmpty(t, output)
 	// Should not contain any Private IP Interface entries
 	assert.NotContains(t, output, "Private IP Interface")
+}
+
+// TestPopulatePrivateIPFromMachineInfo tests the PopulatePrivateIPFromMachineInfo helper function
+func TestPopulatePrivateIPFromMachineInfo(t *testing.T) {
+	t.Run("nil_provider_info", func(t *testing.T) {
+		machineInfo := &MachineInfo{
+			NICInfo: &apiv1.MachineNICInfo{
+				PrivateIPInterfaces: []apiv1.MachineNetworkInterface{
+					{Interface: "eth0", MAC: "00:11:22:33:44:55", IP: "192.168.1.100"},
+				},
+			},
+		}
+		// Should not panic with nil provider info
+		require.NotPanics(t, func() {
+			PopulatePrivateIPFromMachineInfo(nil, machineInfo)
+		})
+	})
+
+	t.Run("nil_machine_info", func(t *testing.T) {
+		providerInfo := &providers.Info{Provider: "test"}
+		// Should not panic with nil machine info
+		require.NotPanics(t, func() {
+			PopulatePrivateIPFromMachineInfo(providerInfo, nil)
+		})
+		assert.Empty(t, providerInfo.PrivateIP)
+	})
+
+	t.Run("provider_ip_already_set", func(t *testing.T) {
+		providerInfo := &providers.Info{
+			Provider:  "test",
+			PrivateIP: "10.0.0.1",
+		}
+		machineInfo := &MachineInfo{
+			NICInfo: &apiv1.MachineNICInfo{
+				PrivateIPInterfaces: []apiv1.MachineNetworkInterface{
+					{Interface: "eth0", MAC: "00:11:22:33:44:55", IP: "192.168.1.100"},
+				},
+			},
+		}
+		PopulatePrivateIPFromMachineInfo(providerInfo, machineInfo)
+		// Should not overwrite existing IP
+		assert.Equal(t, "10.0.0.1", providerInfo.PrivateIP)
+	})
+
+	t.Run("populate_from_first_private_ipv4", func(t *testing.T) {
+		providerInfo := &providers.Info{Provider: "test"}
+		addr1, _ := netip.ParseAddr("192.168.1.100")
+		addr2, _ := netip.ParseAddr("172.16.0.1")
+		machineInfo := &MachineInfo{
+			NICInfo: &apiv1.MachineNICInfo{
+				PrivateIPInterfaces: []apiv1.MachineNetworkInterface{
+					{Interface: "eth0", MAC: "00:11:22:33:44:55", IP: "192.168.1.100", Addr: addr1},
+					{Interface: "eth1", MAC: "00:11:22:33:44:66", IP: "172.16.0.1", Addr: addr2},
+				},
+			},
+		}
+		PopulatePrivateIPFromMachineInfo(providerInfo, machineInfo)
+		// Should use first private IPv4
+		assert.Equal(t, "192.168.1.100", providerInfo.PrivateIP)
+	})
+
+	t.Run("skip_empty_ip", func(t *testing.T) {
+		providerInfo := &providers.Info{Provider: "test"}
+		addr, _ := netip.ParseAddr("192.168.1.100")
+		machineInfo := &MachineInfo{
+			NICInfo: &apiv1.MachineNICInfo{
+				PrivateIPInterfaces: []apiv1.MachineNetworkInterface{
+					{Interface: "eth0", MAC: "00:11:22:33:44:55", IP: ""},
+					{Interface: "eth1", MAC: "00:11:22:33:44:66", IP: "192.168.1.100", Addr: addr},
+				},
+			},
+		}
+		PopulatePrivateIPFromMachineInfo(providerInfo, machineInfo)
+		// Should skip empty IP and use second one
+		assert.Equal(t, "192.168.1.100", providerInfo.PrivateIP)
+	})
+
+	t.Run("skip_ipv6", func(t *testing.T) {
+		providerInfo := &providers.Info{Provider: "test"}
+		addr1, _ := netip.ParseAddr("fe80::1")
+		addr2, _ := netip.ParseAddr("192.168.1.100")
+		machineInfo := &MachineInfo{
+			NICInfo: &apiv1.MachineNICInfo{
+				PrivateIPInterfaces: []apiv1.MachineNetworkInterface{
+					{Interface: "eth0", MAC: "00:11:22:33:44:55", IP: "fe80::1", Addr: addr1},
+					{Interface: "eth1", MAC: "00:11:22:33:44:66", IP: "192.168.1.100", Addr: addr2},
+				},
+			},
+		}
+		PopulatePrivateIPFromMachineInfo(providerInfo, machineInfo)
+		// Should skip IPv6 and use IPv4
+		assert.Equal(t, "192.168.1.100", providerInfo.PrivateIP)
+	})
+
+	t.Run("no_private_ipv4_available", func(t *testing.T) {
+		providerInfo := &providers.Info{Provider: "test"}
+		addr, _ := netip.ParseAddr("fe80::1")
+		machineInfo := &MachineInfo{
+			NICInfo: &apiv1.MachineNICInfo{
+				PrivateIPInterfaces: []apiv1.MachineNetworkInterface{
+					{Interface: "eth0", MAC: "00:11:22:33:44:55", IP: "fe80::1", Addr: addr},
+				},
+			},
+		}
+		PopulatePrivateIPFromMachineInfo(providerInfo, machineInfo)
+		// Should remain empty if no private IPv4 available
+		assert.Empty(t, providerInfo.PrivateIP)
+	})
+
+	t.Run("nil_nic_info", func(t *testing.T) {
+		providerInfo := &providers.Info{Provider: "test"}
+		machineInfo := &MachineInfo{
+			NICInfo: nil,
+		}
+		PopulatePrivateIPFromMachineInfo(providerInfo, machineInfo)
+		// Should remain empty with nil NIC info
+		assert.Empty(t, providerInfo.PrivateIP)
+	})
 }
