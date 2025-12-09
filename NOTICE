@@ -5,35 +5,12 @@ This file contains the licenses and notices for third-party software that is
 distributed with NVIDIA gpuhealth distributions.
 
 ================================================================================
-SECTION 1: THIRD-PARTY SOFTWARE WITH NVIDIA MODIFICATIONS
+SECTION 1: THIRD-PARTY SOFTWARE - APACHE LICENSE 2.0
 ================================================================================
 
-Copyright Lepton AI Inc. - Apache License 2.0
+The following components are licensed under the Apache License 2.0.
 
-Attribution Statements: This product includes gpud, which has been modified by 
-NVIDIA CORPORATION & AFFILIATES. The NVIDIA version includes proprietary 
-modifications for GPU health monitoring and diagnostics capabilities. These 
-modifications are not contributed back to the original project and are subject 
-to NVIDIA's proprietary license terms.
-
-Original Source: https://github.com/leptonai/gpud
-NVIDIA Modified Fork: gitlab-master.nvidia.com/gpu-health/gpud
-
-License Text (http://www.apache.org/licenses/LICENSE-2.0):
-
-// Copyright (c) 2024 Lepton AI Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+License Text (http://www.apache.org/licenses/LICENSE-2.0)
 
                               Apache License
                         Version 2.0, January 2004
@@ -212,21 +189,26 @@ TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 
 END OF TERMS AND CONDITIONS
 
-================================================================================
-SECTION 2: UNMODIFIED THIRD-PARTY SOFTWARE - APACHE LICENSE 2.0
-================================================================================
+--------------------------------------------------------------------------------
 
-The following components are licensed under the Apache License 2.0.
-See full license text above in Section 1.
+Copyright (c) 2024 Lepton AI Inc.
+
+Attribution Statements: This product includes gpud, which has been modified by NVIDIA CORPORATION & AFFILIATES. The NVIDIA version includes proprietary modifications. These modifications are not contributed back to the original project.
+
+Original Source: https://github.com/leptonai/gpud
+NVIDIA Fork: https://gitlab-master.nvidia.com/gpu-health/gpud
+
+// Copyright (c) 2024 Lepton AI Inc.
+// Licensed under the Apache License, Version 2.0
 
 --------------------------------------------------------------------------------
 
-Copyright The Prometheus Authors - Apache License 2.0
+Copyright 2012-2015 The Prometheus Authors - Apache License 2.0
 
 Attribution Statements: This product includes Prometheus Client 
 (github.com/prometheus/client_golang).
 
-// Copyright 2015 The Prometheus Authors
+// Copyright 2012-2015 The Prometheus Authors
 // Licensed under the Apache License, Version 2.0
 
 --------------------------------------------------------------------------------
@@ -241,16 +223,16 @@ Attribution Statements: This product includes OpenTelemetry Protocol definitions
 
 --------------------------------------------------------------------------------
 
-Copyright The Kubernetes Authors - Apache License 2.0
+Copyright 2017 The Kubernetes Authors - Apache License 2.0
 
 Attribution Statements: This product includes Kubernetes API machinery 
 (k8s.io/apimachinery).
 
-// Copyright The Kubernetes Authors
+// Copyright 2017 The Kubernetes Authors.
 // Licensed under the Apache License, Version 2.0
 
 ================================================================================
-SECTION 3: UNMODIFIED THIRD-PARTY SOFTWARE - MIT LICENSE
+SECTION 2: THIRD-PARTY SOFTWARE - MIT LICENSE
 ================================================================================
 
 The following components are licensed under the MIT License.
@@ -277,7 +259,7 @@ SOFTWARE.
 
 --------------------------------------------------------------------------------
 
-Copyright Dustin Sallings - MIT License
+Copyright (c) 2005-2008 Dustin Sallings - MIT License
 
 Attribution Statements: This product includes go-humanize 
 (github.com/dustin/go-humanize).
@@ -286,16 +268,16 @@ Attribution Statements: This product includes go-humanize
 
 --------------------------------------------------------------------------------
 
-Copyright gin-gonic contributors - MIT License
+Copyright (c) 2017 Gin-Gonic - MIT License
 
 Attribution Statements: This product includes gin-contrib/gzip 
 (github.com/gin-contrib/gzip).
 
-// Copyright (c) 2016 gin-gonic contributors
+// Copyright (c) 2017 Gin-Gonic
 
 --------------------------------------------------------------------------------
 
-Copyright Manuel Martínez-Almeida - MIT License
+Copyright (c) 2014 Manuel Martínez-Almeida - MIT License
 
 Attribution Statements: This product includes Gin Web Framework 
 (github.com/gin-gonic/gin).
@@ -304,7 +286,7 @@ Attribution Statements: This product includes Gin Web Framework
 
 --------------------------------------------------------------------------------
 
-Copyright Mitchell Hashimoto - MIT License
+Copyright (c) 2013 Mitchell Hashimoto - MIT License
 
 Attribution Statements: This product includes go-homedir 
 (github.com/mitchellh/go-homedir).
@@ -313,41 +295,41 @@ Attribution Statements: This product includes go-homedir
 
 --------------------------------------------------------------------------------
 
-Copyright Oleku Konko - MIT License
+Copyright (C) 2014 by Oleku Konko - MIT License
 
 Attribution Statements: This product includes tablewriter 
 (github.com/olekukonko/tablewriter).
 
-// Copyright (c) 2014 Oleku Konko
+// Copyright (C) 2014 by Oleku Konko
 
 --------------------------------------------------------------------------------
 
-Copyright Mat Ryer and David Hernandez - MIT License
+Copyright (c) 2012-2020 Mat Ryer, Tyler Bunnell and contributors - MIT License
 
 Attribution Statements: This product includes testify 
 (github.com/stretchr/testify).
 
-// Copyright (c) 2012-2020 Mat Ryer, Tyler Bunnell and contributors
+// Copyright (c) 2012-2020 Mat Ryer, Tyler Bunnell and contributors.
 
 --------------------------------------------------------------------------------
 
-Copyright Jeremy Saenz - MIT License
+Copyright (c) 2023 urfave/cli maintainers - MIT License
 
 Attribution Statements: This product includes cli 
 (github.com/urfave/cli).
 
-// Copyright (c) 2016 Jeremy Saenz & Contributors
+// Copyright (c) 2023 urfave/cli maintainers.
 
 --------------------------------------------------------------------------------
 
-Copyright Uber Technologies, Inc. - MIT License
+Copyright (c) 2016-2024 Uber Technologies, Inc. - MIT License
 
 Attribution Statements: This product includes Zap logger (go.uber.org/zap).
 
-// Copyright (c) 2016-2017 Uber Technologies, Inc.
+// Copyright (c) 2016-2024 Uber Technologies, Inc.
 
 ================================================================================
-SECTION 4: UNMODIFIED THIRD-PARTY SOFTWARE - BSD 3-CLAUSE LICENSE
+SECTION 3: THIRD-PARTY SOFTWARE - BSD 3-CLAUSE LICENSE
 ================================================================================
 
 The following components are licensed under the BSD 3-Clause License.
@@ -379,7 +361,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 --------------------------------------------------------------------------------
 
-Copyright Google Inc. - BSD 3-Clause License
+Copyright (c) 2009,2014 Google Inc. - BSD 3-Clause License
 
 Attribution Statements: This product includes Google UUID library 
 (github.com/google/uuid).
@@ -388,7 +370,7 @@ Attribution Statements: This product includes Google UUID library
 
 --------------------------------------------------------------------------------
 
-Copyright Google Inc. - BSD 3-Clause License
+Copyright (c) 2018 The Go Authors - BSD 3-Clause License
 
 Attribution Statements: This product includes Protocol Buffers 
 (google.golang.org/protobuf).
