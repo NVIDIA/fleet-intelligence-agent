@@ -59,7 +59,11 @@ archives:
     name_template: "gpuhealth-{{ .Os }}-{{ if eq .Arch \"amd64\" }}x86_64{{ else if eq .Arch \"arm64\" }}sbsa{{ else }}{{ .Arch }}{{ end }}-{{ .Version }}"
     wrap_in_directory: gpuhealth
     files:
-      - LICENSE
+      - NOTICE
+      - src: deployments/packages/systemd/gpuhealthd.service
+        dst: usr/lib/systemd/system/gpuhealthd.service
+      - src: deployments/packages/systemd/gpuhealth.env
+        dst: etc/default/gpuhealth
 
 # Linux package configuration
 nfpms:
@@ -72,7 +76,6 @@ nfpms:
     description: |
       NVIDIA GPU Health Agent - Lightweight GPU health monitoring and reporting agent
       for NVIDIA GPU infrastructure.
-    license: Apache-2.0
     section: utils
     priority: optional
     formats:
@@ -85,6 +88,9 @@ nfpms:
       - nvidia-driver-535 | nvidia-driver-545 | nvidia-driver-550
     bindir: /usr/bin
     contents:
+      # License and notices
+      - src: NOTICE
+        dst: /usr/share/doc/gpuhealth/NOTICE
       # SystemD service file
       - src: deployments/packages/systemd/gpuhealthd.service
         dst: /usr/lib/systemd/system/gpuhealthd.service
@@ -113,7 +119,6 @@ nfpms:
     description: |
       NVIDIA GPU Health Agent - Lightweight GPU health monitoring and reporting agent
       for NVIDIA GPU infrastructure.
-    license: Apache-2.0
     section: Applications/System
     formats:
       - rpm
@@ -125,6 +130,9 @@ nfpms:
       - nvidia-driver >= 535
     bindir: /usr/bin
     contents:
+      # License and notices
+      - src: NOTICE
+        dst: /usr/share/doc/gpuhealth/NOTICE
       # SystemD service file
       - src: deployments/packages/systemd/gpuhealthd.service
         dst: /usr/lib/systemd/system/gpuhealthd.service
