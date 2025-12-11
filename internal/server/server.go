@@ -247,6 +247,7 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 		MountPoints:              []string{"/"},
 		MountTargets:             []string{"/var/lib/kubelet"},
 		HealthCheckInterval:      healthCheckInterval,
+		EnableDCGMPolicy:         config.EnableDCGMPolicy,
 	}
 
 	// Register only enabled components for health monitoring

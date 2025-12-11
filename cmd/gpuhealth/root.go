@@ -132,6 +132,10 @@ func App() *cli.App {
 					Usage: "output format for offline mode [json|csv]",
 					Value: "json",
 				},
+				&cli.BoolFlag{
+					Name:  "enable-dcgm-policy",
+					Usage: "enable DCGM policy violation monitoring for non-XID policies (PCIe, DBE, NVLink, Power, Thermal, Page Retirement) -- XID policy is always enabled (default: false)",
+				},
 			},
 		},
 		{

@@ -211,8 +211,8 @@ github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9de
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo0=
 github.com/yusufpapurcu/wmi v1.2.4/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
-gitlab-master.nvidia.com/gpu-health/gpud v0.8.1-0.20251201180956-813890c42923 h1:FkMqBD3FxB2E34miW1gcVKgnJeri7RqkaqFQ1pZTeLY=
-gitlab-master.nvidia.com/gpu-health/gpud v0.8.1-0.20251201180956-813890c42923/go.mod h1:4yvyuLU6BTI2UmkzhjpsCdO4Z6butBvLrEKmCMPs4V8=
+gitlab-master.nvidia.com/gpu-health/gpud v0.8.1-0.20251211184827-d2fdfbde6e98 h1:dpgsw8eZ0Nbf+jG/qdrG5Spvb0GtbP5l2LCNIulsxus=
+gitlab-master.nvidia.com/gpu-health/gpud v0.8.1-0.20251211184827-d2fdfbde6e98/go.mod h1:4yvyuLU6BTI2UmkzhjpsCdO4Z6butBvLrEKmCMPs4V8=
 go.opentelemetry.io/auto/sdk v1.1.0 h1:cH53jehLUN6UFLY71z+NDOiNJqDdPRaXzTel0sJySYA=
 go.opentelemetry.io/auto/sdk v1.1.0/go.mod h1:3wSPjt5PWp2RhlCcmmOial7AvC4DQqZb7a7wCow3W8A=
 go.opentelemetry.io/otel v1.38.0 h1:RkfdswUDRimDg0m2Az18RKOsnI8UDzppJAtj01/Ymk8=
