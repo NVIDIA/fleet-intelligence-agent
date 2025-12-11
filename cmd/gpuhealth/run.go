@@ -219,6 +219,7 @@ func runCommand(cliContext *cli.Context) error {
 
 	gpuCount := cliContext.Int("gpu-count")
 	infinibandExpectedPortStates := cliContext.String("infiniband-expected-port-states")
+	enableDCGMPolicy := cliContext.Bool("enable-dcgm-policy")
 
 	// GPU Health Exporter configuration
 	offlineMode := cliContext.Bool("offline-mode")
@@ -288,6 +289,13 @@ func runCommand(cliContext *cli.Context) error {
 
 	if components != "" {
 		cfg.Components = strings.Split(components, ",")
+	}
+
+	cfg.EnableDCGMPolicy = enableDCGMPolicy
+	if enableDCGMPolicy {
+		log.Logger.Infow("DCGM policy violation monitoring enabled for all policies (PCIe, DBE, NVLink, Power, Thermal, Page Retirement)")
+	} else {
+		log.Logger.Infow("DCGM policy violation monitoring disabled by default (only XID policy will be enabled)")
 	}
 
 	// Configure offline mode if enabled
