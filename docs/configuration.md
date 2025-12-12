@@ -30,14 +30,14 @@ By default, the agent monitors all components except docker, kubelet, tailscale,
 | Environment Variable | Description | Default |
 |---------------------|-------------|---------|
 | `GPUHEALTH_FLAGS` | Additional command line flags | `--log-level=warn` |
-| `GPUHEALTH_COLLECT_INTERVAL` | Data collection interval | `1m` |
+| `GPUHEALTH_COLLECT_INTERVAL` | Data collection interval (1s to 24h) | `1m` |
 | `GPUHEALTH_INCLUDE_METRICS` | Include metrics in export | `true` |
 | `GPUHEALTH_INCLUDE_EVENTS` | Include events in export | `true` |
 | `GPUHEALTH_INCLUDE_MACHINEINFO` | Include machine info | `true` |
 | `GPUHEALTH_INCLUDE_HEALTHCHECKS` | Include component health data | `true` |
 | `GPUHEALTH_METRICS_LOOKBACK` | How far back to look for metrics | `1m` |
 | `GPUHEALTH_EVENTS_LOOKBACK` | How far back to look for events | `1m` |
-| `GPUHEALTH_CHECK_INTERVAL` | Component health check frequency | `1m` |
+| `GPUHEALTH_CHECK_INTERVAL` | Component health check frequency (1s to 24h) | `1m` |
 | `GPUHEALTH_RETRY_MAX_ATTEMPTS` | Max retry attempts for failed exports | `3` |
 | `HTTP_PROXY` | HTTP proxy server URL | - |
 | `HTTPS_PROXY` | HTTPS proxy server URL | - |
@@ -77,7 +77,7 @@ HTTPS_PROXY="http://username:password@proxy.company.com:8080"
 
 ## Data Collection Intervals
 
-Adjust collection and check intervals based on your monitoring needs:
+Adjust collection and check intervals based on your monitoring needs. Both intervals must be between **1 second and 24 hours**:
 
 ```bash
 # More frequent monitoring (30 seconds)
@@ -87,7 +87,13 @@ GPUHEALTH_CHECK_INTERVAL=30s
 # Less frequent monitoring (5 minutes)
 GPUHEALTH_COLLECT_INTERVAL=5m
 GPUHEALTH_CHECK_INTERVAL=5m
+
+# Maximum interval (daily)
+GPUHEALTH_COLLECT_INTERVAL=24h
+GPUHEALTH_CHECK_INTERVAL=24h
 ```
+
+**Note:** Values outside this range (e.g., `25h`) will cause the agent to fail to start with an error message.
 
 
 ## Common Configuration Examples

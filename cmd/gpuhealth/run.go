@@ -109,6 +109,13 @@ func configureHealthExporterFromEnv(cfg *config.Config) error {
 	// GPUHEALTH_COLLECT_INTERVAL - Export interval
 	if interval := os.Getenv("GPUHEALTH_COLLECT_INTERVAL"); interval != "" {
 		if duration, err := time.ParseDuration(interval); err == nil {
+			// Validate the interval range (1 second to 24 hours)
+			if duration < time.Second {
+				return fmt.Errorf("GPUHEALTH_COLLECT_INTERVAL must be at least 1 second, got %v", duration)
+			}
+			if duration > 24*time.Hour {
+				return fmt.Errorf("GPUHEALTH_COLLECT_INTERVAL must be at most 24 hours, got %v", duration)
+			}
 			cfg.HealthExporter.Interval = metav1.Duration{Duration: duration}
 			log.Logger.Infow("set health exporter interval from env", "interval", duration)
 		} else {
