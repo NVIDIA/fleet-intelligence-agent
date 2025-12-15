@@ -173,6 +173,45 @@ jobs:
           path: gpuhealth-${{ matrix.goos }}-${{ matrix.goarch }}
           retention-days: 7
 
+  sonarqube:
+    name: SonarQube Analysis
+    runs-on: [self-hosted, rocky8]
+    needs: [unit_test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for better relevancy of analysis
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Configure Git for private repositories
+        run: |
+          git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run unit tests with coverage
+        run: make test
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v7
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      # Optional: Fail the job if the Quality Gate fails
+      # Uncomment if you want to enforce quality gate in CI
+      # - name: SonarQube Quality Gate check
+      #   uses: SonarSource/sonarqube-quality-gate-action@v1
+      #   timeout-minutes: 5
+      #   env:
+      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
   package_snapshot:
     name: Package Snapshot
     runs-on: [self-hosted, rocky8]
