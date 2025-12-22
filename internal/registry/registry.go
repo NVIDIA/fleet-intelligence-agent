@@ -46,6 +46,7 @@ import (
 	componentskernelmodule "github.com/leptonai/gpud/components/kernel-module"
 	componentslibrary "github.com/leptonai/gpud/components/library"
 	componentsmemory "github.com/leptonai/gpud/components/memory"
+	componentsnetworkethernet "github.com/leptonai/gpud/components/network/ethernet"
 	componentsnetworklatency "github.com/leptonai/gpud/components/network/latency"
 	componentsos "github.com/leptonai/gpud/components/os"
 	componentspci "github.com/leptonai/gpud/components/pci"
@@ -189,6 +190,11 @@ func All() []Component {
 		{
 			Name:             componentsmemory.Name,
 			InitFunc:         componentsmemory.New,
+			EnabledByDefault: true,
+		},
+		{
+			Name:             componentsnetworkethernet.Name,
+			InitFunc:         componentsnetworkethernet.New,
 			EnabledByDefault: true,
 		},
 		{
