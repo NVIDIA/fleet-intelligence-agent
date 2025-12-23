@@ -19,7 +19,6 @@ package registry
 
 import (
 	"github.com/leptonai/gpud/components"
-	componentsbadenvs "github.com/leptonai/gpud/components/accelerator/nvidia/bad-envs"
 	componentsdcgmclock "github.com/leptonai/gpud/components/accelerator/nvidia/dcgm/clock"
 	componentsdcgmcpu "github.com/leptonai/gpud/components/accelerator/nvidia/dcgm/cpu"
 	componentsdcgminforom "github.com/leptonai/gpud/components/accelerator/nvidia/dcgm/inforom"
@@ -64,11 +63,6 @@ type Component struct {
 func All() []Component {
 	return []Component{
 		// NVIDIA GPU Components - all enabled by default
-		{
-			Name:             componentsbadenvs.Name,
-			InitFunc:         componentsbadenvs.New,
-			EnabledByDefault: true,
-		},
 		{
 			Name:             componentsfabricmanager.Name,
 			InitFunc:         componentsfabricmanager.New,

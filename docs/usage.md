@@ -65,7 +65,7 @@ Used to view or update the agent's metadata store, including remote export confi
 ### Enroll Agent
 
 ```bash
-sudo gpuhealth enroll --endpoint=https://api.example.com/api/v1/health --token=<your-sak-token>
+sudo gpuhealth enroll --endpoint=https://api.example.com --token=<your-sak-token>
 ```
 
 Enrolls the agent with the GPU Health backend by exchanging a Service Account Key (SAK) token for a JWT token. The JWT token and backend endpoints are stored locally for subsequent data exports.

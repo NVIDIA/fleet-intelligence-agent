@@ -2,7 +2,7 @@ module github.com/NVIDIA/gpuhealth
 
 go 1.24.11
 
-replace github.com/leptonai/gpud => gitlab-master.nvidia.com/gpu-health/gpud v0.8.1-0.20251222220150-1f0d6b517219
+replace github.com/leptonai/gpud => gitlab-master.nvidia.com/gpu-health/gpud v0.9.2-0.20251223191220-2d1d6a50dc1a
 
 require (
 	github.com/dustin/go-humanize v1.0.1

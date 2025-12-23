@@ -61,7 +61,7 @@ func TestGetComponent(t *testing.T) {
 	}{
 		{
 			name:      "existing_component",
-			compName:  "accelerator-nvidia-bad-envs",
+			compName:  "accelerator-nvidia-fabric-manager",
 			expectNil: false,
 		},
 		{
@@ -95,7 +95,6 @@ func TestComponentNames(t *testing.T) {
 
 	// Check for some expected component names
 	expectedNames := []string{
-		"accelerator-nvidia-bad-envs",
 		"accelerator-nvidia-fabric-manager",
 		"accelerator-nvidia-gpu-counts",
 		"accelerator-nvidia-infiniband",

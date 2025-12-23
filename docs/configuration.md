@@ -11,7 +11,7 @@ sudo systemctl restart gpuhealthd
 
 **Default configuration** (`/etc/default/gpuhealth`):
 ```bash
-GPUHEALTH_FLAGS="--log-level=warn --components=all,-docker,-kubelet,-tailscale,-containerd,-fuse,-nfs"
+GPUHEALTH_FLAGS="--log-level=warn"
 GPUHEALTH_COLLECT_INTERVAL="1m"
 GPUHEALTH_INCLUDE_METRICS="true"
 GPUHEALTH_INCLUDE_EVENTS="true"
@@ -47,7 +47,7 @@ By default, the agent monitors all components except docker, kubelet, tailscale,
 To enable remote telemetry export to an OpenTelemetry-compatible endpoint:
 
 ```bash
-sudo gpuhealth register --endpoint "https://telemetry.company.com/v1" --token "your-token"
+sudo gpuhealth enroll --endpoint "https://api.example.com" --token "your-token"
 ```
 
 This configures the agent to send telemetry data via OTLP over HTTP to the specified endpoint.
@@ -145,57 +145,47 @@ GPUHEALTH_FLAGS="--log-level=warn --components=all"
 # Disable all components
 GPUHEALTH_FLAGS="--log-level=warn --components=none"
 
-# Enable all except specific ones (default)
-GPUHEALTH_FLAGS="--log-level=warn --components=all,-docker,-kubelet,-tailscale"
-
 # Enable only specific components
-GPUHEALTH_FLAGS="--log-level=warn --components=gpu,infiniband,cpu,memory"
+GPUHEALTH_FLAGS="--log-level=warn --components=accelerator-nvidia-dcgm-thermal,accelerator-nvidia-dcgm-utilization,cpu,memory"
 ```
 
 **Available components:**
 
 **NVIDIA GPU Components:**
-- `accelerator-nvidia-bad-envs` - NVIDIA environment variables validation
-- `accelerator-nvidia-clock-speed` - GPU clock speeds
-- `accelerator-nvidia-ecc` - ECC memory errors
 - `accelerator-nvidia-fabric-manager` - NVIDIA Fabric Manager status
-- `accelerator-nvidia-gpm` - GPU Performance Monitor
-- `accelerator-nvidia-gsp-firmware` - GSP firmware mode
 - `accelerator-nvidia-gpu-counts` - GPU count validation
-- `accelerator-nvidia-hw-slowdown` - Hardware slowdown detection
 - `accelerator-nvidia-infiniband` - InfiniBand monitoring
-- `accelerator-nvidia-memory` - GPU memory usage
 - `accelerator-nvidia-nccl` - NCCL library status
 - `accelerator-nvidia-nvlink` - NVLink status
 - `accelerator-nvidia-peermem` - Peer memory access
 - `accelerator-nvidia-persistence-mode` - Persistence mode status
-- `accelerator-nvidia-power` - GPU power consumption
 - `accelerator-nvidia-processes` - GPU processes
-- `accelerator-nvidia-remapped-rows` - Memory remapped rows
-- `accelerator-nvidia-sxid` - NVIDIA Sxid errors
-- `accelerator-nvidia-temperature` - GPU temperature
-- `accelerator-nvidia-utilization` - GPU utilization
-- `accelerator-nvidia-xid` - NVIDIA Xid errors
+- `accelerator-nvidia-error-sxid` - NVIDIA Sxid errors
+
+**NVIDIA GPU (DCGM) Components:**
+- `accelerator-nvidia-dcgm-clock` - GPU clock speeds
+- `accelerator-nvidia-dcgm-cpu` - CPU-related DCGM health/telemetry
+- `accelerator-nvidia-dcgm-inforom` - GPU InfoROM health/telemetry
+- `accelerator-nvidia-dcgm-mem` - GPU memory health/telemetry
+- `accelerator-nvidia-dcgm-nvlink` - NVLink health/telemetry (DCGM)
+- `accelerator-nvidia-dcgm-nvswitch` - NVSwitch health/telemetry (DCGM)
+- `accelerator-nvidia-dcgm-pcie` - PCIe health/telemetry (DCGM)
+- `accelerator-nvidia-dcgm-power` - GPU power health/telemetry (DCGM)
+- `accelerator-nvidia-dcgm-prof` - GPU profiling/perf metrics (DCGM)
+- `accelerator-nvidia-dcgm-thermal` - GPU thermals (DCGM)
+- `accelerator-nvidia-dcgm-utilization` - GPU utilization (DCGM)
+- `accelerator-nvidia-dcgm-xid` - NVIDIA Xid errors (DCGM)
 
 **System Components:**
 - `cpu` - CPU monitoring
 - `disk` - Disk I/O and space monitoring
 - `memory` - System memory monitoring
-- `network` - Network interface monitoring
+- `network-ethernet` - Network interface monitoring (ethernet)
+- `network-latency` - Network latency monitoring
 - `os` - Operating system information
 - `kernel-module` - Kernel module status
 - `library` - System library information
 - `pci` - PCI device information
-
-**Container/Orchestration Components (disabled by default):**
-- `containerd` - Containerd monitoring
-- `docker` - Docker container monitoring
-- `kubelet` - Kubernetes kubelet monitoring
-
-**Other Components (disabled by default):**
-- `fuse` - FUSE filesystem monitoring
-- `nfs` - NFS monitoring
-- `tailscale` - Tailscale VPN monitoring
 
 ## Troubleshooting Configuration
 

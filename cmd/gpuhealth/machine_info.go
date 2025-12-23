@@ -40,14 +40,8 @@ func machineInfoCommand(cliContext *cli.Context) error {
 			if os.IsPermission(err) {
 				return fmt.Errorf("insufficient permissions to read state file %s. Please run with sudo", stateFile)
 			}
-			// If it's not a permission error, continue - the sqlite.Open call below will handle other issues
+			// If it's not a permission error, continue - the sqlite.Open call below will handle other issues.
 		}
-
-		dbRW, err := sqlite.Open(stateFile)
-		if err != nil {
-			return fmt.Errorf("failed to open state file: %w", err)
-		}
-		defer dbRW.Close()
 
 		dbRO, err := sqlite.Open(stateFile, sqlite.WithReadOnly(true))
 		if err != nil {
@@ -57,7 +51,7 @@ func machineInfoCommand(cliContext *cli.Context) error {
 
 		rootCtx, rootCancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer rootCancel()
-		machineID, err := pkgmetadata.ReadMachineIDWithFallback(rootCtx, dbRW, dbRO)
+		machineID, err := pkgmetadata.ReadMachineID(rootCtx, dbRO)
 		if err != nil {
 			return err
 		}
