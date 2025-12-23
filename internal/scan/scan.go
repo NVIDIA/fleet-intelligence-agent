@@ -28,12 +28,11 @@ import (
 	apiv1 "github.com/leptonai/gpud/api/v1"
 	cmdcommon "github.com/leptonai/gpud/cmd/common"
 	"github.com/leptonai/gpud/components"
-	componentsacceleratornvidiainfiniband "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband"
+	nvidiainfiniband "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband"
+	infinibandclass "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband/class"
 	nvidiacommon "github.com/leptonai/gpud/pkg/config/common"
 	"github.com/leptonai/gpud/pkg/log"
 	nvidiadcgm "github.com/leptonai/gpud/pkg/nvidia-query/dcgm"
-	nvidiainfiniband "github.com/leptonai/gpud/pkg/nvidia-query/infiniband"
-	infinibandclass "github.com/leptonai/gpud/pkg/nvidia-query/infiniband/class"
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
 
 	"github.com/NVIDIA/gpuhealth/internal/machineinfo"
@@ -121,7 +120,7 @@ func Scan(ctx context.Context, opts ...Option) error {
 		threshold, err := nvidiainfiniband.SupportsInfinibandPortRate(mi.GPUInfo.Product)
 		if err == nil {
 			log.Logger.Infow("setting default expected port states", "product", mi.GPUInfo.Product, "at_least_ports", threshold.AtLeastPorts, "at_least_rate", threshold.AtLeastRate)
-			componentsacceleratornvidiainfiniband.SetDefaultExpectedPortStates(threshold)
+			nvidiainfiniband.SetDefaultExpectedPortStates(threshold)
 		}
 	}
 

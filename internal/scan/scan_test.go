@@ -24,7 +24,7 @@ import (
 
 	apiv1 "github.com/leptonai/gpud/api/v1"
 	"github.com/leptonai/gpud/components"
-	infinibandclass "github.com/leptonai/gpud/pkg/nvidia-query/infiniband/class"
+	infinibandclass "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband/class"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

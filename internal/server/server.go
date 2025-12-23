@@ -103,7 +103,7 @@ func initializeDatabases(ctx context.Context, config *config.Config) (*sql.DB, *
 // Priority: DB (persisted) → dmidecode (hardware UUID) → random UUID
 func initializeMachineID(ctx context.Context, dbRW, dbRO *sql.DB) (string, error) {
 	// Try to read existing machine ID from database
-	machineID, err := pkgmetadata.ReadMachineIDWithFallback(ctx, dbRW, dbRO)
+	machineID, err := pkgmetadata.ReadMachineID(ctx, dbRO)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", fmt.Errorf("failed to read machine uid: %w", err)
 	}

@@ -15,9 +15,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	componentsnvidiagpucounts "github.com/leptonai/gpud/components/accelerator/nvidia/gpu-counts"
-	componentsinfiniband "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband"
+	nvidiainfiniband "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband"
+	infinibandtypes "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband/types"
 	"github.com/leptonai/gpud/pkg/log"
-	"github.com/leptonai/gpud/pkg/nvidia-query/infiniband"
 	"github.com/urfave/cli"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -260,11 +260,11 @@ func runCommand(cliContext *cli.Context) error {
 	}
 
 	if len(infinibandExpectedPortStates) > 0 {
-		var expectedPortStates infiniband.ExpectedPortStates
+		var expectedPortStates infinibandtypes.ExpectedPortStates
 		if err := json.Unmarshal([]byte(infinibandExpectedPortStates), &expectedPortStates); err != nil {
 			return err
 		}
-		componentsinfiniband.SetDefaultExpectedPortStates(expectedPortStates)
+		nvidiainfiniband.SetDefaultExpectedPortStates(expectedPortStates)
 
 		log.Logger.Infow("set infiniband expected port states", "infinibandExpectedPortStates", infinibandExpectedPortStates)
 	}
