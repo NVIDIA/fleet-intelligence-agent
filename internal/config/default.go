@@ -37,8 +37,8 @@ const (
 )
 
 var (
-	// DefaultRetentionPeriod - keep health data for 24 hours by default
-	DefaultRetentionPeriod = metav1.Duration{Duration: 24 * time.Hour}
+	// DefaultRetentionPeriod - keep health data for 4 hours by default
+	DefaultRetentionPeriod = metav1.Duration{Duration: 4 * time.Hour}
 )
 
 // Default creates a default health configuration
