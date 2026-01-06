@@ -311,8 +311,8 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 	}
 	// Purge metrics every 5 minutes (reasonable interval to balance overhead and timely cleanup)
 	metricsPurgeInterval := 5 * time.Minute
-	log.Logger.Infow("initializing metrics syncer", "scrapeInterval", time.Minute, "purgeInterval", metricsPurgeInterval, "retention", config.RetentionPeriod.Duration)
-	syncer := pkgmetricssyncer.NewSyncer(ctx, promScraper, metricsSQLiteStore, time.Minute, metricsPurgeInterval, config.RetentionPeriod.Duration)
+	log.Logger.Infow("initializing metrics syncer", "scrapeInterval", healthCheckInterval, "purgeInterval", metricsPurgeInterval, "retention", config.RetentionPeriod.Duration)
+	syncer := pkgmetricssyncer.NewSyncer(ctx, promScraper, metricsSQLiteStore, healthCheckInterval, metricsPurgeInterval, config.RetentionPeriod.Duration)
 	syncer.Start()
 
 	promRecorder := pkgmetricsrecorder.NewPrometheusRecorder(ctx, 15*time.Minute, dbRO)
