@@ -3,6 +3,7 @@ INSTALL ?= install
 GOLANGCI_LINT ?= golangci-lint
 GOFMT ?= gofmt
 GOTEST ?= go test
+GOFLAGS ?= -trimpath
 
 # Root directory of the project (absolute path).
 ROOTDIR=$(dir $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -83,7 +84,7 @@ FORCE:
 
 define BUILD_BINARY
 @echo "Building $@"
-@CGO_ENABLED=1 $(GO) build ${GO_BUILD_FLAGS} ${DEBUG_GO_GCFLAGS} -o $@ ${GO_TAGS}  ./$<
+@CGO_ENABLED=1 $(GO) build $(GOFLAGS) ${GO_BUILD_FLAGS} ${DEBUG_GO_GCFLAGS} -o $@ ${GO_TAGS}  ./$<
 endef
 
 # Build a binary from a cmd.
@@ -118,7 +119,7 @@ fmt: ## format Go code
 test: ## run tests with coverage
 	@echo "Running tests..."
 	@mkdir -p coverage
-	@$(GOTEST) -race -coverprofile=coverage/coverage.out -covermode=atomic ./...
+	@$(GOTEST) $(GOFLAGS) -race -coverprofile=coverage/coverage.out -covermode=atomic ./...
 	@$(GO) tool cover -html=coverage/coverage.out -o coverage/coverage.html
 	@echo "Coverage report generated: coverage/coverage.html"
 	@$(GO) tool cover -func=coverage/coverage.out | tail -1
