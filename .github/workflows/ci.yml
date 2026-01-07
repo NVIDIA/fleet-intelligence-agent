@@ -8,6 +8,7 @@ on:
 
 env:
   GO_VERSION: '1.24.11'
+  GOFLAGS: '-trimpath'
   GOPRIVATE: gitlab-master.nvidia.com/*
   GONOPROXY: gitlab-master.nvidia.com/*
   GONOSUMDB: gitlab-master.nvidia.com/*

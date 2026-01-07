@@ -31,6 +31,8 @@ builds:
   - id: gpuhealth
     main: ./cmd/gpuhealth
     binary: gpuhealth
+    flags:
+      - -trimpath
     goos:
       - linux
     goarch:
