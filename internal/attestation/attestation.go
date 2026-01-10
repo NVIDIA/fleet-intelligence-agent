@@ -65,11 +65,11 @@ type AttestationData struct {
 
 // Manager manages the attestation process with configurable intervals
 type Manager struct {
-	ctx                 context.Context
-	cancel              context.CancelFunc
-	cache               *cache
-	nvmlInstance        nvidianvml.Instance
-	attestationInterval time.Duration
+	ctx          context.Context
+	cancel       context.CancelFunc
+	cache        *cache
+	nvmlInstance nvidianvml.Instance
+	config       *config.AttestationConfig
 }
 
 // cache holds the latest attestation results with thread-safe access
@@ -95,20 +95,20 @@ func (c *cache) updateAttestationData(attestationData *AttestationData) {
 }
 
 // NewManager creates a new attestation manager
-func NewManager(ctx context.Context, nvmlInstance nvidianvml.Instance, attestationInterval time.Duration) *Manager {
+func NewManager(ctx context.Context, nvmlInstance nvidianvml.Instance, config *config.AttestationConfig) *Manager {
 	cctx, cancel := context.WithCancel(ctx)
 
 	// Use 24 hours as default if not specified or invalid
-	if attestationInterval <= 0 {
-		attestationInterval = 24 * time.Hour
+	if config.Interval.Duration <= 0 {
+		config.Interval.Duration = 24 * time.Hour
 	}
 
 	return &Manager{
-		ctx:                 cctx,
-		cancel:              cancel,
-		cache:               &cache{},
-		nvmlInstance:        nvmlInstance,
-		attestationInterval: attestationInterval,
+		ctx:          cctx,
+		cancel:       cancel,
+		cache:        &cache{},
+		nvmlInstance: nvmlInstance,
+		config:       config,
 	}
 }
 
@@ -134,10 +134,15 @@ func (m *Manager) Start() {
 	log.Logger.Infow("Starting attestation manager with thundering herd prevention")
 
 	go func() {
-		// Add initial jitter to spread out startup requests (0-30 minutes)
-		initialJitter := m.calculateJitter(30 * time.Minute)
-		log.Logger.Infow("Adding initial startup jitter to prevent thundering herd",
-			"jitter_duration", initialJitter)
+		// Add initial jitter to spread out startup requests (0-30 minutes) if enabled
+		var initialJitter time.Duration
+		if m.config.JitterEnabled {
+			initialJitter = m.calculateJitter(30 * time.Minute)
+			log.Logger.Infow("Adding initial startup jitter to prevent thundering herd",
+				"jitter_duration", initialJitter)
+		} else {
+			log.Logger.Infow("Startup jitter disabled for testing")
+		}
 
 		// Wait for initial jitter before first attestation
 		select {
@@ -152,10 +157,10 @@ func (m *Manager) Start() {
 		m.runAttestationWithJitter()
 
 		// Create ticker with configurable interval (default 24 hours)
-		ticker := time.NewTicker(m.attestationInterval)
+		ticker := time.NewTicker(m.config.Interval.Duration)
 		defer ticker.Stop()
 
-		log.Logger.Infow("Attestation ticker started", "interval", m.attestationInterval)
+		log.Logger.Infow("Attestation ticker started", "interval", m.config.Interval.Duration)
 
 		for {
 			select {
@@ -182,21 +187,19 @@ func (m *Manager) runAttestation() {
 	// Always update cache with result (success or failure) so server knows status
 	attestationData := &AttestationData{}
 
-	// Step 1: Get VBIOS versions for all GPUs
-	log.Logger.Infow("Getting machine ID and VBIOS versions")
-	machineId, vbiosVersions, err := m.getMachineIdWithVBIOS()
+	// Step 1: Get machine ID
+	log.Logger.Infow("Getting machine ID")
+	machineId, err := m.getMachineId()
 	if err != nil {
-		log.Logger.Errorw("Failed to get VBIOS versions", "error", err)
+		log.Logger.Errorw("Failed to get machine info", "error", err)
 		attestationData.Success = false
 		attestationData.ErrorMessage = err.Error()
 		m.cache.updateAttestationData(attestationData)
 		return
 	}
 
-	log.Logger.Infow("Version information retrieved",
-		"machine_id", machineId,
-		"vbios_versions", vbiosVersions,
-		"gpu_count", len(vbiosVersions))
+	log.Logger.Infow("Machine information retrieved",
+		"machine_id", machineId)
 
 	// Step 2: Load JWT token from metadata database
 	jwtToken := m.getJWTTokenFromMetadata(m.ctx)
@@ -222,8 +225,8 @@ func (m *Manager) runAttestation() {
 	attestationData.NonceRefreshTimestamp = nonceRefreshTimestamp
 
 	// Step 4: Get evidences from attestation SDK
-	log.Logger.Infow("Getting evidences with nonce and VBIOS versions", "nonce", nonce, "vbios_versions", vbiosVersions)
-	sdkResponse, err := m.getEvidences(nonce, vbiosVersions)
+	log.Logger.Debugw("Getting evidences with nonce", "nonce", nonce)
+	sdkResponse, err := m.getEvidences(nonce)
 	if err != nil {
 		log.Logger.Errorw("Failed to get evidences", "error", err)
 		attestationData.Success = false
@@ -236,12 +239,7 @@ func (m *Manager) runAttestation() {
 	attestationData.SDKResponse = *sdkResponse
 	attestationData.Success = true
 	attestationData.ErrorMessage = "n/a"
-
-	log.Logger.Infow("Updating attestation cache with successful data",
-		"evidences_count", len(sdkResponse.Evidences),
-		"result_code", sdkResponse.ResultCode,
-		"result_message", sdkResponse.ResultMessage,
-		"nonce_refresh_timestamp", nonceRefreshTimestamp)
+	log.Logger.Debugw("Attestation data", "attestation_data", attestationData)
 
 	// Update the attestation cache
 	m.cache.updateAttestationData(attestationData)
@@ -358,56 +356,37 @@ func (m *Manager) getNonceEndpointFromMetadata(ctx context.Context) string {
 	return ""
 }
 
-func (m *Manager) getMachineIdWithVBIOS() (string, []string, error) {
+func (m *Manager) getMachineId() (string, error) {
 	if m.nvmlInstance == nil {
 		log.Logger.Warnw("NVML instance not available, returning mock data")
-		return "", nil, fmt.Errorf("NVML instance not available")
+		return "", fmt.Errorf("NVML instance not available")
 	}
 
 	// Get machine info which includes GPU information
 	machineInfo, err := pkgmachineinfo.GetMachineInfo(m.nvmlInstance)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to get machine info: %w", err)
+		return "", fmt.Errorf("failed to get machine info: %w", err)
 	}
 
 	if machineInfo.GPUInfo == nil || len(machineInfo.GPUInfo.GPUs) == 0 {
-		return "", nil, fmt.Errorf("no GPU information available")
+		return "", fmt.Errorf("no GPU information available")
 	}
 
-	var vbiosVersions []string
-	for i, gpu := range machineInfo.GPUInfo.GPUs {
-		// Extract the real VBIOS version from GPU information
-		if gpu.VBIOSVersion == "" {
-			log.Logger.Warnw("VBIOS version not available for GPU",
-				"gpu_index", i,
-				"uuid", gpu.UUID,
-				"bus_id", gpu.BusID)
-			continue
-		}
+	// Just log the GPUs found for debug purposes
+	log.Logger.Debugw("GPUs found", "count", len(machineInfo.GPUInfo.GPUs))
 
-		vbiosVersions = append(vbiosVersions, gpu.VBIOSVersion)
-
-		log.Logger.Debugw("Extracted real VBIOS version for GPU",
-			"gpu_index", i,
-			"uuid", gpu.UUID,
-			"bus_id", gpu.BusID,
-			"serial_number", gpu.SN,
-			"board_id", gpu.BoardID,
-			"vbios_version", gpu.VBIOSVersion)
-	}
-
-	return machineInfo.SystemUUID, vbiosVersions, nil
+	return machineInfo.SystemUUID, nil
 }
 
-func (m *Manager) getEvidences(nonce string, vbiosVersions []string) (*AttestationSDKResponse, error) {
-	log.Logger.Infow("Calling attestation SDK CLI", "nonce", nonce)
+func (m *Manager) getEvidences(nonce string) (*AttestationSDKResponse, error) {
+	log.Logger.Infow("Calling attestation SDK CLI")
 
 	// Execute nvattest command
 	// Set timeout to prevent hanging, derived from manager context to respect cancellation
 	ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "nvattest", "collect-evidence", "--device", "gpu", "--nonce", nonce)
+	cmd := exec.CommandContext(ctx, "nvattest", "collect-evidence", "--gpu-evidence-source=corelib", "--nonce", nonce, "--gpu-architecture", "blackwell", "--format", "json")
 
 	// Capture stdout (JSON) and stderr (logs) separately
 	var stdout, stderr bytes.Buffer
@@ -466,6 +445,12 @@ func (m *Manager) calculateJitter(maxJitter time.Duration) time.Duration {
 
 // runAttestationWithJitter runs attestation with additional per-request jitter
 func (m *Manager) runAttestationWithJitter() {
+	if !m.config.JitterEnabled {
+		log.Logger.Infow("Running attestation immediately (jitter disabled)")
+		m.runAttestation()
+		return
+	}
+
 	// Add significant jitter (0–30 minutes) for each request to spread load across a window,
 	// reducing thundering herd risk across many agents.
 	requestJitter := m.calculateJitter(30 * time.Minute)

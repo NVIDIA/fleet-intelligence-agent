@@ -62,6 +62,15 @@ type Config struct {
 	HealthExporter *HealthExporterConfig `json:"health_exporter,omitempty"`
 }
 
+// AttestationConfig holds configuration for the attestation process
+type AttestationConfig struct {
+	// Interval is how often to run attestation (default: 24 hours)
+	Interval metav1.Duration `json:"interval"`
+
+	// JitterEnabled controls whether to add random jitter to attestation schedule
+	JitterEnabled bool `json:"jitter_enabled"`
+}
+
 // HealthExporterConfig holds configuration for the health data exporter
 type HealthExporterConfig struct {
 	// MetricsEndpoint is the specific endpoint for sending metrics data
@@ -70,11 +79,8 @@ type HealthExporterConfig struct {
 	// LogsEndpoint is the specific endpoint for sending logs/events data
 	LogsEndpoint string `json:"logs_endpoint"`
 
-	// AttestationEnabled controls whether attestation functionality is enabled
-	AttestationEnabled bool `json:"attestation_enabled"`
-
-	// AttestationInterval is how often to run attestation (default: 24 hours)
-	AttestationInterval metav1.Duration `json:"attestation_interval"`
+	// Attestation configuration
+	Attestation AttestationConfig `json:"attestation"`
 
 	// AuthToken is the authentication token for HTTP requests
 	AuthToken string `json:"auth_token,omitempty"`

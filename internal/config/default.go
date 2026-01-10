@@ -57,10 +57,12 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 		},
 		// Health exporter is enabled by default
 		HealthExporter: &HealthExporterConfig{
-			MetricsEndpoint:      "",
-			LogsEndpoint:         "",
-			AttestationEnabled:   false,
-			AttestationInterval:  metav1.Duration{Duration: 24 * time.Hour}, // Default 24 hours
+			MetricsEndpoint: "",
+			LogsEndpoint:    "",
+			Attestation: AttestationConfig{
+				Interval:      metav1.Duration{Duration: 24 * time.Hour},
+				JitterEnabled: true,
+			},
 			AuthToken:            "",
 			Interval:             metav1.Duration{Duration: 1 * time.Minute},
 			Timeout:              metav1.Duration{Duration: 30 * time.Second},

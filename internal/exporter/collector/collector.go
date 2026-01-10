@@ -137,10 +137,9 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 	}
 
 	// Collect attestation data if provider is available
-	if c.config.AttestationEnabled {
-		if err := c.collectAttestationData(data); err != nil {
-			log.Logger.Errorw("Failed to collect attestation data", "error", err)
-		}
+	// Attestation is always enabled if manager is available
+	if err := c.collectAttestationData(data); err != nil {
+		log.Logger.Errorw("Failed to collect attestation data", "error", err)
 	}
 
 	return data, nil
