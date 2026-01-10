@@ -59,138 +59,105 @@ func parseDuration(durationStr string) (time.Duration, error) {
 	return totalDuration, nil
 }
 
+// Helper functions for environment variable configuration
+
+func setBoolFromEnv(envKey string, target *bool, logMsg, logKey string) error {
+	if val := os.Getenv(envKey); val != "" {
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return fmt.Errorf("invalid %s value: %v", envKey, val)
+		}
+		*target = b
+		log.Logger.Infow(logMsg, logKey, b)
+	}
+	return nil
+}
+
+func setDurationFromEnv(envKey string, target *metav1.Duration, logMsg, logKey string, min, max time.Duration) error {
+	if val := os.Getenv(envKey); val != "" {
+		d, err := time.ParseDuration(val)
+		if err != nil {
+			return fmt.Errorf("invalid %s value: %v", envKey, val)
+		}
+		if min > 0 && d < min {
+			return fmt.Errorf("%s must be at least %v, got %v", envKey, min, d)
+		}
+		if max > 0 && d > max {
+			return fmt.Errorf("%s must be at most %v, got %v", envKey, max, d)
+		}
+		target.Duration = d
+		log.Logger.Infow(logMsg, logKey, d)
+	}
+	return nil
+}
+
+func setIntFromEnv(envKey string, target *int, logMsg, logKey string, min int) error {
+	if val := os.Getenv(envKey); val != "" {
+		i, err := strconv.Atoi(val)
+		if err != nil {
+			return fmt.Errorf("invalid %s value: %v", envKey, val)
+		}
+		if i < min {
+			return fmt.Errorf("%s must be at least %d, got %d", envKey, min, i)
+		}
+		*target = i
+		log.Logger.Infow(logMsg, logKey, i)
+	}
+	return nil
+}
+
 // configureHealthExporterFromEnv reads environment variables and applies them to the health exporter configuration
 func configureHealthExporterFromEnv(cfg *config.Config) error {
 	// Ensure HealthExporter config exists
 	if cfg.HealthExporter == nil {
 		return fmt.Errorf("health exporter config is nil")
 	}
+	he := cfg.HealthExporter
 
-	// GPUHEALTH_INCLUDE_METRICS - Include metrics in export
-	if includeMetrics := os.Getenv("GPUHEALTH_INCLUDE_METRICS"); includeMetrics != "" {
-		if val, err := strconv.ParseBool(includeMetrics); err == nil {
-			cfg.HealthExporter.IncludeMetrics = val
-			log.Logger.Infow("set health exporter include metrics from env", "include_metrics", val)
-		} else {
-			return fmt.Errorf("invalid GPUHEALTH_INCLUDE_METRICS value: %v", includeMetrics)
-		}
+	if err := setBoolFromEnv("GPUHEALTH_INCLUDE_METRICS", &he.IncludeMetrics, "set health exporter include metrics from env", "include_metrics"); err != nil {
+		return err
 	}
 
-	// GPUHEALTH_INCLUDE_EVENTS - Include events in export
-	if includeEvents := os.Getenv("GPUHEALTH_INCLUDE_EVENTS"); includeEvents != "" {
-		if val, err := strconv.ParseBool(includeEvents); err == nil {
-			cfg.HealthExporter.IncludeEvents = val
-			log.Logger.Infow("set health exporter include events from env", "include_events", val)
-		} else {
-			return fmt.Errorf("invalid GPUHEALTH_INCLUDE_EVENTS value: %v", includeEvents)
-		}
+	if err := setBoolFromEnv("GPUHEALTH_INCLUDE_EVENTS", &he.IncludeEvents, "set health exporter include events from env", "include_events"); err != nil {
+		return err
 	}
 
-	// GPUHEALTH_INCLUDE_MACHINEINFO - Include machine info in export
-	if includeMachineInfo := os.Getenv("GPUHEALTH_INCLUDE_MACHINEINFO"); includeMachineInfo != "" {
-		if val, err := strconv.ParseBool(includeMachineInfo); err == nil {
-			cfg.HealthExporter.IncludeMachineInfo = val
-			log.Logger.Infow("set health exporter include machine info from env", "include_machine_info", val)
-		} else {
-			return fmt.Errorf("invalid GPUHEALTH_INCLUDE_MACHINEINFO value: %v", includeMachineInfo)
-		}
+	if err := setBoolFromEnv("GPUHEALTH_INCLUDE_MACHINEINFO", &he.IncludeMachineInfo, "set health exporter include machine info from env", "include_machine_info"); err != nil {
+		return err
 	}
 
-	// GPUHEALTH_INCLUDE_HEALTHCHECKS - Include component data in export
-	if includeComponentData := os.Getenv("GPUHEALTH_INCLUDE_HEALTHCHECKS"); includeComponentData != "" {
-		if val, err := strconv.ParseBool(includeComponentData); err == nil {
-			cfg.HealthExporter.IncludeComponentData = val
-			log.Logger.Infow("set health exporter include component data from env", "include_component_data", val)
-		} else {
-			return fmt.Errorf("invalid GPUHEALTH_INCLUDE_HEALTHCHECKS value: %v", includeComponentData)
-		}
+	if err := setBoolFromEnv("GPUHEALTH_INCLUDE_HEALTHCHECKS", &he.IncludeComponentData, "set health exporter include component data from env", "include_component_data"); err != nil {
+		return err
 	}
 
-	// GPUHEALTH_COLLECT_INTERVAL - Export interval
-	if interval := os.Getenv("GPUHEALTH_COLLECT_INTERVAL"); interval != "" {
-		if duration, err := time.ParseDuration(interval); err == nil {
-			// Validate the interval range (1 second to 24 hours)
-			if duration < time.Second {
-				return fmt.Errorf("GPUHEALTH_COLLECT_INTERVAL must be at least 1 second, got %v", duration)
-			}
-			if duration > 24*time.Hour {
-				return fmt.Errorf("GPUHEALTH_COLLECT_INTERVAL must be at most 24 hours, got %v", duration)
-			}
-			cfg.HealthExporter.Interval = metav1.Duration{Duration: duration}
-			log.Logger.Infow("set health exporter interval from env", "interval", duration)
-		} else {
-			return fmt.Errorf("invalid GPUHEALTH_COLLECT_INTERVAL value: %v", interval)
-		}
+	if err := setDurationFromEnv("GPUHEALTH_COLLECT_INTERVAL", &he.Interval, "set health exporter interval from env", "interval", time.Second, 24*time.Hour); err != nil {
+		return err
 	}
 
-	// GPUHEALTH_ATTESTATION_ENABLED - Enable/disable attestation
-	if attestationEnabled := os.Getenv("GPUHEALTH_ATTESTATION_ENABLED"); attestationEnabled != "" {
-		if val, err := strconv.ParseBool(attestationEnabled); err == nil {
-			cfg.HealthExporter.AttestationEnabled = val
-			log.Logger.Infow("set attestation enabled from env", "attestation_enabled", val)
-		} else {
-			return fmt.Errorf("invalid GPUHEALTH_ATTESTATION_ENABLED value: %v", attestationEnabled)
-		}
+	// GPUHEALTH_ATTESTATION_JITTER_ENABLED - Enable/disable attestation jitter
+	if err := setBoolFromEnv("GPUHEALTH_ATTESTATION_JITTER_ENABLED", &he.Attestation.JitterEnabled, "set attestation jitter enabled from env", "attestation_jitter_enabled"); err != nil {
+		return err
 	}
 
-	// GPUHEALTH_ATTESTATION_INTERVAL - Attestation interval
-	if interval := os.Getenv("GPUHEALTH_ATTESTATION_INTERVAL"); interval != "" {
-		if duration, err := time.ParseDuration(interval); err == nil {
-			cfg.HealthExporter.AttestationInterval = metav1.Duration{Duration: duration}
-			log.Logger.Infow("set attestation interval from env", "attestation_interval", duration)
-		} else {
-			return fmt.Errorf("invalid GPUHEALTH_ATTESTATION_INTERVAL value: %v", interval)
-		}
+	if err := setDurationFromEnv("GPUHEALTH_ATTESTATION_INTERVAL", &he.Attestation.Interval, "set attestation interval from env", "attestation_interval", 0, 0); err != nil {
+		return err
 	}
 
-	// GPUHEALTH_METRICS_LOOKBACK - Metrics lookback duration
-	if metricsLookback := os.Getenv("GPUHEALTH_METRICS_LOOKBACK"); metricsLookback != "" {
-		if duration, err := time.ParseDuration(metricsLookback); err == nil {
-			cfg.HealthExporter.MetricsLookback = metav1.Duration{Duration: duration}
-			log.Logger.Infow("set health exporter metrics lookback from env", "metrics_lookback", duration)
-		} else {
-			return fmt.Errorf("invalid GPUHEALTH_METRICS_LOOKBACK value: %v", metricsLookback)
-		}
+	// Lookbacks
+	if err := setDurationFromEnv("GPUHEALTH_METRICS_LOOKBACK", &he.MetricsLookback, "set health exporter metrics lookback from env", "metrics_lookback", 0, 0); err != nil {
+		return err
 	}
 
-	// GPUHEALTH_EVENTS_LOOKBACK - Events lookback duration
-	if eventsLookback := os.Getenv("GPUHEALTH_EVENTS_LOOKBACK"); eventsLookback != "" {
-		if duration, err := time.ParseDuration(eventsLookback); err == nil {
-			cfg.HealthExporter.EventsLookback = metav1.Duration{Duration: duration}
-			log.Logger.Infow("set health exporter events lookback from env", "events_lookback", duration)
-		} else {
-			return fmt.Errorf("invalid GPUHEALTH_EVENTS_LOOKBACK value: %v", eventsLookback)
-		}
+	if err := setDurationFromEnv("GPUHEALTH_EVENTS_LOOKBACK", &he.EventsLookback, "set health exporter events lookback from env", "events_lookback", 0, 0); err != nil {
+		return err
 	}
 
-	// GPUHEALTH_CHECK_INTERVAL - Component health check interval
-	if healthCheckInterval := os.Getenv("GPUHEALTH_CHECK_INTERVAL"); healthCheckInterval != "" {
-		if duration, err := time.ParseDuration(healthCheckInterval); err == nil {
-			// Validate the interval range (1 second to 24 hours)
-			if duration < time.Second {
-				return fmt.Errorf("GPUHEALTH_CHECK_INTERVAL must be at least 1 second, got %v", duration)
-			}
-			if duration > 24*time.Hour {
-				return fmt.Errorf("GPUHEALTH_CHECK_INTERVAL must be at most 24 hours, got %v", duration)
-			}
-			cfg.HealthExporter.HealthCheckInterval = metav1.Duration{Duration: duration}
-			log.Logger.Infow("set health exporter health check interval from env", "health_check_interval", duration)
-		} else {
-			return fmt.Errorf("invalid GPUHEALTH_CHECK_INTERVAL value: %v", healthCheckInterval)
-		}
+	if err := setDurationFromEnv("GPUHEALTH_CHECK_INTERVAL", &he.HealthCheckInterval, "set health exporter health check interval from env", "health_check_interval", time.Second, 24*time.Hour); err != nil {
+		return err
 	}
 
-	// GPUHEALTH_RETRY_MAX_ATTEMPTS - Maximum retry attempts
-	if retryMaxAttempts := os.Getenv("GPUHEALTH_RETRY_MAX_ATTEMPTS"); retryMaxAttempts != "" {
-		if val, err := strconv.Atoi(retryMaxAttempts); err == nil {
-			if val < 0 {
-				return fmt.Errorf("GPUHEALTH_RETRY_MAX_ATTEMPTS must be non-negative, got %v", val)
-			}
-			cfg.HealthExporter.RetryMaxAttempts = val
-			log.Logger.Infow("set health exporter retry max attempts from env", "retry_max_attempts", val)
-		} else {
-			return fmt.Errorf("invalid GPUHEALTH_RETRY_MAX_ATTEMPTS value: %v", retryMaxAttempts)
-		}
+	if err := setIntFromEnv("GPUHEALTH_RETRY_MAX_ATTEMPTS", &he.RetryMaxAttempts, "set health exporter retry max attempts from env", "retry_max_attempts", 0); err != nil {
+		return err
 	}
 
 	return nil

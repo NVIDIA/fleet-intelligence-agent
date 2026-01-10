@@ -74,14 +74,9 @@ func New(ctx context.Context, opts ...ExporterOption) (Exporter, error) {
 	}
 	options.setDefaults()
 
-	// Create attestation manager if enabled
-	var attestationManager *attestation.Manager
-	if options.config.AttestationEnabled {
-		attestationManager = attestation.NewManager(cctx, options.nvmlInstance, options.config.AttestationInterval.Duration)
-		log.Logger.Infow("Attestation manager created", "interval", options.config.AttestationInterval.Duration)
-	} else {
-		log.Logger.Infow("Attestation disabled, skipping attestation manager creation")
-	}
+	// Create attestation manager (always enabled)
+	attestationManager := attestation.NewManager(cctx, options.nvmlInstance, &options.config.Attestation)
+	log.Logger.Infow("Attestation manager created", "interval", options.config.Attestation.Interval.Duration, "jitter_enabled", options.config.Attestation.JitterEnabled)
 
 	// Create components
 	dataCollector := collector.New(

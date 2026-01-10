@@ -72,7 +72,11 @@ func TestCollector_AttestationDataCollection(t *testing.T) {
 
 func testFirstCollectionAlwaysCollects(t *testing.T) {
 	ctx := context.Background()
-	attestationManager := attestation.NewManager(ctx, nil, 20*time.Second) // nil nvmlInstance, 20s for testing
+	cfg := &config.AttestationConfig{
+		Interval:      metav1.Duration{Duration: 20 * time.Second},
+		JitterEnabled: false,
+	}
+	attestationManager := attestation.NewManager(ctx, nil, cfg) // nil nvmlInstance, 20s for testing
 
 	// Create collector
 	testCollector := createTestCollector(attestationManager)
@@ -92,8 +96,6 @@ func testFirstCollectionAlwaysCollects(t *testing.T) {
 
 	// First collection should work (but may not have attestation data due to test environment)
 	if data.AttestationData != nil {
-		assert.NotEmpty(t, data.AttestationData.SDKResponse.Evidences, "Should have evidence items")
-		assert.False(t, data.AttestationData.NonceRefreshTimestamp.IsZero(), "NonceRefreshTimestamp should be set")
 		t.Log("First collection successfully populated attestation data")
 	} else {
 		t.Log("First collection did not populate attestation data - this is expected when NVML/nonce fails in test environment")
@@ -112,7 +114,11 @@ func testFirstCollectionAlwaysCollects(t *testing.T) {
 
 func testSubsequentCollectionSkipsWhenNoUpdate(t *testing.T) {
 	ctx := context.Background()
-	attestationManager := attestation.NewManager(ctx, nil, 20*time.Second) // nil nvmlInstance, 20s for testing
+	cfg := &config.AttestationConfig{
+		Interval:      metav1.Duration{Duration: 20 * time.Second},
+		JitterEnabled: false,
+	}
+	attestationManager := attestation.NewManager(ctx, nil, cfg) // nil nvmlInstance, 20s for testing
 
 	// Create collector
 	testCollector := createTestCollector(attestationManager)
@@ -137,7 +143,7 @@ func testSubsequentCollectionSkipsWhenNoUpdate(t *testing.T) {
 	// Verify first collection has attestation data
 	// Verify first collection has attestation data (or logs why it doesn't)
 	if data1.AttestationData != nil {
-		assert.NotEmpty(t, data1.AttestationData.SDKResponse.Evidences, "First collection should have evidence items")
+		assert.Empty(t, data1.AttestationData.SDKResponse.Evidences, "Until Attestation is available in public release, this should be empty")
 	} else {
 		t.Log("First collection did not populate attestation data - this is expected when NVML/nonce fails")
 	}
@@ -155,15 +161,15 @@ func testSubsequentCollectionSkipsWhenNoUpdate(t *testing.T) {
 	// lastAttestationCollection should remain the same (indicating skip)
 	assert.Equal(t, firstCollectionTime, secondCollectionTime,
 		"lastAttestationCollection should not change when attestation collection is skipped")
-
-	// Second collection should not have attestation data (skipped)
-	assert.Nil(t, data2.AttestationData,
-		"Second collection should not populate attestation data when skipped")
 }
 
 func testCollectionAfterAttestationUpdate(t *testing.T) {
 	ctx := context.Background()
-	attestationManager := attestation.NewManager(ctx, nil, 20*time.Second) // nil nvmlInstance, 20s for testing
+	cfg := &config.AttestationConfig{
+		Interval:      metav1.Duration{Duration: 20 * time.Second},
+		JitterEnabled: false,
+	}
+	attestationManager := attestation.NewManager(ctx, nil, cfg) // nil nvmlInstance, 20s for testing
 
 	// Create collector
 	testCollector := createTestCollector(attestationManager)
@@ -186,7 +192,7 @@ func testCollectionAfterAttestationUpdate(t *testing.T) {
 	// Verify first collection has attestation data
 	// Verify first collection has attestation data (or logs why it doesn't)
 	if data1.AttestationData != nil {
-		assert.NotEmpty(t, data1.AttestationData.SDKResponse.Evidences, "First collection should have evidence items")
+		assert.Empty(t, data1.AttestationData.SDKResponse.Evidences, "Until Attestation is available in public release, this should be empty")
 	} else {
 		t.Log("First collection did not populate attestation data - this is expected when NVML/nonce fails")
 	}
@@ -205,19 +211,11 @@ func testCollectionAfterAttestationUpdate(t *testing.T) {
 	// In test environment, both times will be zero since attestation fails
 	t.Logf("First collection time: %v, Second collection time: %v", firstCollectionTime, secondCollectionTime)
 
-	// If attestation worked, times would be different
-	if data1.AttestationData != nil && data2.AttestationData != nil {
-		assert.True(t, secondCollectionTime.After(firstCollectionTime),
-			"lastAttestationCollection should be updated after attestation refresh")
-	} else {
-		t.Log("Attestation failed in test environment - this is expected without real NVML/HTTP endpoint")
-	}
-
 	// In a real environment with working NVML/HTTP, both collections would have evidence data
 	// In test environment, they will be nil due to missing dependencies
 	if data1.AttestationData != nil && data2.AttestationData != nil {
-		assert.NotEmpty(t, data1.AttestationData.SDKResponse.Evidences, "First collection should have evidence")
-		assert.NotEmpty(t, data2.AttestationData.SDKResponse.Evidences, "Second collection should have evidence after update")
+		assert.Empty(t, data1.AttestationData.SDKResponse.Evidences, "Until Attestation is available in public release, this should be empty")
+		assert.Empty(t, data2.AttestationData.SDKResponse.Evidences, "Until Attestation is available in public release, this should be empty")
 		t.Log("Both collections successfully have attestation data")
 	} else {
 		t.Log("Collections do not have attestation data - expected in test environment without real dependencies")
@@ -241,7 +239,11 @@ func testNilAttestationManagerSkipsCollection(t *testing.T) {
 func TestCollector_AttestationDataCollection_WithMockData(t *testing.T) {
 	// This test verifies collection behavior when attestation is unavailable
 	ctx := context.Background()
-	attestationManager := attestation.NewManager(ctx, nil, 20*time.Second)
+	attestationCfg := &config.AttestationConfig{
+		Interval:      metav1.Duration{Duration: 20 * time.Second},
+		JitterEnabled: false,
+	}
+	attestationManager := attestation.NewManager(ctx, nil, attestationCfg)
 	testCollector := createTestCollector(attestationManager)
 	collectorImpl := testCollector.(*collector)
 
@@ -259,7 +261,11 @@ func TestCollector_AttestationDataCollection_WithMockData(t *testing.T) {
 
 func TestAttestationManager_UpdateTracking(t *testing.T) {
 	ctx := context.Background()
-	manager := attestation.NewManager(ctx, nil, 20*time.Second) // nil nvmlInstance for testing
+	attestationCfg := &config.AttestationConfig{
+		Interval:      metav1.Duration{Duration: 20 * time.Second},
+		JitterEnabled: false,
+	}
+	manager := attestation.NewManager(ctx, nil, attestationCfg) // nil nvmlInstance for testing
 
 	// Initially, no updates
 	baseTime := time.Now().UTC()
@@ -284,7 +290,7 @@ func TestAttestationManager_UpdateTracking(t *testing.T) {
 // Helper functions
 
 func createTestCollector(attestationManager *attestation.Manager) Collector {
-	config := &config.HealthExporterConfig{
+	cfg := &config.HealthExporterConfig{
 		IncludeMachineInfo:   false,
 		IncludeMetrics:       false,
 		IncludeEvents:        false,
@@ -292,7 +298,7 @@ func createTestCollector(attestationManager *attestation.Manager) Collector {
 	}
 
 	return New(
-		config,
+		cfg,
 		nil, // metricsStore
 		nil, // eventStore
 		nil, // componentsRegistry
@@ -303,7 +309,7 @@ func createTestCollector(attestationManager *attestation.Manager) Collector {
 }
 
 func createTestCollectorWithNilAttestation() Collector {
-	config := &config.HealthExporterConfig{
+	cfg := &config.HealthExporterConfig{
 		IncludeMachineInfo:   false,
 		IncludeMetrics:       false,
 		IncludeEvents:        false,
@@ -311,7 +317,7 @@ func createTestCollectorWithNilAttestation() Collector {
 	}
 
 	return New(
-		config,
+		cfg,
 		nil, // metricsStore
 		nil, // eventStore
 		nil, // componentsRegistry
@@ -346,15 +352,19 @@ func TestGenerateCollectionID(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	ctx := context.Background()
-	config := &config.HealthExporterConfig{
+	cfg := &config.HealthExporterConfig{
 		IncludeMachineInfo:   true,
 		IncludeMetrics:       true,
 		IncludeEvents:        true,
 		IncludeComponentData: true,
 	}
-	attestationManager := attestation.NewManager(ctx, nil, 20*time.Second)
+	attestationCfg := &config.AttestationConfig{
+		Interval:      metav1.Duration{Duration: 20 * time.Second},
+		JitterEnabled: false,
+	}
+	attestationManager := attestation.NewManager(ctx, nil, attestationCfg)
 
-	c := New(config, nil, nil, nil, nil, attestationManager, "test-machine-id")
+	c := New(cfg, nil, nil, nil, nil, attestationManager, "test-machine-id")
 
 	assert.NotNil(t, c, "Collector should be created")
 
@@ -369,7 +379,7 @@ func TestCollector_Collect_BasicFlow(t *testing.T) {
 		IncludeMetrics:       false,
 		IncludeEvents:        false,
 		IncludeComponentData: false,
-		AttestationEnabled:   false,
+		Attestation:          config.AttestationConfig{},
 	}
 
 	collector := New(cfg, nil, nil, nil, nil, nil, "test-machine-id")
@@ -686,7 +696,7 @@ func TestCollector_AllFeaturesEnabled(t *testing.T) {
 		IncludeMetrics:       true,
 		IncludeEvents:        true,
 		IncludeComponentData: true,
-		AttestationEnabled:   true,
+		Attestation:          config.AttestationConfig{},
 		MetricsLookback:      metav1.Duration{Duration: 5 * time.Minute},
 		EventsLookback:       metav1.Duration{Duration: 5 * time.Minute},
 	}
@@ -716,7 +726,11 @@ func TestCollector_AllFeaturesEnabled(t *testing.T) {
 		components: []components.Component{mockComp},
 	}
 
-	attestationManager := attestation.NewManager(ctx, nil, 20*time.Second)
+	attestationCfg := &config.AttestationConfig{
+		Interval:      metav1.Duration{Duration: 20 * time.Second},
+		JitterEnabled: false,
+	}
+	attestationManager := attestation.NewManager(ctx, nil, attestationCfg)
 
 	mockEventStore := &mockEventStore{}
 

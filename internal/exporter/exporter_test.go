@@ -19,6 +19,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -870,6 +871,60 @@ func TestRefreshJWTToken(t *testing.T) {
 		token, err := he.refreshJWTToken(ctx)
 		require.Error(t, err)
 		assert.Empty(t, token)
+
+		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("refreshes token successfully", func(t *testing.T) {
+		// Mock enrollment server
+		expectedToken := "new-jwt-token"
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Verify request
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.Equal(t, "Bearer test-sak-token", r.Header.Get("Authorization"))
+
+			// Return new token
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, `{"jwt_assertion": "%s"}`, expectedToken)
+		}))
+		defer server.Close()
+
+		tmpDB := setupTestDB(t)
+		defer tmpDB.Close()
+
+		ctx := context.Background()
+		// Setup metadata
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "sak_token", "test-sak-token")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "enroll_endpoint", server.URL)
+		require.NoError(t, err)
+
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithDatabaseConnections(tmpDB, tmpDB),
+			WithMachineID("test-machine-id"),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		token, err := he.refreshJWTToken(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, expectedToken, token)
+
+		// Verify DB was updated
+		storedToken, err := pkgmetadata.ReadMetadata(ctx, tmpDB, pkgmetadata.MetadataKeyToken)
+		require.NoError(t, err)
+		assert.Equal(t, expectedToken, storedToken)
 
 		// Cleanup
 		err = exporter.Stop()
