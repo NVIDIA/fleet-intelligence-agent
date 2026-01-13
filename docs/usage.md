@@ -24,7 +24,7 @@ Starts the HTTP API server on port 15133. The server provides REST endpoints and
 - `--log-level`: Set logging level (debug, info, warn, error)
 - `--listen-address`: Change listen address (default: `0.0.0.0:15133`)
 - `--pprof`: Enable pprof profiling endpoint (note: pprof routes are not yet exposed)
-- `--components`: Enable/disable specific components (default: all except docker, kubelet, tailscale, containerd, fuse, nfs)
+- `--components`: Enable/disable specific components
 
 ### Check Status
 

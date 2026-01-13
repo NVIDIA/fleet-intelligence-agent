@@ -167,7 +167,7 @@ func Scan(ctx context.Context, opts ...Option) error {
 		RebootEventStore: nil,
 
 		MountPoints:  []string{"/"},
-		MountTargets: []string{"/var/lib/kubelet"},
+		MountTargets: []string{},
 
 		FailureInjector: op.failureInjector,
 	}

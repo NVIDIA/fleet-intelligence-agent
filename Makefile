@@ -4,6 +4,16 @@ GOLANGCI_LINT ?= golangci-lint
 GOFMT ?= gofmt
 GOTEST ?= go test
 GOFLAGS ?= -trimpath
+DOCKER ?= docker
+
+# Container image build settings
+IMAGE ?= gpuhealth:dev
+DOCKER_BUILDKIT ?= 1
+DOCKER_BUILD_PROGRESS ?= auto
+# By default, use ssh-agent forwarding for private module access during `docker build`.
+# Set DOCKER_SSH= to disable (e.g. when using --secret/netrc in CI).
+DOCKER_SSH ?= default
+DOCKER_BUILD_EXTRA_FLAGS ?=
 
 # Root directory of the project (absolute path).
 ROOTDIR=$(dir $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -71,7 +81,7 @@ GOPATHS=$(shell echo ${GOPATH} | tr ":" "\n" | tr ";" "\n")
 
 BINARIES=$(addprefix bin/,$(COMMANDS))
 
-.PHONY: clean all binaries gpuhealth lint test fmt help package-snapshot
+.PHONY: clean all binaries gpuhealth lint test fmt help package-snapshot docker-build
 .DEFAULT: help
 
 help: ## show this help message
@@ -93,6 +103,16 @@ bin/%: cmd/% FORCE
 
 binaries: $(BINARIES) ## build binaries
 	@echo "Built binaries: $(BINARIES)"
+
+# Build container image (requires BuildKit for --ssh/--secret mounts used in Dockerfile)
+docker-build: ## build container image (IMAGE=gpuhealth:dev)
+	@echo "Building container image: $(IMAGE)"
+	@DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) $(DOCKER) build \
+		$(if $(DOCKER_SSH),--ssh $(DOCKER_SSH),) \
+		--progress=$(DOCKER_BUILD_PROGRESS) \
+		-t $(IMAGE) \
+		$(DOCKER_BUILD_EXTRA_FLAGS) \
+		.
 
 # Specific target for gpuhealth (your main binary)
 gpuhealth: bin/gpuhealth ## build gpuhealth binary

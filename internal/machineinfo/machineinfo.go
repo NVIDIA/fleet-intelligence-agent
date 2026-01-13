@@ -20,6 +20,8 @@ package machineinfo
 import (
 	"fmt"
 	"io"
+	"os"
+	"strings"
 
 	"github.com/dustin/go-humanize"
 	apiv1 "github.com/leptonai/gpud/api/v1"
@@ -77,6 +79,11 @@ func GetMachineInfo(nvmlInstance nvidianvml.Instance) (*MachineInfo, error) {
 	gpudInfo, err := pkgmachineinfo.GetMachineInfo(nvmlInstance)
 	if err != nil {
 		return nil, err
+	}
+
+	// Override the hostname if it's set in the environment for containerized deployments
+	if hostname := strings.TrimSpace(os.Getenv("HOSTNAME")); hostname != "" {
+		gpudInfo.Hostname = hostname
 	}
 
 	// Convert to our custom MachineInfo struct with GPU Health version
