@@ -17,6 +17,7 @@ package config
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -512,5 +513,252 @@ func TestDefaultWithHealthExporter(t *testing.T) {
 		assert.Equal(t, "", cfg.HealthExporter.LogsEndpoint)
 		assert.Equal(t, "", cfg.HealthExporter.AuthToken)
 		assert.False(t, cfg.HealthExporter.OfflineMode)
+	})
+}
+
+func TestToConfigEntries(t *testing.T) {
+	allComponents := []string{"cpu", "disk", "memory", "gpu"}
+
+	t.Run("basic config entries", func(t *testing.T) {
+		cfg := &Config{
+			APIVersion:      "v1",
+			Address:         "0.0.0.0:8080",
+			State:           "/var/lib/gpuhealth",
+			RetentionPeriod: metav1.Duration{Duration: 24 * time.Hour},
+			Components:      []string{},
+		}
+
+		entries := cfg.ToConfigEntries(allComponents)
+
+		// Find specific entries
+		var apiVersion, address, state, retentionPeriod, enabledComponents, disabledComponents string
+		for _, entry := range entries {
+			switch entry.Key {
+			case "api_version":
+				apiVersion = entry.Value
+			case "address":
+				address = entry.Value
+			case "state":
+				state = entry.Value
+			case "retention_period":
+				retentionPeriod = entry.Value
+			case "enabled_components":
+				enabledComponents = entry.Value
+			case "disabled_components":
+				disabledComponents = entry.Value
+			}
+		}
+
+		assert.Equal(t, "v1", apiVersion)
+		assert.Equal(t, "0.0.0.0:8080", address)
+		assert.Equal(t, "/var/lib/gpuhealth", state)
+		assert.Equal(t, "86400", retentionPeriod)
+
+		// Verify JSONB array format
+		var enabled []string
+		err := json.Unmarshal([]byte(enabledComponents), &enabled)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, allComponents, enabled)
+
+		var disabled []string
+		err = json.Unmarshal([]byte(disabledComponents), &disabled)
+		require.NoError(t, err)
+		assert.Empty(t, disabled)
+	})
+
+	t.Run("with health exporter config", func(t *testing.T) {
+		cfg := &Config{
+			APIVersion:      "v1",
+			Address:         "0.0.0.0:8080",
+			State:           "/var/lib/gpuhealth",
+			RetentionPeriod: metav1.Duration{Duration: 24 * time.Hour},
+			Components:      []string{},
+			HealthExporter: &HealthExporterConfig{
+				MetricsEndpoint: "https://example.com/metrics",
+				LogsEndpoint:    "https://example.com/logs",
+				Attestation: AttestationConfig{
+					Interval:      metav1.Duration{Duration: 24 * time.Hour},
+					JitterEnabled: true,
+				},
+				Interval:             metav1.Duration{Duration: 1 * time.Minute},
+				Timeout:              metav1.Duration{Duration: 30 * time.Second},
+				IncludeMetrics:       true,
+				IncludeEvents:        true,
+				IncludeMachineInfo:   true,
+				IncludeComponentData: true,
+				MetricsLookback:      metav1.Duration{Duration: 5 * time.Minute},
+				EventsLookback:       metav1.Duration{Duration: 5 * time.Minute},
+				HealthCheckInterval:  metav1.Duration{Duration: 1 * time.Minute},
+				RetryMaxAttempts:     3,
+				OfflineMode:          false,
+				OutputPath:           "",
+				OutputFormat:         "json",
+				Duration:             0,
+			},
+		}
+
+		entries := cfg.ToConfigEntries(allComponents)
+
+		// Check for health exporter entries
+		foundMetricsEndpoint := false
+		foundLogsEndpoint := false
+		foundAttestation := false
+		foundAuthToken := false
+
+		for _, entry := range entries {
+			if entry.Key == "health_exporter.metrics_endpoint" {
+				foundMetricsEndpoint = true
+			}
+			if entry.Key == "health_exporter.logs_endpoint" {
+				foundLogsEndpoint = true
+			}
+			if entry.Key == "health_exporter.attestation_jitter_enabled" {
+				foundAttestation = true
+				assert.Equal(t, "true", entry.Value)
+			}
+			if entry.Key == "auth_token" || entry.Key == "health_exporter.auth_token" {
+				foundAuthToken = true
+			}
+		}
+
+		// Endpoints are excluded - they're enrollment-assigned, not user config
+		assert.False(t, foundMetricsEndpoint, "metrics_endpoint should not be exported")
+		assert.False(t, foundLogsEndpoint, "logs_endpoint should not be exported")
+		assert.True(t, foundAttestation)
+		assert.False(t, foundAuthToken, "auth_token should not be exported")
+	})
+
+	t.Run("components with disabled list", func(t *testing.T) {
+		cfg := &Config{
+			APIVersion:      "v1",
+			Address:         "0.0.0.0:8080",
+			State:           "/var/lib/gpuhealth",
+			RetentionPeriod: metav1.Duration{Duration: 24 * time.Hour},
+			Components:      []string{"*", "-memory", "-disk"},
+		}
+
+		entries := cfg.ToConfigEntries(allComponents)
+
+		var enabledComponents, disabledComponents string
+		for _, entry := range entries {
+			if entry.Key == "enabled_components" {
+				enabledComponents = entry.Value
+			}
+			if entry.Key == "disabled_components" {
+				disabledComponents = entry.Value
+			}
+		}
+
+		// Verify JSONB array format
+		var enabled []string
+		err := json.Unmarshal([]byte(enabledComponents), &enabled)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"cpu", "gpu"}, enabled)
+
+		var disabled []string
+		err = json.Unmarshal([]byte(disabledComponents), &disabled)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"memory", "disk"}, disabled)
+	})
+
+	t.Run("specific components only", func(t *testing.T) {
+		cfg := &Config{
+			APIVersion:      "v1",
+			Address:         "0.0.0.0:8080",
+			State:           "/var/lib/gpuhealth",
+			RetentionPeriod: metav1.Duration{Duration: 24 * time.Hour},
+			Components:      []string{"cpu", "memory"},
+		}
+
+		entries := cfg.ToConfigEntries(allComponents)
+
+		var enabledComponents, disabledComponents string
+		for _, entry := range entries {
+			if entry.Key == "enabled_components" {
+				enabledComponents = entry.Value
+			}
+			if entry.Key == "disabled_components" {
+				disabledComponents = entry.Value
+			}
+		}
+
+		var enabled []string
+		err := json.Unmarshal([]byte(enabledComponents), &enabled)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"cpu", "memory"}, enabled)
+
+		var disabled []string
+		err = json.Unmarshal([]byte(disabledComponents), &disabled)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"disk", "gpu"}, disabled)
+	})
+}
+
+func TestGetComponentLists(t *testing.T) {
+	allComponents := []string{"cpu", "disk", "memory", "gpu", "network"}
+
+	t.Run("empty components enables all", func(t *testing.T) {
+		cfg := &Config{Components: []string{}}
+		enabled, disabled := cfg.getComponentLists(allComponents)
+
+		assert.ElementsMatch(t, allComponents, enabled)
+		assert.Empty(t, disabled)
+		assert.NotNil(t, disabled, "disabled should be empty slice, not nil")
+	})
+
+	t.Run("wildcard enables all", func(t *testing.T) {
+		cfg := &Config{Components: []string{"*"}}
+		enabled, disabled := cfg.getComponentLists(allComponents)
+
+		assert.ElementsMatch(t, allComponents, enabled)
+		assert.Empty(t, disabled)
+	})
+
+	t.Run("all keyword enables all", func(t *testing.T) {
+		cfg := &Config{Components: []string{"all"}}
+		enabled, disabled := cfg.getComponentLists(allComponents)
+
+		assert.ElementsMatch(t, allComponents, enabled)
+		assert.Empty(t, disabled)
+	})
+
+	t.Run("wildcard with exclusions", func(t *testing.T) {
+		cfg := &Config{Components: []string{"*", "-memory", "-disk"}}
+		enabled, disabled := cfg.getComponentLists(allComponents)
+
+		assert.ElementsMatch(t, []string{"cpu", "gpu", "network"}, enabled)
+		assert.ElementsMatch(t, []string{"memory", "disk"}, disabled)
+	})
+
+	t.Run("specific components", func(t *testing.T) {
+		cfg := &Config{Components: []string{"cpu", "memory"}}
+		enabled, disabled := cfg.getComponentLists(allComponents)
+
+		assert.ElementsMatch(t, []string{"cpu", "memory"}, enabled)
+		assert.ElementsMatch(t, []string{"disk", "gpu", "network"}, disabled)
+	})
+
+	t.Run("specific with explicit disables", func(t *testing.T) {
+		cfg := &Config{Components: []string{"cpu", "memory", "-network"}}
+		enabled, disabled := cfg.getComponentLists(allComponents)
+
+		assert.ElementsMatch(t, []string{"cpu", "memory"}, enabled)
+		assert.ElementsMatch(t, []string{"disk", "gpu", "network"}, disabled)
+	})
+
+	t.Run("returns empty slices not nil", func(t *testing.T) {
+		cfg := &Config{Components: []string{"*"}}
+		enabled, disabled := cfg.getComponentLists(allComponents)
+
+		// Verify JSON marshaling produces empty array, not null
+		enabledJSON, err := json.Marshal(enabled)
+		require.NoError(t, err)
+		disabledJSON, err := json.Marshal(disabled)
+		require.NoError(t, err)
+
+		// Should contain all components
+		assert.NotEqual(t, "null", string(enabledJSON))
+		// Should be empty array "[]", not null
+		assert.Equal(t, "[]", string(disabledJSON))
 	})
 }
