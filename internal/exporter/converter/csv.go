@@ -360,6 +360,8 @@ func (c *csvConverter) writeMachineInfoCSV(outputDir, filename string, data *col
 				[]string{prefix + " SN", gpu.SN},
 				[]string{prefix + " Minor ID", gpu.MinorID},
 				[]string{prefix + " Board ID", fmt.Sprintf("%d", gpu.BoardID)},
+				[]string{prefix + " VBIOS Version", gpu.VBIOSVersion},
+				[]string{prefix + " Chassis SN", gpu.ChassisSN},
 			)
 		}
 	}
