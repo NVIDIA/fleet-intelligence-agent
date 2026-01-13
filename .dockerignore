@@ -1,0 +1,12 @@
+.git
+.github
+coverage
+dist
+bin
+build
+**/*.test
+**/*.out
+**/*.log
+**/node_modules
+deployments/packages
+

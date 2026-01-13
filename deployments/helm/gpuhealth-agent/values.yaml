@@ -1,0 +1,55 @@
+image:
+  repository: nvcr.io/nvidian/gpu-health/gpuhealth-agent
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: nvcr-pull-secret
+
+hostPID: true
+runtimeClassName: nvidia
+
+securityContext:
+  privileged: true
+  runAsUser: 0
+
+env:
+  NVIDIA_VISIBLE_DEVICES: all
+  NVIDIA_DRIVER_CAPABILITIES: utility
+  DCGM_URL: nvidia-dcgm.gpu-operator.svc:5555
+  DCGM_URL_IS_UNIX_SOCKET: "false"
+
+logLevel: warn
+listenAddress: 0.0.0.0:15133
+components: all
+
+enroll:
+  enabled: false
+  endpoint: ""
+  tokenSecretName: ""
+  tokenSecretKey: "token"
+  tokenValue: ""
+  securityContext:
+    runAsUser: 0
+
+ports:
+  http: 15133
+
+resources:
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+    ephemeral-storage: "1Gi"
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+    ephemeral-storage: "256Mi"
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  automountToken: false

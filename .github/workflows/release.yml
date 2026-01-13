@@ -29,12 +29,22 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
       - name: Configure Git for private repositories
         run: |
           git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
 
       - name: Download dependencies
         run: go mod download
+
+      - name: Set up SSH agent for private modules
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.GITLAB_SSH_KEY }}
 
       - name: Clean previous dist directory
         run: |
@@ -126,6 +136,20 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
 
+      - name: Prepare gpuhealth-agent image tags
+        id: agent_image
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          IMAGE="nvcr.io/nvidian/gpu-health/gpuhealth-agent"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "tags<<EOF" >> "$GITHUB_OUTPUT"
+          echo "${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
+          if [ "${{ steps.version.outputs.is_prerelease }}" = "false" ]; then
+            echo "${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+          fi
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -139,6 +163,20 @@ jobs:
           username: $oauthtoken
           password: ${{ secrets.NVCR_API_KEY }}
 
+      - name: Build and push gpuhealth-agent image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.agent_image.outputs.tags }}
+          ssh: default
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ steps.version.outputs.commit }}
+            BUILD_TIMESTAMP=${{ github.event.head_commit.timestamp }}
+
       - name: Build and push Skyhook package image
         uses: docker/build-push-action@v6
         with:
@@ -146,6 +184,36 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.skyhook.outputs.tags }}
+
+      - name: Package Helm chart
+        run: |
+          helm package deployments/helm/gpuhealth-agent \
+            --destination dist \
+            --version "${{ steps.version.outputs.version }}" \
+            --app-version "${{ steps.version.outputs.version }}"
+
+      - name: Ensure Helm push plugin is installed
+        run: |
+          if helm plugin list | awk '{print $1}' | grep -qx 'cm-push'; then
+            echo "helm-push plugin already installed"
+          else
+            helm plugin install https://github.com/chartmuseum/helm-push
+          fi
+
+      - name: Add NGC Helm repo
+        env:
+          NGC_API_KEY: ${{ secrets.NVCR_API_KEY }}
+        run: |
+          set -euo pipefail
+          helm repo add ngc https://helm.ngc.nvidia.com/nvidian/gpu-health \
+            --username '$oauthtoken' \
+            --password "${NGC_API_KEY}"
+
+      - name: Push Helm chart to NGC Helm registry
+        run: |
+          set -euo pipefail
+          CHART_VERSION="${{ steps.version.outputs.version }}"
+          helm cm-push "dist/gpuhealth-agent-${CHART_VERSION}.tgz" ngc
       
       - name: Setup JFrog CLI
         if: steps.version.outputs.is_prerelease == 'false'
@@ -192,6 +260,13 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Skyhook image tags:**" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.skyhook.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**gpuhealth-agent image tags:**" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.agent_image.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Helm chart (NGC repo):**" >> $GITHUB_STEP_SUMMARY
+          echo "repo: https://helm.ngc.nvidia.com/nvidian" >> $GITHUB_STEP_SUMMARY
+          echo "chart: gpuhealth-agent-${{ steps.version.outputs.version }}.tgz" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [[ "${{ steps.version.outputs.is_prerelease }}" == "true" ]]; then
