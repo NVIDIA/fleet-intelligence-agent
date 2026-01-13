@@ -23,7 +23,6 @@ GPUHEALTH_CHECK_INTERVAL="1m"
 GPUHEALTH_RETRY_MAX_ATTEMPTS="3"
 ```
 
-By default, the agent monitors all components except docker, kubelet, tailscale, containerd, fuse, and nfs.
 
 ## Environment Variables
 

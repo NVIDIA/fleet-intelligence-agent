@@ -245,7 +245,7 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 		EventStore:               eventStore,
 		RebootEventStore:         rebootEventStore,
 		MountPoints:              []string{"/"},
-		MountTargets:             []string{"/var/lib/kubelet"},
+		MountTargets:             []string{},
 		HealthCheckInterval:      healthCheckInterval,
 		EnableDCGMPolicy:         config.EnableDCGMPolicy,
 	}
