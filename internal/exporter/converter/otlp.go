@@ -97,7 +97,7 @@ func (c *otlpConverter) Convert(data *collector.HealthData) *OTLPData {
 	}
 }
 
-// createOTLPResource creates OTLP resource with machine info and identification
+// createOTLPResource creates OTLP resource with machine info, agent config, and identification
 func (c *otlpConverter) createOTLPResource(data *collector.HealthData) *resourcev1.Resource {
 	attributes := []*commonv1.KeyValue{
 		{
@@ -118,6 +118,16 @@ func (c *otlpConverter) createOTLPResource(data *collector.HealthData) *resource
 				Value: &commonv1.AnyValue_IntValue{IntValue: int64(len(data.ComponentData))},
 			},
 		},
+	}
+
+	// Add agent config entries as resource attributes
+	for _, entry := range data.ConfigEntries {
+		attributes = append(attributes, &commonv1.KeyValue{
+			Key: "agentConfig." + entry.Key,
+			Value: &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_StringValue{StringValue: entry.Value},
+			},
+		})
 	}
 
 	// Add machine info attributes if available using reflection

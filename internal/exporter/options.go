@@ -38,6 +38,7 @@ type ExporterOption func(*exporterOptions) error
 // Configuration values should be sourced from config.HealthExporterConfig.
 type exporterOptions struct {
 	config             *config.HealthExporterConfig
+	fullConfig         *config.Config // Full agent config for daily config export
 	metricsStore       pkgmetrics.Store
 	eventStore         eventstore.Store
 	componentsRegistry components.Registry
@@ -57,6 +58,14 @@ func WithConfig(config *config.HealthExporterConfig) ExporterOption {
 		}
 		c.config = config
 		c.timeout = config.Timeout.Duration
+		return nil
+	}
+}
+
+// WithFullConfig sets the full agent configuration for daily config export
+func WithFullConfig(cfg *config.Config) ExporterOption {
+	return func(c *exporterOptions) error {
+		c.fullConfig = cfg
 		return nil
 	}
 }

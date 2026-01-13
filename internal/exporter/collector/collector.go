@@ -51,6 +51,7 @@ type HealthData struct {
 	Events          eventstore.Events
 	ComponentData   map[string]interface{}
 	AttestationData *attestation.AttestationData
+	ConfigEntries   []config.ConfigEntry
 }
 
 // Collector defines the interface for collecting health data
@@ -61,6 +62,7 @@ type Collector interface {
 // collector implements the Collector interface
 type collector struct {
 	config                    *config.HealthExporterConfig
+	configEntries             []config.ConfigEntry // Cached config entries computed once at startup
 	metricsStore              pkgmetrics.Store
 	eventStore                eventstore.Store
 	componentsRegistry        components.Registry
@@ -72,7 +74,9 @@ type collector struct {
 
 // New creates a new health data collector
 func New(
-	config *config.HealthExporterConfig,
+	cfg *config.HealthExporterConfig,
+	fullConfig *config.Config,
+	allComponentNames []string,
 	metricsStore pkgmetrics.Store,
 	eventStore eventstore.Store,
 	componentsRegistry components.Registry,
@@ -80,8 +84,16 @@ func New(
 	attestationManager *attestation.Manager,
 	machineID string,
 ) Collector {
+	// Compute config entries once at startup (no dynamic config reload)
+	var configEntries []config.ConfigEntry
+	if fullConfig != nil {
+		configEntries = fullConfig.ToConfigEntries(allComponentNames)
+		log.Logger.Infow("Config entries computed at startup", "entries_count", len(configEntries))
+	}
+
 	return &collector{
-		config:             config,
+		config:             cfg,
+		configEntries:      configEntries,
 		metricsStore:       metricsStore,
 		eventStore:         eventStore,
 		componentsRegistry: componentsRegistry,
@@ -140,6 +152,11 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 	// Attestation is always enabled if manager is available
 	if err := c.collectAttestationData(data); err != nil {
 		log.Logger.Errorw("Failed to collect attestation data", "error", err)
+	}
+
+	// Collect config data
+	if err := c.collectConfigData(data); err != nil {
+		log.Logger.Errorw("Failed to collect config data", "error", err)
 	}
 
 	return data, nil
@@ -295,5 +312,18 @@ func (c *collector) collectAttestationData(data *HealthData) error {
 		c.lastAttestationCollection = time.Now().UTC()
 	}
 
+	return nil
+}
+
+// collectConfigData returns cached agent configuration entries
+// Config entries are computed once at startup since there's no dynamic config reload
+func (c *collector) collectConfigData(data *HealthData) error {
+	if len(c.configEntries) == 0 {
+		log.Logger.Debugw("No config entries available, skipping config data collection")
+		return nil
+	}
+
+	// Return cached config entries (computed once at startup)
+	data.ConfigEntries = c.configEntries
 	return nil
 }

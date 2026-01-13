@@ -16,8 +16,10 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -25,6 +27,12 @@ import (
 
 	pkgconfigcommon "github.com/leptonai/gpud/pkg/config/common"
 )
+
+// ConfigEntry represents a single configuration option as a key-value pair
+type ConfigEntry struct {
+	Key   string
+	Value string
+}
 
 // Config provides configuration for the health metrics exporter
 type Config struct {
@@ -232,4 +240,126 @@ func (config *Config) ShouldDisable(componentName string) bool {
 
 	_, shouldDisable := config.disabledComponents[componentName]
 	return shouldDisable
+}
+
+// ToConfigEntries converts the Config struct into a slice of ConfigEntry for export.
+func (config *Config) ToConfigEntries(allComponentNames []string) []ConfigEntry {
+	entries := []ConfigEntry{
+		{Key: "api_version", Value: config.APIVersion},
+		{Key: "address", Value: config.Address},
+		{Key: "state", Value: config.State},
+		{Key: "retention_period", Value: fmt.Sprintf("%d", int64(config.RetentionPeriod.Seconds()))},
+	}
+
+	enabled, disabled := config.getComponentLists(allComponentNames)
+	enabledJSON, _ := json.Marshal(enabled)
+	disabledJSON, _ := json.Marshal(disabled)
+	entries = append(entries,
+		ConfigEntry{Key: "enabled_components", Value: string(enabledJSON)},
+		ConfigEntry{Key: "disabled_components", Value: string(disabledJSON)},
+		ConfigEntry{Key: "enable_dcgm_policy", Value: fmt.Sprintf("%t", config.EnableDCGMPolicy)},
+	)
+
+	if config.HealthExporter != nil {
+		entries = append(entries, extractHealthExporterEntries(config.HealthExporter)...)
+	}
+	return entries
+}
+
+// getComponentLists computes enabled/disabled lists from config rules against all available components.
+func (config *Config) getComponentLists(allComponentNames []string) (enabled, disabled []string) {
+	enabled, disabled = []string{}, []string{}
+
+	disabledSet := make(map[string]bool)
+	for _, c := range config.Components {
+		if strings.HasPrefix(c, "-") {
+			disabledSet[strings.TrimPrefix(c, "-")] = true
+		}
+	}
+
+	allMode := len(config.Components) == 0 ||
+		(len(config.Components) > 0 && (config.Components[0] == "*" || config.Components[0] == "all"))
+
+	if allMode {
+		for _, name := range allComponentNames {
+			if disabledSet[name] {
+				disabled = append(disabled, name)
+			} else {
+				enabled = append(enabled, name)
+			}
+		}
+		return
+	}
+
+	enabledSet := make(map[string]bool)
+	for _, c := range config.Components {
+		if !strings.HasPrefix(c, "-") && c != "*" && c != "all" {
+			enabledSet[c] = true
+		}
+	}
+	for _, name := range allComponentNames {
+		if disabledSet[name] {
+			disabled = append(disabled, name)
+		} else if enabledSet[name] {
+			enabled = append(enabled, name)
+		} else {
+			disabled = append(disabled, name)
+		}
+	}
+	return
+}
+
+// extractHealthExporterEntries uses reflection to extract config entries from HealthExporterConfig.
+func extractHealthExporterEntries(cfg *HealthExporterConfig) []ConfigEntry {
+	var entries []ConfigEntry
+	v := reflect.ValueOf(cfg).Elem()
+	t := v.Type()
+
+	for i := 0; i < v.NumField(); i++ {
+		field := t.Field(i)
+		value := v.Field(i)
+
+		jsonTag := field.Tag.Get("json")
+		if jsonTag == "" || jsonTag == "-" {
+			continue
+		}
+		key := strings.Split(jsonTag, ",")[0]
+		// Skip sensitive/enrollment-assigned field
+		if key == "auth_token" || key == "metrics_endpoint" || key == "logs_endpoint" {
+			continue
+		}
+
+		var strValue string
+		switch value.Kind() {
+		case reflect.String:
+			strValue = value.String()
+		case reflect.Bool:
+			strValue = fmt.Sprintf("%t", value.Bool())
+		case reflect.Int, reflect.Int64:
+			// Check if it's a time.Duration (which is int64 under the hood)
+			if d, ok := value.Interface().(time.Duration); ok {
+				strValue = fmt.Sprintf("%d", int64(d.Seconds()))
+			} else {
+				strValue = fmt.Sprintf("%d", value.Int())
+			}
+		case reflect.Struct:
+			if duration, ok := value.Interface().(metav1.Duration); ok {
+				strValue = fmt.Sprintf("%d", int64(duration.Seconds()))
+			} else if d, ok := value.Interface().(time.Duration); ok {
+				strValue = fmt.Sprintf("%d", int64(d.Seconds()))
+			} else if att, ok := value.Interface().(AttestationConfig); ok {
+				// Handle nested AttestationConfig - add individual fields
+				entries = append(entries,
+					ConfigEntry{Key: "health_exporter.attestation_interval", Value: fmt.Sprintf("%d", int64(att.Interval.Seconds()))},
+					ConfigEntry{Key: "health_exporter.attestation_jitter_enabled", Value: fmt.Sprintf("%t", att.JitterEnabled)},
+				)
+				continue
+			}
+		default:
+			strValue = fmt.Sprintf("%v", value.Interface())
+		}
+
+		entries = append(entries, ConfigEntry{Key: "health_exporter." + key, Value: strValue})
+	}
+	return entries
 }

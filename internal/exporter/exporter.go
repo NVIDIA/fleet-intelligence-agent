@@ -35,6 +35,7 @@ import (
 	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
 	"github.com/NVIDIA/gpuhealth/internal/exporter/converter"
 	"github.com/NVIDIA/gpuhealth/internal/exporter/writer"
+	"github.com/NVIDIA/gpuhealth/internal/registry"
 )
 
 // Ensure healthExporter implements the Exporter interface
@@ -78,9 +79,13 @@ func New(ctx context.Context, opts ...ExporterOption) (Exporter, error) {
 	attestationManager := attestation.NewManager(cctx, options.nvmlInstance, &options.config.Attestation)
 	log.Logger.Infow("Attestation manager created", "interval", options.config.Attestation.Interval.Duration, "jitter_enabled", options.config.Attestation.JitterEnabled)
 
-	// Create components
+	// Get all component names for config export
+	allComponentNames := registry.AllComponentNames()
+
 	dataCollector := collector.New(
 		options.config,
+		options.fullConfig,
+		allComponentNames,
 		options.metricsStore,
 		options.eventStore,
 		options.componentsRegistry,

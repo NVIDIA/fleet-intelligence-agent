@@ -239,3 +239,13 @@ func GetComponent(name string) *Component {
 	}
 	return nil
 }
+
+// AllComponentNames returns a list of all available component names
+func AllComponentNames() []string {
+	all := All()
+	names := make([]string, len(all))
+	for i, c := range all {
+		names[i] = c.Name
+	}
+	return names
+}
