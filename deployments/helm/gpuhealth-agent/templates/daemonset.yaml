@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "gpuhealth-agent.fullname" . }}
+  labels:
+    {{- include "gpuhealth-agent.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "gpuhealth-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "gpuhealth-agent.selectorLabels" . | nindent 8 }}
+    spec:
+      hostPID: {{ .Values.hostPID }}
+      {{- with .Values.runtimeClassName }}
+      runtimeClassName: {{ . | quote }}
+      {{- end }}
+      {{- if .Values.serviceAccount.name }}
+      serviceAccountName: {{ .Values.serviceAccount.name | quote }}
+      {{- else if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "gpuhealth-agent.fullname" . }}
+      {{- end }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountToken }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.enroll.enabled }}
+      initContainers:
+        - name: enroll
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/bash
+            - -c
+          args:
+            - >
+              /usr/bin/gpuhealth enroll
+              --endpoint {{ required "enroll.endpoint is required when enroll.enabled=true" .Values.enroll.endpoint | quote }}
+              --token "${GPUHEALTH_TOKEN}"
+          securityContext:
+            {{- toYaml .Values.enroll.securityContext | nindent 12 }}
+          env:
+            - name: GPUHEALTH_TOKEN
+              {{- if .Values.enroll.tokenSecretName }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.enroll.tokenSecretName | quote }}
+                  key: {{ .Values.enroll.tokenSecretKey | quote }}
+              {{- else }}
+              value: {{ required "enroll.tokenValue or enroll.tokenSecretName is required when enroll.enabled=true" .Values.enroll.tokenValue | quote }}
+              {{- end }}
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/gpuhealth
+      {{- end }}
+      containers:
+        - name: gpuhealth-agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - run
+            - {{ printf "--log-level=%s" .Values.logLevel | quote }}
+            - {{ printf "--listen-address=%s" .Values.listenAddress | quote }}
+            - {{ printf "--components=%s" .Values.components | quote }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: {{ .Values.env.NVIDIA_VISIBLE_DEVICES | quote }}
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: {{ .Values.env.NVIDIA_DRIVER_CAPABILITIES | quote }}
+            - name: DCGM_ADDRESS
+              value: {{ .Values.env.DCGM_ADDRESS | quote }}
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - name: http
+              containerPort: {{ .Values.ports.http }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: dev
+              mountPath: /dev
+            - name: sys
+              mountPath: /sys
+              readOnly: true
+            - name: os-release
+              mountPath: /etc/os-release
+              readOnly: true
+            - name: machine-id
+              mountPath: /etc/machine-id
+              readOnly: true
+            - name: pstore
+              mountPath: /var/lib/systemd/pstore
+              readOnly: true
+            - name: fabricmanager-log
+              mountPath: /var/log/fabricmanager.log
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/gpuhealth
+      volumes:
+        - name: dev
+          hostPath:
+            path: /dev
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: os-release
+          hostPath:
+            path: /etc/os-release
+            type: File
+        - name: machine-id
+          hostPath:
+            path: /etc/machine-id
+            type: File
+        - name: pstore
+          hostPath:
+            path: /var/lib/systemd/pstore
+        - name: fabricmanager-log
+          hostPath:
+            path: /var/log/fabricmanager.log
+            type: FileOrCreate
+        - name: state
+          hostPath:
+            path: /var/lib/gpuhealth
+            type: DirectoryOrCreate
+

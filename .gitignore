@@ -70,3 +70,5 @@ release/
 # Local development
 local/
 dev/
+
+CLAUDE.md
