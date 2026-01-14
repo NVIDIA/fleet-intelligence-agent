@@ -188,33 +188,46 @@ func (m *Manager) runAttestation() {
 	attestationData := &AttestationData{}
 
 	// Step 1: Get machine ID
-	log.Logger.Infow("Getting machine ID")
+	log.Logger.Debugw("Getting machine ID in Attestation")
 	machineId, err := m.getMachineId()
 	if err != nil {
-		log.Logger.Errorw("Failed to get machine info", "error", err)
+		log.Logger.Errorw("Failed to get machine ID in Attestation", "error", err)
+		// SDKResponse and NonceRefreshTimestamp are nil
 		attestationData.Success = false
 		attestationData.ErrorMessage = err.Error()
 		m.cache.updateAttestationData(attestationData)
 		return
 	}
 
-	log.Logger.Infow("Machine information retrieved",
+	log.Logger.Debugw("Machine ID retrieved in Attestation",
 		"machine_id", machineId)
 
 	// Step 2: Load JWT token from metadata database
 	jwtToken := m.getJWTTokenFromMetadata(m.ctx)
 	if jwtToken == "" {
-		log.Logger.Errorw("JWT token not found in metadata, cannot proceed with attestation")
-		attestationData.Success = false
-		attestationData.ErrorMessage = "JWT token not found in metadata"
-		m.cache.updateAttestationData(attestationData)
-		return
+		if endpoint := m.getEndpointFromMetadata(m.ctx); endpoint != "" {
+			log.Logger.Errorw("JWT token not found in metadata", "endpoint", endpoint)
+			// SDKResponse and NonceRefreshTimestamp are nil
+			attestationData.Success = false
+			attestationData.ErrorMessage = "JWT token not found in agent metadata while agent is enrolled"
+			m.cache.updateAttestationData(attestationData)
+			return
+		} else {
+			log.Logger.Infow("No backend endpoint found in metadata, agent not enrolled")
+			// SDKResponse and NonceRefreshTimestamp are nil
+			attestationData.Success = false
+			attestationData.ErrorMessage = "No backend endpoint found in metadata, agent is not enrolled"
+			m.cache.updateAttestationData(attestationData)
+			return
+		}
 	}
 
 	// Step 3: Get nonce by calling the envoy endpoint
 	nonce, nonceRefreshTimestamp, err := m.getNonce(jwtToken, machineId)
 	if err != nil {
+		// if agent is not enrolled, it will return in step 2. so here we can directly return the nonce error
 		log.Logger.Errorw("Failed to get nonce", "error", err)
+		// SDKResponse and NonceRefreshTimestamp are nil
 		attestationData.Success = false
 		attestationData.ErrorMessage = err.Error()
 		m.cache.updateAttestationData(attestationData)
@@ -228,7 +241,8 @@ func (m *Manager) runAttestation() {
 	log.Logger.Debugw("Getting evidences with nonce", "nonce", nonce)
 	sdkResponse, err := m.getEvidences(nonce)
 	if err != nil {
-		log.Logger.Errorw("Failed to get evidences", "error", err)
+		log.Logger.Errorw("Failed to get evidences from attestation SDK", "error", err)
+		// SDKResponse
 		attestationData.Success = false
 		attestationData.ErrorMessage = err.Error()
 		m.cache.updateAttestationData(attestationData)
@@ -238,7 +252,7 @@ func (m *Manager) runAttestation() {
 	// Success case: populate all data
 	attestationData.SDKResponse = *sdkResponse
 	attestationData.Success = true
-	attestationData.ErrorMessage = "n/a"
+	attestationData.ErrorMessage = ""
 	log.Logger.Debugw("Attestation data", "attestation_data", attestationData)
 
 	// Update the attestation cache
@@ -258,14 +272,14 @@ func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time
 		"uuid": machineId,
 	})
 	if err != nil {
-		log.Logger.Errorw("Error marshaling request body:", "error", err)
+		log.Logger.Debugw("failed to marshal request body in nonce endpoint request", "error", err)
 		return "", time.Time{}, err
 	}
 
 	// Create HTTP request with proper Bearer authorization
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
-		log.Logger.Errorw("Error creating HTTP request:", "error", err)
+		log.Logger.Debugw("failed to create HTTP request in nonce endpoint request", "error", err)
 		return "", time.Time{}, err
 	}
 
@@ -277,7 +291,7 @@ func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Logger.Errorw("Error making POST request:", "error", err)
+		log.Logger.Debugw("failed to make POST request in nonce endpoint request", "error", err)
 		return "", time.Time{}, err
 	}
 	defer resp.Body.Close()
@@ -295,12 +309,12 @@ func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time
 		"content_type", resp.Header.Get("Content-Type"))
 
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		log.Logger.Errorw("Error decoding response:", "error", err)
+		log.Logger.Debugw("failed to decode response in nonce endpoint request", "error", err)
 		return "", time.Time{}, err
 	}
 
 	if response.Error != "" {
-		log.Logger.Errorw("Error from server:", "error", response.Error)
+		log.Logger.Debugw("error from server in nonce endpoint request", "error", response.Error)
 	} else {
 		log.Logger.Debugw("Nonce received from server:", "nonce", response.Nonce, "nonce_refresh_timestamp", response.NonceRefreshTimestamp)
 	}
@@ -329,6 +343,29 @@ func (m *Manager) getJWTTokenFromMetadata(ctx context.Context) string {
 	}
 
 	log.Logger.Debugw("JWT token not found in metadata")
+	return ""
+}
+
+func (m *Manager) getEndpointFromMetadata(ctx context.Context) string {
+	stateFile, err := config.DefaultStateFile()
+	if err != nil {
+		log.Logger.Debugw("failed to get state file path", "error", err)
+		return ""
+	}
+
+	dbRO, err := sqlite.Open(stateFile)
+	if err != nil {
+		log.Logger.Debugw("failed to open state database", "error", err)
+		return ""
+	}
+	defer dbRO.Close()
+
+	// Load endpoint from metadata
+	if endpoint, err := pkgmetadata.ReadMetadata(ctx, dbRO, pkgmetadata.MetadataKeyEndpoint); err == nil && endpoint != "" {
+		return endpoint
+	}
+
+	log.Logger.Debugw("backend endpoint not found in metadata")
 	return ""
 }
 
@@ -398,8 +435,9 @@ func (m *Manager) getEvidences(nonce string) (*AttestationSDKResponse, error) {
 	log.Logger.Debugw("Attestation CLI completed", "exit_error", err, "stdout", stdout.String(), "stderr", stderr.String())
 
 	if err != nil {
-		// If stdout is empty, it means the command failed completely (e.g. not found)
+		// If stdout is empty, it means the command failed completely (e.g. command not found)
 		if stdout.Len() == 0 {
+			// SDKResponse is nil
 			return nil, fmt.Errorf("attestation CLI execution failed: %w (stderr: %s)", err, stderr.String())
 		}
 		// If stdout has content, we continue to try parsing the JSON response
@@ -409,8 +447,9 @@ func (m *Manager) getEvidences(nonce string) (*AttestationSDKResponse, error) {
 	// Parse the JSON response from stdout (clean JSON without log messages)
 	var response AttestationSDKResponse
 	if parseErr := json.Unmarshal(stdout.Bytes(), &response); parseErr != nil {
-		log.Logger.Errorw("Failed to parse attestation CLI JSON response", "parse_error", parseErr)
-		return nil, fmt.Errorf("failed to parse CLI response: %w", parseErr)
+		log.Logger.Debugw("Failed to parse attestation CLI JSON response", "parse_error", parseErr)
+		// SDKResponse is nil
+		return nil, fmt.Errorf("failed to parse CLI response: %w (stderr: %s), stdout: %s, error: %s", parseErr, stderr.String(), stdout.String(), err.Error())
 	}
 
 	log.Logger.Infow("Successfully called attestation SDK",
