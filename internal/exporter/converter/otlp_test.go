@@ -255,67 +255,22 @@ func TestOTLPConverter_Convert_WithAttestationData(t *testing.T) {
 	require.NotNil(t, otlpData)
 	require.NotNil(t, otlpData.Logs)
 
-	// Should have attestation logs
+	// Should NOT have attestation logs
 	rl := otlpData.Logs.ResourceLogs[0]
 	logs := rl.ScopeLogs[0].LogRecords
+	assert.Empty(t, logs, "Should not have attestation logs")
 
-	// Should have at least summary + evidence logs
-	assert.GreaterOrEqual(t, len(logs), 2)
-
-	// Find attestation summary log
-	foundSummary := false
-	foundEvidence := false
-	for _, log := range logs {
-		body := log.Body.GetStringValue()
-		if contains(body, "Attestation Success") {
-			foundSummary = true
-		}
-		if contains(body, "GPU") && contains(body, "BLACKWELL") {
-			foundEvidence = true
-		}
-	}
-	assert.True(t, foundSummary, "Should have attestation summary log")
-	assert.True(t, foundEvidence, "Should have attestation evidence log")
-}
-
-func TestOTLPConverter_Convert_AttestationFailure(t *testing.T) {
-	attestationData := &attestation.AttestationData{
-		Success:      false,
-		ErrorMessage: "NVML not available",
-		SDKResponse: attestation.AttestationSDKResponse{
-			ResultCode:    1,
-			ResultMessage: "Failed",
-		},
-		NonceRefreshTimestamp: time.Now(),
-	}
-
-	data := &collector.HealthData{
-		Timestamp:       time.Now(),
-		MachineID:       "test-machine",
-		AttestationData: attestationData,
-	}
-
-	converter := NewOTLPConverter()
-	otlpData := converter.Convert(data)
-
-	require.NotNil(t, otlpData)
-	require.NotNil(t, otlpData.Logs)
-
-	// Find error log
-	rl := otlpData.Logs.ResourceLogs[0]
-	logs := rl.ScopeLogs[0].LogRecords
-
-	foundError := false
-	for _, log := range logs {
-		body := log.Body.GetStringValue()
-		if contains(body, "Attestation Failed") || contains(body, "NVML not available") {
-			foundError = true
-			// Should have ERROR severity
-			assert.Equal(t, "ERROR", log.SeverityText)
+	// Should have attestation data in resource attributes
+	rm := otlpData.Metrics.ResourceMetrics[0]
+	attrs := rm.Resource.Attributes
+	foundAttestation := false
+	for _, attr := range attrs {
+		if contains(attr.Key, "attestation") {
+			foundAttestation = true
 			break
 		}
 	}
-	assert.True(t, foundError, "Should have attestation failure log")
+	assert.True(t, foundAttestation, "Should have attestation data in resource attributes")
 }
 
 func TestOTLPConverter_ConvertStructToOTLPAttributes(t *testing.T) {
@@ -683,7 +638,7 @@ func TestOTLPConverter_Convert_AllData(t *testing.T) {
 	rm := otlpData.Metrics.ResourceMetrics[0]
 	assert.Greater(t, len(rm.ScopeMetrics[0].Metrics), 0)
 
-	// Verify logs (events + component data + attestation)
+	// Verify logs (events + component data)
 	rl := otlpData.Logs.ResourceLogs[0]
 	assert.Greater(t, len(rl.ScopeLogs[0].LogRecords), 0)
 
