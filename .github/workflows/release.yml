@@ -163,12 +163,6 @@ jobs:
           username: $oauthtoken
           password: ${{ secrets.NVCR_API_KEY }}
 
-      - name: Login to NVCR Helm registry
-        run: |
-          helm registry login nvcr.io \
-            --username '$oauthtoken' \
-            --password '${{ secrets.NVCR_API_KEY }}'
-
       - name: Build and push gpuhealth-agent image
         uses: docker/build-push-action@v6
         with:
@@ -198,10 +192,28 @@ jobs:
             --version "${{ steps.version.outputs.version }}" \
             --app-version "${{ steps.version.outputs.version }}"
 
-      - name: Push Helm chart to NVCR
+      - name: Ensure Helm push plugin is installed
         run: |
-          helm push "dist/gpuhealth-agent-${{ steps.version.outputs.version }}.tgz" \
-            oci://nvcr.io/nvidian/gpu-health/charts
+          if helm plugin list | awk '{print $1}' | grep -qx 'cm-push'; then
+            echo "helm-push plugin already installed"
+          else
+            helm plugin install https://github.com/chartmuseum/helm-push --verify=false
+          fi
+
+      - name: Add NGC Helm repo
+        env:
+          NGC_API_KEY: ${{ secrets.NVCR_API_KEY }}
+        run: |
+          set -euo pipefail
+          helm repo add ngc https://helm.ngc.nvidia.com/nvidian/gpu-health \
+            --username '$oauthtoken' \
+            --password "${NGC_API_KEY}"
+
+      - name: Push Helm chart to NGC Helm registry
+        run: |
+          set -euo pipefail
+          CHART_VERSION="${{ steps.version.outputs.version }}"
+          helm cm-push "dist/gpuhealth-agent-${CHART_VERSION}.tgz" ngc
       
       - name: Setup JFrog CLI
         if: steps.version.outputs.is_prerelease == 'false'
@@ -252,8 +264,9 @@ jobs:
           echo "**gpuhealth-agent image tags:**" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.agent_image.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Helm chart:**" >> $GITHUB_STEP_SUMMARY
-          echo "oci://nvcr.io/nvidian/gpu-health/charts/gpuhealth-agent:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Helm chart (NGC repo):**" >> $GITHUB_STEP_SUMMARY
+          echo "repo: https://helm.ngc.nvidia.com/nvidian" >> $GITHUB_STEP_SUMMARY
+          echo "chart: gpuhealth-agent-${{ steps.version.outputs.version }}.tgz" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [[ "${{ steps.version.outputs.is_prerelease }}" == "true" ]]; then
