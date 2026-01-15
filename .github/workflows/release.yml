@@ -197,7 +197,7 @@ jobs:
           if helm plugin list | awk '{print $1}' | grep -qx 'cm-push'; then
             echo "helm-push plugin already installed"
           else
-            helm plugin install https://github.com/chartmuseum/helm-push --verify=false
+            helm plugin install https://github.com/chartmuseum/helm-push
           fi
 
       - name: Add NGC Helm repo
