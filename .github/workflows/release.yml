@@ -29,12 +29,22 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
       - name: Configure Git for private repositories
         run: |
           git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
 
       - name: Download dependencies
         run: go mod download
+
+      - name: Set up SSH agent for private modules
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.GITLAB_SSH_KEY }}
 
       - name: Clean previous dist directory
         run: |
@@ -126,6 +136,20 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
 
+      - name: Prepare gpuhealth-agent image tags
+        id: agent_image
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          IMAGE="nvcr.io/nvidian/gpu-health/gpuhealth-agent"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "tags<<EOF" >> "$GITHUB_OUTPUT"
+          echo "${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
+          if [ "${{ steps.version.outputs.is_prerelease }}" = "false" ]; then
+            echo "${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+          fi
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -139,6 +163,26 @@ jobs:
           username: $oauthtoken
           password: ${{ secrets.NVCR_API_KEY }}
 
+      - name: Login to NVCR Helm registry
+        run: |
+          helm registry login nvcr.io \
+            --username '$oauthtoken' \
+            --password '${{ secrets.NVCR_API_KEY }}'
+
+      - name: Build and push gpuhealth-agent image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.agent_image.outputs.tags }}
+          ssh: default
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ steps.version.outputs.commit }}
+            BUILD_TIMESTAMP=${{ github.event.head_commit.timestamp }}
+
       - name: Build and push Skyhook package image
         uses: docker/build-push-action@v6
         with:
@@ -146,6 +190,18 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.skyhook.outputs.tags }}
+
+      - name: Package Helm chart
+        run: |
+          helm package deployments/helm/gpuhealth-agent \
+            --destination dist \
+            --version "${{ steps.version.outputs.version }}" \
+            --app-version "${{ steps.version.outputs.version }}"
+
+      - name: Push Helm chart to NVCR
+        run: |
+          helm push "dist/gpuhealth-agent-${{ steps.version.outputs.version }}.tgz" \
+            oci://nvcr.io/nvidian/gpu-health/charts
       
       - name: Setup JFrog CLI
         if: steps.version.outputs.is_prerelease == 'false'
@@ -192,6 +248,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Skyhook image tags:**" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.skyhook.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**gpuhealth-agent image tags:**" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.agent_image.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Helm chart:**" >> $GITHUB_STEP_SUMMARY
+          echo "oci://nvcr.io/nvidian/gpu-health/charts/gpuhealth-agent:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [[ "${{ steps.version.outputs.is_prerelease }}" == "true" ]]; then
