@@ -97,6 +97,12 @@ spec:
             - name: sys
               mountPath: /sys
               readOnly: true
+            - name: proc
+              mountPath: /proc
+              readOnly: true
+            - name: os-release
+              mountPath: /etc/os-release
+              readOnly: true
             - name: machine-id
               mountPath: /etc/machine-id
               readOnly: true
@@ -112,6 +118,13 @@ spec:
         - name: sys
           hostPath:
             path: /sys
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: os-release
+          hostPath:
+            path: /etc/os-release
+            type: File
         - name: machine-id
           hostPath:
             path: /etc/machine-id
