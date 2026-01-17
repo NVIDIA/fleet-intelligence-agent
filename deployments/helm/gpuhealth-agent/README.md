@@ -4,49 +4,53 @@ This chart deploys the `gpuhealth-agent` DaemonSet.
 
 ## Install
 
-```bash
-helm install gpuhealth-agent deployments/helm/gpuhealth-agent
-```
+For installation steps (NGC Helm repo, image pull secret, enrollment, and
+`helm install`/`helm upgrade`), see `docs/installation.md`.
 
 ## Configuration
 
-Key values (see `values.yaml` for the full list):
+Common values (defaults from `values.yaml`):
 
-- `image.repository`, `image.tag` (defaults to chart `appVersion` when empty), `image.pullPolicy`
-- `resources` (CPU/memory requests and limits)
-- `nodeSelector`, `tolerations`, `affinity`
-- `logLevel`, `listenAddress`, `components`
-- `env.DCGM_URL` (DCGM HostEngine service)
-- `env.DCGM_URL_IS_UNIX_SOCKET` (set to "true" when DCGM_URL is a unix socket path)
+| Value | Default | Description |
+| --- | --- | --- |
+| `image.repository` | `nvcr.io/nvidian/gpu-health/gpuhealth-agent` | Agent image repository. |
+| `image.tag` | `""` | Image tag (empty uses chart `appVersion`). |
+| `image.pullPolicy` | `IfNotPresent` | Image pull policy. |
+| `imagePullSecrets[0].name` | `nvcr-pull-secret` | Secret for pulling from NVCR. |
+| `hostPID` | `true` | Use host PID namespace. |
+| `runtimeClassName` | `nvidia` | RuntimeClass for NVIDIA runtime. |
+| `securityContext.privileged` | `true` | Run privileged. |
+| `securityContext.runAsUser` | `0` | Run as root. |
+| `env.NVIDIA_VISIBLE_DEVICES` | `all` | NVIDIA visible devices. |
+| `env.NVIDIA_DRIVER_CAPABILITIES` | `utility` | NVIDIA driver capabilities. |
+| `env.DCGM_URL` | `nvidia-dcgm.gpu-operator.svc:5555` | DCGM HostEngine endpoint. |
+| `env.DCGM_URL_IS_UNIX_SOCKET` | `"false"` | Treat `DCGM_URL` as a unix socket path. |
+| `logLevel` | `warn` | Log level. |
+| `listenAddress` | `0.0.0.0:15133` | Listen address. |
+| `components` | `all` | Enabled components. |
+| `enroll.enabled` | `false` | Enable enrollment init container. |
+| `enroll.endpoint` | `""` | Enrollment endpoint. |
+| `enroll.tokenSecretName` | `""` | Secret name for enrollment token. |
+| `enroll.tokenSecretKey` | `token` | Secret key for enrollment token. |
+| `enroll.tokenValue` | `""` | Inline token value (optional). |
+| `enroll.securityContext.runAsUser` | `0` | Run enrollment init as root. |
+| `ports.http` | `15133` | HTTP port. |
+| `resources.requests.cpu` | `100m` | CPU request. |
+| `resources.requests.memory` | `256Mi` | Memory request. |
+| `resources.requests.ephemeral-storage` | `256Mi` | Ephemeral storage request. |
+| `resources.limits.cpu` | `500m` | CPU limit. |
+| `resources.limits.memory` | `512Mi` | Memory limit. |
+| `resources.limits.ephemeral-storage` | `1Gi` | Ephemeral storage limit. |
+| `nodeSelector` | `{}` | Node selector. |
+| `tolerations` | `[]` | Tolerations. |
+| `affinity` | `{}` | Affinity rules. |
+| `serviceAccount.create` | `true` | Create ServiceAccount. |
+| `serviceAccount.name` | `""` | ServiceAccount name. |
+| `serviceAccount.automountToken` | `false` | Automount service account token. |
 
 ### Enrollment (per node via init container)
 
-Enable enrollment and provide the endpoint and token:
-
-```yaml
-enroll:
-  enabled: true
-  endpoint: "https://api.example.com"
-  tokenSecretName: "gpuhealth-token"
-  tokenSecretKey: "token"
-```
-
-Create the token Secret in the same namespace:
-
-```bash
-kubectl create secret generic gpuhealth-token \
-  --namespace <ns> \
-  --from-literal=token='<your-enroll-token>'
-```
-
-If you prefer not to use a Secret, you can set:
-
-```yaml
-enroll:
-  enabled: true
-  endpoint: "https://api.example.com"
-  tokenValue: "<your-enroll-token>"
-```
+See `docs/installation.md` for the enrollment flow and secret creation steps.
 
 ## Notes
 

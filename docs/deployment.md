@@ -19,9 +19,10 @@ Key points:
 
 ## Kubernetes: DCGM dependency diagram
 
-This repository ships a Helm chart (`deployments/helm/gpuhealth-agent`) to deploy
-the agent. The agent does not deploy DCGM itself; it expects DCGM HostEngine to
-already be running in the cluster (most commonly via the NVIDIA GPU Operator).
+The GPU Health Agent is deployed via a Helm chart published in NGC (source lives
+in `deployments/helm/gpuhealth-agent`). The agent does not deploy DCGM itself; it
+expects DCGM HostEngine to already be running in the cluster (most commonly via
+the NVIDIA GPU Operator). For install steps, see `docs/installation.md`.
 
 In the DaemonSet/Helm chart, this is configured via:
 
@@ -59,13 +60,13 @@ flowchart LR
         OP["gpu-operator (controller)"]
         DP["nvidia-device-plugin (DaemonSet)"]
         DCGM["dcgm-hostengine (Pod)"]
-        SVC["Service: nvidia-dcgm\nTCP 5555"]
-        EXP["dcgm-exporter (optional)\nPrometheus metrics"]
+        SVC["Service: nvidia-dcgm<br/>TCP 5555"]
+        EXP["dcgm-exporter (optional)<br/>Prometheus metrics"]
       end
 
       subgraph AG["Your workload (this repo)"]
-        GHA["gpuhealth-agent (DaemonSet)\nDCGM_URL -> nvidia-dcgm:5555"]
-        API["/metrics + REST API\nport 15133"]
+        GHA["gpuhealth-agent (DaemonSet)<br/>DCGM_URL -> nvidia-dcgm:5555"]
+        API["/metrics + REST API<br/>port 15133"]
       end
     end
   end
@@ -75,11 +76,11 @@ flowchart LR
 
   CRI --> NCT --> RC
   RC --> GHA
-  DP -->|"allocates GPUs\n(device files, env)"| GHA
+  DP -->|"allocates GPUs<br/>(device files, env)"| GHA
 
   DCGM -->|"uses NVML/driver"| NVML
   DCGM --> SVC
-  SVC -->|"DCGM HostEngine API\n(TCP 5555)"| GHA
+  SVC -->|"DCGM HostEngine API<br/>(TCP 5555)"| GHA
 
   DCGM --> EXP
   GHA --> API
