@@ -103,6 +103,82 @@ sudo cp gpuhealth /usr/local/bin/
 gpuhealth --version
 ```
 
+## Kubernetes Installation (Helm)
+
+### Prerequisites
+
+- NVIDIA GPU Operator installed with DCGM HostEngine enabled.
+- A DCGM service endpoint reachable from the cluster (defaults to `nvidia-dcgm.gpu-operator.svc:5555`).
+- Access to NGC/NVCR (for helm chart pulls and container image pulls).
+
+### Add the NGC Helm repo
+
+If you pull the chart from NGC, add the Helm repo using your NGC API key:
+
+```bash
+helm repo add gpuhealth https://helm.ngc.nvidia.com/nvidian/gpu-health \
+  --username='$oauthtoken' \
+  --password='<ngc-api-key>'
+helm repo update
+```
+
+### Create NVCR image pull secret
+
+Create the namespace first:
+
+```bash
+kubectl create namespace <ns>
+```
+
+Create a registry secret so the DaemonSet can pull the agent image:
+
+```bash
+kubectl create secret docker-registry nvcr-pull-secret \
+  --namespace <ns> \
+  --docker-server=nvcr.io \
+  --docker-username='$oauthtoken' \
+  --docker-password='<ngc-api-key>' \
+  --docker-email='unused@example.com'
+```
+
+### Create enrollment secret (optional)
+
+If you need to enroll nodes, create the token Secret referenced by the Helm values:
+
+```bash
+kubectl create secret generic gpuhealth-token \
+  --namespace <ns> \
+  --from-literal=token='<your-enroll-token>'
+```
+
+### Install or upgrade
+
+Install:
+
+```bash
+helm install gpuhealth-agent gpuhealth/gpuhealth-agent \
+  --namespace <ns> \
+  --set enroll.enabled=true \
+  --set enroll.endpoint=https://api.example.com \
+  --set enroll.tokenSecretName=gpuhealth-token
+```
+
+Upgrade:
+
+```bash
+helm upgrade gpuhealth-agent gpuhealth/gpuhealth-agent \
+  --namespace <ns> \
+  --set enroll.enabled=true \
+  --set enroll.endpoint=https://api.example.com \
+  --set enroll.tokenSecretName=gpuhealth-token
+```
+
+If you do not use enrollment, omit the `enroll.*` flags. If DCGM is exposed at a different service name or port, set `env.DCGM_URL`:
+
+```bash
+--set env.DCGM_URL=<dcgm-service>:5555
+```
+
 ## Build from Source
 
 ```bash
@@ -173,4 +249,3 @@ sudo apt purge gpuhealth  # Also removes configuration files
 # RHEL/Rocky/AlmaLinux
 sudo dnf remove gpuhealth
 ```
-
