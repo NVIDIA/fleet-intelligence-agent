@@ -87,7 +87,7 @@ func App() *cli.App {
 				&cli.StringFlag{
 					Name:  "listen-address",
 					Usage: "set the listen address",
-					Value: fmt.Sprintf("0.0.0.0:%d", config.DefaultHealthPort),
+					Value: config.DefaultListenAddress,
 				},
 				&cli.DurationFlag{
 					Name:  "retention-period",
@@ -149,9 +149,9 @@ func App() *cli.App {
 					Usage: "set the logging level [debug, info, warn, error]",
 				},
 				&cli.StringFlag{
-					Name:  "listen-address",
-					Usage: "set the listen address",
-					Value: fmt.Sprintf("http://localhost:%d", config.DefaultHealthPort),
+					Name:  "server-url",
+					Usage: "set the server URL to connect to",
+					Value: config.DefaultClientURL,
 				},
 			},
 		},
@@ -224,6 +224,11 @@ func App() *cli.App {
 			Usage:  "inject faults into components for testing",
 			Action: injectCommand,
 			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  "server-url",
+					Usage: "set the server URL to connect to",
+					Value: config.DefaultClientURL,
+				},
 				&cli.StringFlag{
 					Name:     "component,c",
 					Usage:    "component name to inject fault into (required)",

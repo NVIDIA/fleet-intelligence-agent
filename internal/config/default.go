@@ -34,9 +34,18 @@ const (
 
 	// DefaultHealthPort for health metrics export
 	DefaultHealthPort = 15133
+
+	// DefaultListenHost is the default host to bind to (localhost only for security)
+	DefaultListenHost = "127.0.0.1"
 )
 
 var (
+	// DefaultListenAddress combines the default host and port (for server binding)
+	DefaultListenAddress = fmt.Sprintf("%s:%d", DefaultListenHost, DefaultHealthPort)
+
+	// DefaultClientURL is the default URL for client commands to connect to the server
+	DefaultClientURL = fmt.Sprintf("http://localhost:%d", DefaultHealthPort)
+
 	// DefaultRetentionPeriod - keep health data for 24 hours by default
 	DefaultRetentionPeriod = metav1.Duration{Duration: 24 * time.Hour}
 )
@@ -50,7 +59,7 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 
 	cfg := &Config{
 		APIVersion:      DefaultAPIVersion,
-		Address:         fmt.Sprintf(":%d", DefaultHealthPort),
+		Address:         DefaultListenAddress,
 		RetentionPeriod: DefaultRetentionPeriod,
 		NvidiaToolOverwrites: nvidiacommon.ToolOverwrites{
 			InfinibandClassRootDir: options.InfinibandClassRootDir,

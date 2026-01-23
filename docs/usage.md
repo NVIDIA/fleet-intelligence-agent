@@ -22,7 +22,7 @@ Starts the HTTP API server on port 15133. The server provides REST endpoints and
 
 **Options:**
 - `--log-level`: Set logging level (debug, info, warn, error)
-- `--listen-address`: Change listen address (default: `0.0.0.0:15133`)
+- `--listen-address`: Change listen address (default: `127.0.0.1:15133` for localhost only; see [Exposing the Agent for External Monitoring](#exposing-the-agent-for-external-monitoring) for details on exposing to Prometheus and other tools)
 - `--pprof`: Enable pprof profiling endpoint (note: pprof routes are not yet exposed)
 - `--components`: Enable/disable specific components
 
@@ -229,6 +229,36 @@ curl http://localhost:15133/metrics
 ```
 
 Returns metrics in Prometheus exposition format for integration with monitoring systems
+
+## Exposing the Agent for External Monitoring
+
+By default, gpuhealth binds to `127.0.0.1:15133` (localhost only) for security. To allow external monitoring tools like Prometheus to scrape metrics, you can expose the agent on a network interface using the `--listen-address` flag:
+
+```bash
+# Expose on all interfaces
+sudo gpuhealth run --listen-address=0.0.0.0:15133
+
+# Or expose on a specific IP address
+sudo gpuhealth run --listen-address=192.168.1.100:15133
+```
+
+### Prometheus Configuration Example
+
+Configure Prometheus to scrape the exposed endpoint:
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: 'gpuhealth'
+    scrape_interval: 60s
+    static_configs:
+      - targets:
+          - 'gpu-server-1:15133'
+          - 'gpu-server-2:15133'
+    metrics_path: /metrics
+```
+
+**For production deployments** with persistent configuration and security considerations, see the [Configuration Guide](configuration.md#change-api-server-listen-address).
 
 ## Troubleshooting
 

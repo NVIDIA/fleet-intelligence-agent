@@ -97,12 +97,19 @@ GPUHEALTH_CHECK_INTERVAL=24h
 
 ## Common Configuration Examples
 
-### Change API Server Port
+### Change API Server Listen Address
 
-Edit `/etc/default/gpuhealth` and set the `--listen-address` flag:
+By default, gpuhealth binds to `127.0.0.1:15133` (localhost only) for security. To expose the agent for external monitoring tools like Prometheus, edit `/etc/default/gpuhealth` and add the `--listen-address` flag to `GPUHEALTH_FLAGS`:
 
 ```bash
+# Expose on all interfaces (default port 15133)
+GPUHEALTH_FLAGS="--log-level=warn --listen-address=0.0.0.0:15133"
+
+# Or use a custom port
 GPUHEALTH_FLAGS="--log-level=warn --listen-address=0.0.0.0:8080"
+
+# Or bind to a specific IP
+GPUHEALTH_FLAGS="--log-level=warn --listen-address=192.168.1.100:15133"
 ```
 
 Then restart the service:
@@ -110,6 +117,8 @@ Then restart the service:
 ```bash
 sudo systemctl restart gpuhealthd
 ```
+
+**For detailed Prometheus integration and security considerations**, see the [Exposing the Agent for External Monitoring](usage.md#exposing-the-agent-for-external-monitoring) section in the usage documentation.
 
 ### Reduce Logging Level
 

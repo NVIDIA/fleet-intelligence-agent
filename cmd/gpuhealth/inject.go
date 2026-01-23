@@ -7,8 +7,6 @@ import (
 	"net/http"
 
 	"github.com/urfave/cli"
-
-	"github.com/NVIDIA/gpuhealth/internal/config"
 )
 
 func injectCommand(c *cli.Context) error {
@@ -17,8 +15,8 @@ func injectCommand(c *cli.Context) error {
 		return fmt.Errorf("component name is required")
 	}
 
-	// Get the server address
-	address := fmt.Sprintf("http://localhost:%d", config.DefaultHealthPort)
+	// Get the server URL from flag
+	address := c.String("server-url")
 
 	// Check if clear flag is set
 	clearFault := c.Bool("clear")
