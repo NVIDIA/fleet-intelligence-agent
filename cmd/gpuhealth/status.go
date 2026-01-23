@@ -19,7 +19,7 @@ import (
 
 func statusCommand(cliContext *cli.Context) error {
 	logLevel := cliContext.String("log-level")
-	listenAddress := cliContext.String("listen-address")
+	serverURL := cliContext.String("server-url")
 	zapLvl, err := log.ParseLogLevel(logLevel)
 	if err != nil {
 		return err
@@ -87,7 +87,7 @@ func statusCommand(cliContext *cli.Context) error {
 		Timeout: 5 * time.Second,
 	}
 
-	resp, err := client.Get(listenAddress + "/healthz")
+	resp, err := client.Get(serverURL + "/healthz")
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)
 	}

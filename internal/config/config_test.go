@@ -35,7 +35,7 @@ func TestDefault(t *testing.T) {
 
 		// Check basic properties
 		assert.Equal(t, DefaultAPIVersion, cfg.APIVersion)
-		assert.Equal(t, ":15133", cfg.Address)
+		assert.Equal(t, DefaultListenAddress, cfg.Address)
 		assert.Equal(t, DefaultRetentionPeriod, cfg.RetentionPeriod)
 
 		// State path should be set
