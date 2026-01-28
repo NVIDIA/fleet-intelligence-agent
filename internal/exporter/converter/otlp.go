@@ -337,12 +337,15 @@ func (c *otlpConverter) convertToOTLPLogs(data *collector.HealthData) []*logsv1.
 			}
 
 			if extraInfo != nil {
-				attributes = append(attributes, &commonv1.KeyValue{
-					Key: "extra_info",
-					Value: &commonv1.AnyValue{
-						Value: &commonv1.AnyValue_StringValue{StringValue: fmt.Sprintf("%v", extraInfo)},
-					},
-				})
+				jsonBytes, err := json.Marshal(extraInfo)
+				if err == nil {
+					attributes = append(attributes, &commonv1.KeyValue{
+						Key: "extra_info",
+						Value: &commonv1.AnyValue{
+							Value: &commonv1.AnyValue_StringValue{StringValue: string(jsonBytes)},
+						},
+					})
+				}
 			}
 
 			logRecord := &logsv1.LogRecord{

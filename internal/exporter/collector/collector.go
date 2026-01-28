@@ -259,27 +259,33 @@ func (c *collector) collectComponentData(data *HealthData) error {
 		health := "Unknown"
 		reason := "No health data"
 		var timeValue interface{}
-		var extraInfo interface{}
+		var extraInfo interface{} = map[string]interface{}{} // Default to empty map for JSON marshaling
 
 		if len(healthStates) > 0 {
 			firstState := healthStates[0]
 			health = string(firstState.Health)
 			reason = firstState.Reason
 			timeValue = firstState.Time
-			extraInfo = firstState.ExtraInfo
 
-			if extraInfoMap, ok := extraInfo.(map[string]interface{}); ok {
-				if dataValue, exists := extraInfoMap["data"]; exists {
-					extraInfo = dataValue
-				} else {
-					// Empty map case for extra info
-					// Without this, the extra info is serialized as "map[]" which is invalid JSON/JSONB
-					extraInfo = "{}"
+			// Handle ExtraInfo - ensure it's properly set for JSON marshaling downstream
+			// ExtraInfo can be map[string]string, map[string]interface{}, or nil
+			if firstState.ExtraInfo != nil {
+				// Check if it's an empty map by trying common map types
+				switch v := any(firstState.ExtraInfo).(type) {
+				case map[string]interface{}:
+					if len(v) > 0 {
+						extraInfo = v
+					}
+				case map[string]string:
+					if len(v) > 0 {
+						extraInfo = v
+					}
+				default:
+					// For other non-nil types, use as-is
+					extraInfo = firstState.ExtraInfo
 				}
-			} else {
-				// Could be nil or not a map
-				extraInfo = "{}"
 			}
+			// If ExtraInfo is nil or empty, extraInfo keeps its default empty map
 		}
 
 		componentData[componentName] = map[string]interface{}{
