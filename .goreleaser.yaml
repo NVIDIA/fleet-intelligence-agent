@@ -97,11 +97,11 @@ nfpms:
       # SystemD service file
       - src: deployments/packages/systemd/gpuhealthd.service
         dst: /usr/lib/systemd/system/gpuhealthd.service
-        type: config|noreplace
+        type: config
       # Environment configuration
       - src: deployments/packages/systemd/gpuhealth.env
         dst: /etc/default/gpuhealth
-        type: config|noreplace
+        type: config
       # Data directory
       - dst: /var/lib/gpuhealth
         type: dir
@@ -139,11 +139,11 @@ nfpms:
       # SystemD service file
       - src: deployments/packages/systemd/gpuhealthd.service
         dst: /usr/lib/systemd/system/gpuhealthd.service
-        type: config|noreplace
+        type: config
       # Environment configuration (RPM uses /etc/default like Debian)
       - src: deployments/packages/systemd/gpuhealth.env
         dst: /etc/default/gpuhealth
-        type: config|noreplace
+        type: config
       # Data directory
       - dst: /var/lib/gpuhealth
         type: dir
