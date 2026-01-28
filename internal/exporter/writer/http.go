@@ -18,8 +18,10 @@ package writer
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"time"
 
@@ -180,13 +182,16 @@ func (w *httpWriter) sendOTLPRequestWithRetry(ctx context.Context, reqData []byt
 			break
 		}
 
-		delay := defaultRetryDelay
+		// Add jitter (0-50% of base delay) to prevent thundering herd
+		jitter := calculateJitter(defaultRetryDelay / 2)
+		delay := defaultRetryDelay + jitter
 		log.Logger.Warnw("Request failed, retrying",
 			"data_type", dataType,
 			"collection_id", collectionID,
 			"attempt", attempt,
 			"total_attempts", maxRetries,
 			"delay_seconds", delay.Seconds(),
+			"jitter_ms", jitter.Milliseconds(),
 			"error", err)
 
 		// Wait before retrying (with context cancellation support)
@@ -270,4 +275,26 @@ func (w *httpWriter) isUnauthorizedError(err error) bool {
 	}
 
 	return false
+}
+
+// calculateJitter returns a random duration between 0 and maxJitter to prevent thundering herd
+func calculateJitter(maxJitter time.Duration) time.Duration {
+	if maxJitter <= 0 {
+		return 0
+	}
+
+	// Generate cryptographically secure random number
+	maxMs := int64(maxJitter / time.Millisecond)
+	if maxMs <= 0 {
+		return 0
+	}
+
+	randomMs, err := rand.Int(rand.Reader, big.NewInt(maxMs))
+	if err != nil {
+		log.Logger.Warnw("Failed to generate secure random jitter, using fallback", "error", err)
+		// Fallback to simple time-based pseudo-random
+		return time.Duration(time.Now().UnixNano()%maxMs) * time.Millisecond
+	}
+
+	return time.Duration(randomMs.Int64()) * time.Millisecond
 }
