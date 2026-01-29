@@ -187,9 +187,15 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 	}
 	s.machineID = machineID
 
-	// Initialize fault injector for testing
-	kmsgWriter := pkgkmsgwriter.NewWriter(pkgkmsgwriter.DefaultDevKmsg)
-	s.faultInjector = pkgfaultinjector.NewInjector(kmsgWriter)
+	// Initialize fault injector for testing (only if enabled)
+	if config.EnableFaultInjection {
+		log.Logger.Infow("fault injection enabled for testing")
+		kmsgWriter := pkgkmsgwriter.NewWriter(pkgkmsgwriter.DefaultDevKmsg)
+		s.faultInjector = pkgfaultinjector.NewInjector(kmsgWriter)
+	} else {
+		log.Logger.Infow("fault injection disabled")
+		s.faultInjector = nil
+	}
 
 	nvmlInstance, err := nvidianvml.NewWithExitOnSuccessfulLoad(ctx)
 	if err != nil {
@@ -444,7 +450,14 @@ func (s *Server) startServer(ctx context.Context, nvmlInstance nvidianvml.Instan
 	})
 	router.GET("/healthz", s.healthz())
 	router.GET("/machine-info", globalHandler.machineInfo)
-	router.POST(URLPathInjectFault, s.injectFault)
+
+	// Only register fault injection endpoint if explicitly enabled
+	if s.config.EnableFaultInjection {
+		log.Logger.Infow("registering fault injection endpoint", "path", URLPathInjectFault)
+		router.POST(URLPathInjectFault, s.injectFault)
+	} else {
+		log.Logger.Debugw("fault injection endpoint disabled")
+	}
 
 	log.Logger.Infow("gpuhealth started serving with HTTP", "address", s.config.Address)
 

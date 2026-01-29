@@ -17,6 +17,7 @@ package server
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -41,8 +42,22 @@ const URLPathInjectFault = "/inject-fault"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /inject-fault [post]
 func (s *Server) injectFault(c *gin.Context) {
+	// Security check: verify request is from localhost
+	remoteHost, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"code": errdefs.ErrFailedPrecondition, "message": "access denied"})
+		return
+	}
+
+	ip := net.ParseIP(remoteHost)
+	if ip == nil || !ip.IsLoopback() {
+		c.JSON(http.StatusForbidden, gin.H{"code": errdefs.ErrFailedPrecondition, "message": "access denied"})
+		return
+	}
+
+	// Defense in depth: verify fault injector is enabled
 	if s.faultInjector == nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": errdefs.ErrNotFound, "message": "fault injector not set up"})
+		c.JSON(http.StatusNotFound, gin.H{"code": errdefs.ErrNotFound, "message": "fault injector not enabled"})
 		return
 	}
 
