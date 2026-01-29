@@ -38,6 +38,7 @@ GPUHEALTH_RETRY_MAX_ATTEMPTS="3"
 | `GPUHEALTH_EVENTS_LOOKBACK` | How far back to look for events | `1m` |
 | `GPUHEALTH_CHECK_INTERVAL` | Component health check frequency (1s to 24h) | `1m` |
 | `GPUHEALTH_RETRY_MAX_ATTEMPTS` | Max retry attempts for failed exports | `3` |
+| `GPUHEALTH_ENABLE_FAULT_INJECTION` | Enable fault injection endpoint for testing (localhost only) | `false` |
 | `HTTP_PROXY` | HTTP proxy server URL | - |
 | `HTTPS_PROXY` | HTTPS proxy server URL | - |
 
@@ -194,6 +195,48 @@ GPUHEALTH_FLAGS="--log-level=warn --components=accelerator-nvidia-dcgm-thermal,a
 - `kernel-module` - Kernel module status
 - `library` - System library information
 - `pci` - PCI device information
+
+## Fault Injection for Testing
+
+** TESTING ONLY - DO NOT ENABLE IN PRODUCTION**
+
+The fault injection endpoint allows testing error handling and recovery by artificially injecting faults into the system. This is disabled by default for security reasons.
+
+### Enabling Fault Injection
+
+Via command line flag:
+```bash
+gpuhealth run --enable-fault-injection
+```
+
+Via environment variable:
+```bash
+export GPUHEALTH_ENABLE_FAULT_INJECTION=true
+gpuhealth run
+```
+
+Via systemd service (`/etc/default/gpuhealth`):
+```bash
+GPUHEALTH_FLAGS="--log-level=warn --enable-fault-injection"
+```
+
+### Security Notes
+
+- **Localhost only**: The endpoint is only accessible from `127.0.0.1` or `::1` (IPv4/IPv6 loopback)
+- **Not bypassable**: Even if the server binds to `0.0.0.0`, remote requests are rejected
+- **Use in testing environments only**: Never enable in production systems
+
+### Example Usage
+
+Once enabled, you can inject faults via the `gpuhealth inject` command:
+
+```bash
+# Inject a component error
+gpuhealth inject --component nvidia-gpu --fault-type component-error --fault-message "Test error"
+
+# Clear injected faults
+gpuhealth inject --component nvidia-gpu --clear
+```
 
 ## Troubleshooting Configuration
 

@@ -661,26 +661,43 @@ func TestInjectFault(t *testing.T) {
 		name           string
 		faultInjector  pkgfaultinjector.Injector
 		requestBody    interface{}
+		remoteAddr     string // Set to test security check
 		expectedStatus int
 		checkResponse  func(t *testing.T, body []byte)
 	}{
 		{
+			name:           "non_localhost_rejected",
+			faultInjector:  pkgfaultinjector.NewInjector(pkgkmsgwriter.NewWriter("/dev/null")),
+			requestBody:    map[string]interface{}{},
+			remoteAddr:     "192.168.1.100:12345", // Non-localhost address
+			expectedStatus: http.StatusForbidden,
+			checkResponse: func(t *testing.T, body []byte) {
+				var response map[string]interface{}
+				err := json.Unmarshal(body, &response)
+				require.NoError(t, err)
+				assert.Contains(t, response, "message")
+				assert.Contains(t, response["message"], "access denied")
+			},
+		},
+		{
 			name:           "nil_fault_injector",
 			faultInjector:  nil,
 			requestBody:    map[string]interface{}{},
+			remoteAddr:     "127.0.0.1:54321", // Localhost address
 			expectedStatus: http.StatusNotFound,
 			checkResponse: func(t *testing.T, body []byte) {
 				var response map[string]interface{}
 				err := json.Unmarshal(body, &response)
 				require.NoError(t, err)
 				assert.Contains(t, response, "message")
-				assert.Contains(t, response["message"], "fault injector not set up")
+				assert.Contains(t, response["message"], "fault injector not enabled")
 			},
 		},
 		{
 			name:           "invalid_json",
 			faultInjector:  pkgfaultinjector.NewInjector(pkgkmsgwriter.NewWriter("/dev/null")),
 			requestBody:    "invalid json",
+			remoteAddr:     "127.0.0.1:54321",
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, body []byte) {
 				var response map[string]interface{}
@@ -696,6 +713,7 @@ func TestInjectFault(t *testing.T) {
 			requestBody:   &pkgfaultinjector.Request{
 				// Empty request - should fail validation
 			},
+			remoteAddr:     "127.0.0.1:54321",
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, body []byte) {
 				var response map[string]interface{}
@@ -703,6 +721,20 @@ func TestInjectFault(t *testing.T) {
 				require.NoError(t, err)
 				assert.Contains(t, response, "message")
 				assert.Contains(t, response["message"], "invalid request")
+			},
+		},
+		{
+			name:           "ipv6_localhost",
+			faultInjector:  nil,
+			requestBody:    map[string]interface{}{},
+			remoteAddr:     "[::1]:54321", // IPv6 localhost
+			expectedStatus: http.StatusNotFound,
+			checkResponse: func(t *testing.T, body []byte) {
+				var response map[string]interface{}
+				err := json.Unmarshal(body, &response)
+				require.NoError(t, err)
+				assert.Contains(t, response, "message")
+				assert.Contains(t, response["message"], "fault injector not enabled")
 			},
 		},
 	}
@@ -727,6 +759,12 @@ func TestInjectFault(t *testing.T) {
 
 			req := httptest.NewRequest("POST", "/inject-fault", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
+
+			// Set RemoteAddr for security check testing
+			if tt.remoteAddr != "" {
+				req.RemoteAddr = tt.remoteAddr
+			}
+
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)

@@ -194,6 +194,7 @@ func runCommand(cliContext *cli.Context) error {
 	gpuCount := cliContext.Int("gpu-count")
 	infinibandExpectedPortStates := cliContext.String("infiniband-expected-port-states")
 	enableDCGMPolicy := cliContext.Bool("enable-dcgm-policy")
+	enableFaultInjection := cliContext.Bool("enable-fault-injection")
 
 	// GPU Health Exporter configuration
 	offlineMode := cliContext.Bool("offline-mode")
@@ -253,6 +254,11 @@ func runCommand(cliContext *cli.Context) error {
 	}
 	log.Logger.Infow("health exporter configuration", "cfg", cfg.HealthExporter)
 
+	// Apply environment variable overrides for feature flags
+	if err := setBoolFromEnv("GPUHEALTH_ENABLE_FAULT_INJECTION", &cfg.EnableFaultInjection, "set fault injection enabled from env", "enable_fault_injection"); err != nil {
+		return err
+	}
+
 	if listenAddress != "" {
 		cfg.Address = listenAddress
 	}
@@ -270,6 +276,18 @@ func runCommand(cliContext *cli.Context) error {
 		log.Logger.Infow("DCGM policy violation monitoring enabled for all policies (PCIe, DBE, NVLink, Power, Thermal, Page Retirement)")
 	} else {
 		log.Logger.Infow("DCGM policy violation monitoring disabled by default (only XID policy will be enabled)")
+	}
+
+	// Only apply CLI flag if true, to avoid overwriting env var setting
+	// (since we can't distinguish between explicit --enable-fault-injection=false and default false)
+	if enableFaultInjection {
+		cfg.EnableFaultInjection = true
+	}
+
+	if cfg.EnableFaultInjection {
+		log.Logger.Infow("fault injection endpoint enabled for testing")
+	} else {
+		log.Logger.Infow("fault injection endpoint disabled")
 	}
 
 	// Configure offline mode if enabled

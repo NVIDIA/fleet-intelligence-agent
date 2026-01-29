@@ -66,6 +66,11 @@ type Config struct {
 	// PCIe, DBE, and NVLink have false-positive issues with monotonic counter checks.
 	EnableDCGMPolicy bool `json:"enable_dcgm_policy"`
 
+	// EnableFaultInjection enables the /inject-fault endpoint for testing.
+	// This endpoint allows injecting faults (kernel messages, component errors, events) into the system.
+	// SECURITY: Only accessible from localhost (127.0.0.0/8 or ::1). Disabled by default.
+	EnableFaultInjection bool `json:"enable_fault_injection"`
+
 	// Health Exporter Configuration
 	HealthExporter *HealthExporterConfig `json:"health_exporter,omitempty"`
 }

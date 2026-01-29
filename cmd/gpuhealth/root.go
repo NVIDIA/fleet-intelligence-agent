@@ -136,6 +136,10 @@ func App() *cli.App {
 					Name:  "enable-dcgm-policy",
 					Usage: "enable DCGM policy violation monitoring for non-XID policies (PCIe, DBE, NVLink, Power, Thermal, Page Retirement) -- XID policy is always enabled (default: false)",
 				},
+				&cli.BoolFlag{
+					Name:  "enable-fault-injection",
+					Usage: "enable fault injection endpoint for testing (only accessible from localhost, default: false)",
+				},
 			},
 		},
 		{

@@ -58,9 +58,10 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 	}
 
 	cfg := &Config{
-		APIVersion:      DefaultAPIVersion,
-		Address:         DefaultListenAddress,
-		RetentionPeriod: DefaultRetentionPeriod,
+		APIVersion:           DefaultAPIVersion,
+		Address:              DefaultListenAddress,
+		RetentionPeriod:      DefaultRetentionPeriod,
+		EnableFaultInjection: false, // Disabled by default for security
 		NvidiaToolOverwrites: nvidiacommon.ToolOverwrites{
 			InfinibandClassRootDir: options.InfinibandClassRootDir,
 		},
