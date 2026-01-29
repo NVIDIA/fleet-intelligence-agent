@@ -111,6 +111,17 @@ gpuhealth --version
 - A DCGM service endpoint reachable from the cluster (defaults to `nvidia-dcgm.gpu-operator.svc:5555`).
 - Access to NGC/NVCR (for helm chart pulls and container image pulls).
 
+Set shared variables once for the examples below:
+
+```bash
+NS=my-namespace
+NGC_API_KEY='<ngc-api-key>'
+DCGM_URL='nvidia-dcgm.gpu-operator.svc:5555'
+ENROLL_ENDPOINT='<enroll-endpoint>'
+ENROLL_TOKEN_SECRET_NAME='<token-secret-name>'
+ENROLL_TOKEN='<enroll-token>'
+```
+
 ### Add the NGC Helm repo
 
 If you pull the chart from NGC, add the Helm repo using your NGC API key:
@@ -118,7 +129,7 @@ If you pull the chart from NGC, add the Helm repo using your NGC API key:
 ```bash
 helm repo add gpuhealth https://helm.ngc.nvidia.com/nvidian/gpu-health \
   --username='$oauthtoken' \
-  --password='<ngc-api-key>'
+  --password="$NGC_API_KEY"
 helm repo update
 ```
 
@@ -127,18 +138,17 @@ helm repo update
 Create the namespace first:
 
 ```bash
-kubectl create namespace <ns>
+kubectl create namespace "$NS"
 ```
 
 Create a registry secret so the DaemonSet can pull the agent image:
 
 ```bash
 kubectl create secret docker-registry nvcr-pull-secret \
-  --namespace <ns> \
+  --namespace "$NS" \
   --docker-server=nvcr.io \
   --docker-username='$oauthtoken' \
-  --docker-password='<ngc-api-key>' \
-  --docker-email='unused@example.com'
+  --docker-password="$NGC_API_KEY"
 ```
 
 ### Create enrollment secret (optional)
@@ -146,9 +156,9 @@ kubectl create secret docker-registry nvcr-pull-secret \
 If you need to enroll nodes, create the token Secret referenced by the Helm values:
 
 ```bash
-kubectl create secret generic gpuhealth-token \
-  --namespace <ns> \
-  --from-literal=token='<your-enroll-token>'
+kubectl create secret generic "$ENROLL_TOKEN_SECRET_NAME" \
+  --namespace "$NS" \
+  --from-literal=token="$ENROLL_TOKEN"
 ```
 
 ### Install or upgrade
@@ -157,26 +167,68 @@ Install:
 
 ```bash
 helm install gpuhealth-agent gpuhealth/gpuhealth-agent \
-  --namespace <ns> \
+  --namespace "$NS" \
   --set enroll.enabled=true \
-  --set enroll.endpoint=https://api.example.com \
-  --set enroll.tokenSecretName=gpuhealth-token
+  --set enroll.endpoint="$ENROLL_ENDPOINT" \
+  --set enroll.tokenSecretName="$ENROLL_TOKEN_SECRET_NAME"
+```
+
+Install (no enrollment):
+
+```bash
+helm install gpuhealth-agent gpuhealth/gpuhealth-agent \
+  --namespace "$NS"
 ```
 
 Upgrade:
 
 ```bash
 helm upgrade gpuhealth-agent gpuhealth/gpuhealth-agent \
-  --namespace <ns> \
+  --namespace "$NS" \
   --set enroll.enabled=true \
-  --set enroll.endpoint=https://api.example.com \
-  --set enroll.tokenSecretName=gpuhealth-token
+  --set enroll.endpoint="$ENROLL_ENDPOINT" \
+  --set enroll.tokenSecretName="$ENROLL_TOKEN_SECRET_NAME"
 ```
 
-If you do not use enrollment, omit the `enroll.*` flags. If DCGM is exposed at a different service name or port, set `env.DCGM_URL`:
+Upgrade (no enrollment):
 
 ```bash
---set env.DCGM_URL=<dcgm-service>:5555
+helm upgrade gpuhealth-agent gpuhealth/gpuhealth-agent \
+  --namespace "$NS"
+```
+
+If DCGM is exposed at a different service name or port, set `env.DCGM_URL`:
+
+```bash
+--set env.DCGM_URL="$DCGM_URL"
+```
+
+### Schedule only on GPU nodes
+
+Use a GPU Operator label with `nodeSelector` and, if needed, a toleration for GPU taints.
+Replace the label key/value with the one used in your cluster (for example, `nvidia.com/gpu.deploy.dcgm=true`).
+
+Using `--set` (quote the tolerations for zsh, and escape dots in the label key):
+
+```bash
+helm upgrade --install gpuhealth-agent gpuhealth/gpuhealth-agent \
+  --namespace "$NS" \
+  --set-string nodeSelector.nvidia\\.com/gpu\\.deploy\\.dcgm=true \
+  --set 'tolerations[0].key=nvidia.com/gpu' \
+  --set 'tolerations[0].operator=Exists' \
+  --set 'tolerations[0].effect=NoSchedule'
+```
+
+Using a values file:
+
+```yaml
+nodeSelector:
+  nvidia.com/gpu.deploy.dcgm: "true"
+
+tolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Exists"
+    effect: "NoSchedule"
 ```
 
 ## Build from Source
