@@ -38,7 +38,6 @@ GPUHEALTH_RETRY_MAX_ATTEMPTS="3"
 | `GPUHEALTH_EVENTS_LOOKBACK` | How far back to look for events | `1m` |
 | `GPUHEALTH_CHECK_INTERVAL` | Component health check frequency (1s to 24h) | `1m` |
 | `GPUHEALTH_RETRY_MAX_ATTEMPTS` | Max retry attempts for failed exports | `3` |
-| `GPUHEALTH_ENABLE_FAULT_INJECTION` | Enable fault injection endpoint for testing (localhost only) | `false` |
 | `HTTP_PROXY` | HTTP proxy server URL | - |
 | `HTTPS_PROXY` | HTTPS proxy server URL | - |
 
@@ -207,12 +206,6 @@ The fault injection endpoint allows testing error handling and recovery by artif
 Via command line flag:
 ```bash
 gpuhealth run --enable-fault-injection
-```
-
-Via environment variable:
-```bash
-export GPUHEALTH_ENABLE_FAULT_INJECTION=true
-gpuhealth run
 ```
 
 Via systemd service (`/etc/default/gpuhealth`):
