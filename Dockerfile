@@ -4,7 +4,7 @@
 #     DOCKER_BUILDKIT=1 docker build --ssh default -t gpuhealth:dev .
 ARG DCGM_VERSION="4.4.2-1-ubuntu22.04"
 
-FROM golang:1.24.11 AS build
+FROM golang:1.24.12 AS build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -54,6 +54,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     kmod \
     util-linux \
     dmidecode \
+    pciutils \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /out/gpuhealth /usr/bin/gpuhealth
