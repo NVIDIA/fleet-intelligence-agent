@@ -254,11 +254,6 @@ func runCommand(cliContext *cli.Context) error {
 	}
 	log.Logger.Infow("health exporter configuration", "cfg", cfg.HealthExporter)
 
-	// Apply environment variable overrides for feature flags
-	if err := setBoolFromEnv("GPUHEALTH_ENABLE_FAULT_INJECTION", &cfg.EnableFaultInjection, "set fault injection enabled from env", "enable_fault_injection"); err != nil {
-		return err
-	}
-
 	if listenAddress != "" {
 		cfg.Address = listenAddress
 	}
