@@ -102,7 +102,6 @@ spec:
               mountPath: /dev
             - name: sys
               mountPath: /sys
-              readOnly: true
             - name: os-release
               mountPath: /etc/os-release
               readOnly: true
