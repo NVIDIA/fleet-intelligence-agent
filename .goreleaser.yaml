@@ -87,6 +87,8 @@ nfpms:
       - systemd
     recommends:
       - datacenter-gpu-manager-4-core
+      - nvattest
+      - corelib
     suggests:
       - nvidia-driver-535 | nvidia-driver-545 | nvidia-driver-550
     bindir: /usr/bin
@@ -129,6 +131,8 @@ nfpms:
       - systemd
     recommends:
       - datacenter-gpu-manager-4-core
+      - nvattest
+      - corelib
     suggests:
       - nvidia-driver >= 535
     bindir: /usr/bin
