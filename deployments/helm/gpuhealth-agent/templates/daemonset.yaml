@@ -102,6 +102,9 @@ spec:
               mountPath: /dev
             - name: sys
               mountPath: /sys
+              readOnly: true
+            - name: sys-pci-devices
+              mountPath: /sys/bus/pci/devices
             - name: os-release
               mountPath: /etc/os-release
               readOnly: true
@@ -123,6 +126,9 @@ spec:
         - name: sys
           hostPath:
             path: /sys
+        - name: sys-pci-devices
+          hostPath:
+            path: /sys/bus/pci/devices
         - name: os-release
           hostPath:
             path: /etc/os-release
