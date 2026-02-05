@@ -1,0 +1,14 @@
+✓ GPU Health Agent deployed successfully!
+
+NAMESPACE: {{ .Release.Namespace }}
+{{- if .Values.enroll.enabled }}
+ENROLLMENT: Enabled ({{ .Values.enroll.endpoint }})
+{{- else }}
+ENROLLMENT: Disabled (standalone mode)
+{{- end }}
+
+Check status:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "gpuhealth-agent.name" . }}
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "gpuhealth-agent.name" . }} --tail=50
+
+Docs: https://github.com/NVIDIA/gpuhealth
