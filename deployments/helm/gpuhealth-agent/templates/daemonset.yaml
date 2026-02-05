@@ -102,6 +102,9 @@ spec:
               mountPath: /dev
             - name: sys
               mountPath: /sys
+            - name: proc
+              mountPath: /proc
+              readOnly: true
             - name: os-release
               mountPath: /etc/os-release
               readOnly: true
@@ -123,6 +126,10 @@ spec:
         - name: sys
           hostPath:
             path: /sys
+        - name: proc
+          hostPath:
+            path: /proc
+            type: Directory
         - name: os-release
           hostPath:
             path: /etc/os-release

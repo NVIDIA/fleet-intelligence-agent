@@ -21,6 +21,7 @@ Common values (defaults from `values.yaml`):
 | `runtimeClassName` | `nvidia` | RuntimeClass for NVIDIA runtime. |
 | `securityContext.privileged` | `true` | Run privileged. |
 | `securityContext.runAsUser` | `0` | Run as root. |
+| `securityContext.runAsGroup` | `0` | Run as root group. |
 | `env.NVIDIA_VISIBLE_DEVICES` | `all` | NVIDIA visible devices. |
 | `env.NVIDIA_DRIVER_CAPABILITIES` | `utility` | NVIDIA driver capabilities. |
 | `env.DCGM_URL` | `nvidia-dcgm.gpu-operator.svc:5555` | DCGM HostEngine endpoint. |
@@ -41,7 +42,7 @@ Common values (defaults from `values.yaml`):
 | `resources.limits.cpu` | `500m` | CPU limit. |
 | `resources.limits.memory` | `512Mi` | Memory limit. |
 | `resources.limits.ephemeral-storage` | `1Gi` | Ephemeral storage limit. |
-| `nodeSelector` | `{}` | Node selector. |
+| `nodeSelector` | `{"nvidia.com/gpu.present": "true"}` | Node selector (targets GPU nodes). |
 | `tolerations` | `[]` | Tolerations. |
 | `affinity` | `{}` | Affinity rules. |
 | `serviceAccount.create` | `true` | Create ServiceAccount. |
@@ -57,3 +58,6 @@ See `docs/installation.md` for the enrollment flow and secret creation steps.
 - The chart assumes DCGM HostEngine is already running in the cluster (typically
   via NVIDIA GPU Operator). Set `env.DCGM_URL` to match your DCGM Service.
 - The DaemonSet uses `runtimeClassName: nvidia` by default.
+- **Node Labeling**: By default, the agent only deploys to nodes with GPUs (labeled `nvidia.com/gpu.present=true`).
+  This label is automatically set by the NVIDIA GPU Operator or Device Plugin.
+  To deploy to all nodes regardless of labels, override with `--set nodeSelector=null`.

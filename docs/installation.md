@@ -203,10 +203,18 @@ If DCGM is exposed at a different service name or port, set `env.DCGM_URL`:
 --set env.DCGM_URL="$DCGM_URL"
 ```
 
-### Schedule only on GPU nodes
+### Node Scheduling
 
-Use a GPU Operator label with `nodeSelector` and, if needed, a toleration for GPU taints.
-Replace the label key/value with the one used in your cluster (for example, `nvidia.com/gpu.deploy.dcgm=true`).
+**By default**, the agent automatically deploys only to GPU nodes using the nodeSelector:
+
+```yaml
+nodeSelector:
+  nvidia.com/gpu.present: "true"
+```
+
+This label is automatically set by the NVIDIA GPU Operator or Device Plugin, so no manual node labeling is required.
+
+If you need a different node selector or tolerations for GPU taints, you can override them.
 
 Using `--set` (quote the tolerations for zsh, and escape dots in the label key):
 
