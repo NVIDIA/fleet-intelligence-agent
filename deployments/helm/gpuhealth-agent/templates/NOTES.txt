@@ -1,0 +1,53 @@
+✓ GPU Health Agent deployed successfully!
+
+RELEASE NAME: {{ .Release.Name }}
+NAMESPACE:    {{ .Release.Namespace }}
+
+The GPU Health Agent DaemonSet has been deployed to your cluster.
+
+CHECKING DEPLOYMENT STATUS:
+
+  View DaemonSet status:
+    kubectl get daemonset {{ include "gpuhealth-agent.fullname" . }} -n {{ .Release.Namespace }}
+
+  View pods:
+    kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "gpuhealth-agent.name" . }}
+
+  Check pod logs:
+    kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "gpuhealth-agent.name" . }} --tail=50
+
+  Watch rollout:
+    kubectl rollout status daemonset/{{ include "gpuhealth-agent.fullname" . }} -n {{ .Release.Namespace }}
+
+{{- if .Values.enroll.enabled }}
+
+ENROLLMENT: ENABLED
+
+  Nodes enrolled with: {{ .Values.enroll.endpoint }}
+
+{{- else }}
+
+ENROLLMENT: DISABLED
+
+  Nodes are running in standalone mode without enrollment.
+
+  To enable enrollment and connect to the GPU Health backend:
+
+    1. Create enrollment token secret:
+       kubectl create secret generic <token-secret-name> \
+         --namespace {{ .Release.Namespace }} \
+         --from-literal=token="<your-enrollment-token>"
+
+    2. Upgrade the release with enrollment enabled:
+       helm upgrade {{ .Release.Name }} gpuhealth/gpuhealth-agent \
+         --namespace {{ .Release.Namespace }} \
+         --reuse-values \
+         --set enroll.enabled=true \
+         --set enroll.endpoint="<your-enrollment-endpoint>" \
+         --set enroll.tokenSecretName="<token-secret-name>"
+{{- end }}
+
+DOCUMENTATION:
+
+  For more information, visit:
+    https://github.com/NVIDIA/gpuhealth

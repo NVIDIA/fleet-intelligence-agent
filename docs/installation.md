@@ -203,6 +203,86 @@ If DCGM is exposed at a different service name or port, set `env.DCGM_URL`:
 --set env.DCGM_URL="$DCGM_URL"
 ```
 
+### Verifying deployment
+
+After installation, verify the agent is running correctly:
+
+```bash
+# Check DaemonSet status
+kubectl get daemonset gpuhealth-agent -n "$NS"
+
+# Check pods (should be one per GPU node)
+kubectl get pods -n "$NS" -l app.kubernetes.io/name=gpuhealth-agent
+
+# View pod logs
+kubectl logs -n "$NS" -l app.kubernetes.io/name=gpuhealth-agent --tail=50
+
+# Watch rollout status
+kubectl rollout status daemonset/gpuhealth-agent -n "$NS"
+```
+
+Check a specific pod in detail:
+
+```bash
+# Get a pod name
+POD_NAME=$(kubectl get pods -n "$NS" -l app.kubernetes.io/name=gpuhealth-agent -o jsonpath='{.items[0].metadata.name}')
+
+# Describe the pod
+kubectl describe pod -n "$NS" "$POD_NAME"
+
+# View full logs
+kubectl logs -n "$NS" "$POD_NAME" --follow
+```
+
+### Troubleshooting
+
+**Pods not starting:**
+
+```bash
+# Check pod events
+kubectl describe pod -n "$NS" -l app.kubernetes.io/name=gpuhealth-agent
+```
+
+Common issues:
+- **ImagePullBackOff**: Verify the `nvcr-pull-secret` exists in the namespace
+- **Pending**: Check node labels match `nodeSelector` (default: `nvidia.com/gpu.present=true`)
+- **CrashLoopBackOff**: Check logs for errors
+
+**Enrollment failures:**
+
+```bash
+# Check init container logs
+kubectl logs -n "$NS" "$POD_NAME" -c enroll
+
+# Verify enrollment secret exists
+kubectl get secret "$ENROLL_TOKEN_SECRET_NAME" -n "$NS"
+
+# Check secret content (verify token is not empty)
+kubectl get secret "$ENROLL_TOKEN_SECRET_NAME" -n "$NS" -o jsonpath='{.data.token}' | base64 -d | wc -c
+```
+
+**DCGM connection issues:**
+
+```bash
+# Verify DCGM service is accessible
+kubectl get svc -n gpu-operator nvidia-dcgm
+
+# Test DCGM connectivity from a pod
+kubectl exec -n "$NS" "$POD_NAME" -- curl -v telnet://nvidia-dcgm.gpu-operator.svc:5555
+
+# Check DCGM URL environment variable
+kubectl get pods -n "$NS" "$POD_NAME" -o jsonpath='{.spec.containers[0].env[?(@.name=="DCGM_URL")].value}'
+```
+
+If DCGM is at a different location, update the URL:
+
+```bash
+helm upgrade gpuhealth-agent gpuhealth/gpuhealth-agent \
+  --namespace "$NS" \
+  --reuse-values \
+  --set env.DCGM_URL="<dcgm-service>:<port>"
+```
+
 ### Node Scheduling
 
 **By default**, the agent automatically deploys only to GPU nodes using the nodeSelector:
