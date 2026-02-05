@@ -141,18 +141,19 @@ func TestManager_IsAttestationDataUpdated(t *testing.T) {
 	assert.False(t, manager.IsAttestationDataUpdated(futureTime))
 }
 
-func TestManager_GetMachineId_NilNVML(t *testing.T) {
+func TestManager_GetMachineId_NoDatabase(t *testing.T) {
 	ctx := context.Background()
 	cfg := &config.AttestationConfig{
 		Interval:      metav1.Duration{Duration: 20 * time.Second},
 		JitterEnabled: false,
 	}
-	manager := NewManager(ctx, nil, cfg) // nil nvmlInstance
+	manager := NewManager(ctx, nil, cfg)
 
+	// getMachineId will fail because there's no database with machine ID in test environment
 	machineId, err := manager.getMachineId()
 
+	// Expected to fail in test environment without proper database setup
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "NVML instance not available")
 	assert.Empty(t, machineId)
 }
 
@@ -374,7 +375,7 @@ func TestManager_RunAttestation_WithFallback(t *testing.T) {
 		Interval:      metav1.Duration{Duration: 20 * time.Second},
 		JitterEnabled: false,
 	}
-	manager := NewManager(ctx, nil, cfg) // nil nvmlInstance will trigger fallback
+	manager := NewManager(ctx, nil, cfg)
 
 	// Since runAttestation is called by Start(), we need to test it differently
 	// We'll test the fallback behavior by checking that it handles errors gracefully

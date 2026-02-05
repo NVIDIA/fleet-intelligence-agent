@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/leptonai/gpud/pkg/log"
-	pkgmachineinfo "github.com/leptonai/gpud/pkg/machine-info"
 	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
 	"github.com/leptonai/gpud/pkg/sqlite"
@@ -394,25 +393,27 @@ func (m *Manager) getNonceEndpointFromMetadata(ctx context.Context) string {
 }
 
 func (m *Manager) getMachineId() (string, error) {
-	if m.nvmlInstance == nil {
-		log.Logger.Warnw("NVML instance not available, returning mock data")
-		return "", fmt.Errorf("NVML instance not available")
-	}
-
-	// Get machine info which includes GPU information
-	machineInfo, err := pkgmachineinfo.GetMachineInfo(m.nvmlInstance)
+	stateFile, err := config.DefaultStateFile()
 	if err != nil {
-		return "", fmt.Errorf("failed to get machine info: %w", err)
+		return "", fmt.Errorf("failed to get state file path: %w", err)
 	}
 
-	if machineInfo.GPUInfo == nil || len(machineInfo.GPUInfo.GPUs) == 0 {
-		return "", fmt.Errorf("no GPU information available")
+	dbRO, err := sqlite.Open(stateFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to open state database: %w", err)
+	}
+	defer dbRO.Close()
+
+	machineID, err := pkgmetadata.ReadMachineID(m.ctx, dbRO)
+	if err != nil {
+		return "", fmt.Errorf("failed to read machine ID from metadata: %w", err)
 	}
 
-	// Just log the GPUs found for debug purposes
-	log.Logger.Debugw("GPUs found", "count", len(machineInfo.GPUInfo.GPUs))
+	if machineID == "" {
+		return "", fmt.Errorf("machine ID not found in metadata")
+	}
 
-	return machineInfo.SystemUUID, nil
+	return machineID, nil
 }
 
 func (m *Manager) getEvidences(nonce string) (*AttestationSDKResponse, error) {
