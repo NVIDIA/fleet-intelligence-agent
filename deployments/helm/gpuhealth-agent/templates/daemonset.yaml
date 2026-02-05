@@ -102,8 +102,8 @@ spec:
               mountPath: /dev
             - name: sys
               mountPath: /sys
-            - name: proc
-              mountPath: /proc
+            - name: proc-driver
+              mountPath: /proc/driver
               readOnly: true
             - name: os-release
               mountPath: /etc/os-release
@@ -126,9 +126,9 @@ spec:
         - name: sys
           hostPath:
             path: /sys
-        - name: proc
+        - name: proc-driver
           hostPath:
-            path: /proc
+            path: /proc/driver
             type: Directory
         - name: os-release
           hostPath:
