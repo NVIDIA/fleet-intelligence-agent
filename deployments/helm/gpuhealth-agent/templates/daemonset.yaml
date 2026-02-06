@@ -80,10 +80,6 @@ spec:
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
-            - name: NVIDIA_VISIBLE_DEVICES
-              value: {{ .Values.env.NVIDIA_VISIBLE_DEVICES | quote }}
-            - name: NVIDIA_DRIVER_CAPABILITIES
-              value: {{ .Values.env.NVIDIA_DRIVER_CAPABILITIES | quote }}
             - name: DCGM_URL
               value: {{ .Values.env.DCGM_URL | quote }}
             - name: DCGM_URL_IS_UNIX_SOCKET
@@ -102,9 +98,6 @@ spec:
               mountPath: /dev
             - name: sys
               mountPath: /sys
-            - name: proc
-              mountPath: /proc
-              readOnly: true
             - name: os-release
               mountPath: /etc/os-release
               readOnly: true
@@ -126,10 +119,6 @@ spec:
         - name: sys
           hostPath:
             path: /sys
-        - name: proc
-          hostPath:
-            path: /proc
-            type: Directory
         - name: os-release
           hostPath:
             path: /etc/os-release

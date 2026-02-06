@@ -15,8 +15,6 @@ securityContext:
   runAsGroup: 0
 
 env:
-  NVIDIA_VISIBLE_DEVICES: all
-  NVIDIA_DRIVER_CAPABILITIES: utility
   DCGM_URL: nvidia-dcgm.gpu-operator.svc:5555
   DCGM_URL_IS_UNIX_SOCKET: "false"
 
