@@ -28,8 +28,6 @@ enroll:
   tokenSecretName: ""
   tokenSecretKey: "token"
   tokenValue: ""
-  securityContext:
-    runAsUser: 0
 
 ports:
   http: 15133
