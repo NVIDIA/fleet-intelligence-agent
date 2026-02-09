@@ -39,8 +39,8 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.enroll.enabled }}
       initContainers:
+      {{- if .Values.enroll.enabled }}
         - name: enroll
           image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -64,6 +64,21 @@ spec:
               {{- else }}
               value: {{ required "enroll.tokenValue or enroll.tokenSecretName is required when enroll.enabled=true" .Values.enroll.tokenValue | quote }}
               {{- end }}
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/gpuhealth
+      {{- else }}
+        - name: unenroll
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/bash
+            - -c
+          args:
+            - >
+              /usr/bin/gpuhealth unenroll || true
+          securityContext:
+            {{- toYaml .Values.enroll.securityContext | nindent 12 }}
           volumeMounts:
             - name: state
               mountPath: /var/lib/gpuhealth
