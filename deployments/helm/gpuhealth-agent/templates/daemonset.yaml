@@ -39,8 +39,8 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.enroll.enabled }}
       initContainers:
+      {{- if .Values.enroll.enabled }}
         - name: enroll
           image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -65,6 +65,40 @@ spec:
               value: {{ required "enroll.tokenValue or enroll.tokenSecretName is required when enroll.enabled=true" .Values.enroll.tokenValue | quote }}
               {{- end }}
           volumeMounts:
+            - name: dev
+              mountPath: /dev
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/gpuhealth
+      {{- else }}
+        - name: unenroll
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/bash
+            - -c
+          args:
+            - |-
+              if output=$(/usr/bin/gpuhealth unenroll 2>&1); then
+                echo "${output}"
+                echo "gpuhealth: unenroll completed"
+                exit 0
+              fi
+
+              echo "${output}"
+              if echo "${output}" | grep -q "no such table: gpud_metadata"; then
+                echo "gpuhealth: no enrollment metadata table found; treating node as already unenrolled"
+                exit 0
+              fi
+
+              echo "gpuhealth: unenroll failed (enroll.enabled=false), continuing startup"
+              exit 0
+          securityContext:
+            {{- toYaml .Values.enroll.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: dev
+              mountPath: /dev
+              readOnly: true
             - name: state
               mountPath: /var/lib/gpuhealth
       {{- end }}
