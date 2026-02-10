@@ -51,7 +51,7 @@ spec:
             - >
               /usr/bin/gpuhealth enroll
               --endpoint {{ required "enroll.endpoint is required when enroll.enabled=true" .Values.enroll.endpoint | quote }}
-              --token "${GPUHEALTH_TOKEN}"
+              --token "${GPUHEALTH_TOKEN}" || true
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
