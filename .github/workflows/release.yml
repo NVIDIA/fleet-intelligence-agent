@@ -95,8 +95,8 @@ jobs:
       # - NVCR_API_KEY: NGC API key for nvcr.io (docker username is the literal '$oauthtoken')
       #
       # Image is pushed to:
-      # - nvcr.io/0753215517602916/gpu-health/gpuhealth-skyhook:<version>
-      # - nvcr.io/0753215517602916/gpu-health/gpuhealth-skyhook:latest (stable releases only)
+      # - nvcr.io/0753215517602916/gpuhealth-skyhook:<version>
+      # - nvcr.io/0753215517602916/gpuhealth-skyhook:latest (stable releases only)
       - name: Prepare Skyhook package payload (DEB/RPM + config.json)
         id: skyhook
         run: |
@@ -125,7 +125,7 @@ jobs:
           path.write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
           PY
 
-          IMAGE="nvcr.io/0753215517602916/gpu-health/gpuhealth-skyhook"
+          IMAGE="nvcr.io/0753215517602916/gpuhealth-skyhook"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tags<<EOF" >> "$GITHUB_OUTPUT"
           echo "${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
@@ -141,7 +141,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ steps.version.outputs.version }}"
-          IMAGE="nvcr.io/0753215517602916/gpu-health/gpuhealth-agent"
+          IMAGE="nvcr.io/0753215517602916/gpuhealth-agent"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tags<<EOF" >> "$GITHUB_OUTPUT"
           echo "${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
