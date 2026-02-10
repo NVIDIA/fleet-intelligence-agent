@@ -95,8 +95,8 @@ jobs:
       # - NVCR_API_KEY: NGC API key for nvcr.io (docker username is the literal '$oauthtoken')
       #
       # Image is pushed to:
-      # - nvcr.io/nvidian/gpu-health/gpuhealth-skyhook:<version>
-      # - nvcr.io/nvidian/gpu-health/gpuhealth-skyhook:latest (stable releases only)
+      # - nvcr.io/0753215517602916/gpuhealth-skyhook:<version>
+      # - nvcr.io/0753215517602916/gpuhealth-skyhook:latest (stable releases only)
       - name: Prepare Skyhook package payload (DEB/RPM + config.json)
         id: skyhook
         run: |
@@ -125,7 +125,7 @@ jobs:
           path.write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
           PY
 
-          IMAGE="nvcr.io/nvidian/gpu-health/gpuhealth-skyhook"
+          IMAGE="nvcr.io/0753215517602916/gpuhealth-skyhook"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tags<<EOF" >> "$GITHUB_OUTPUT"
           echo "${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
@@ -141,7 +141,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ steps.version.outputs.version }}"
-          IMAGE="nvcr.io/nvidian/gpu-health/gpuhealth-agent"
+          IMAGE="nvcr.io/0753215517602916/gpuhealth-agent"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tags<<EOF" >> "$GITHUB_OUTPUT"
           echo "${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
@@ -194,6 +194,7 @@ jobs:
 
       - name: Ensure Helm push plugin is installed
         run: |
+          set -euo pipefail
           if helm plugin list | awk '{print $1}' | grep -qx 'cm-push'; then
             echo "helm-push plugin already installed"
           else
@@ -205,11 +206,12 @@ jobs:
           NGC_API_KEY: ${{ secrets.NVCR_API_KEY }}
         run: |
           set -euo pipefail
-          helm repo add ngc https://helm.ngc.nvidia.com/nvidian/gpu-health \
+          helm repo remove ngc || true
+          helm repo add ngc https://helm.ngc.nvidia.com/0753215517602916 \
             --username '$oauthtoken' \
             --password "${NGC_API_KEY}"
 
-      - name: Push Helm chart to NGC Helm registry
+      - name: Push Helm chart to NGC Helm repo
         run: |
           set -euo pipefail
           CHART_VERSION="${{ steps.version.outputs.version }}"
@@ -264,8 +266,8 @@ jobs:
           echo "**gpuhealth-agent image tags:**" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.agent_image.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Helm chart (NGC repo):**" >> $GITHUB_STEP_SUMMARY
-          echo "repo: https://helm.ngc.nvidia.com/nvidian" >> $GITHUB_STEP_SUMMARY
+          echo "**Helm chart (NGC Helm repo):**" >> $GITHUB_STEP_SUMMARY
+          echo "repo: https://helm.ngc.nvidia.com/0753215517602916" >> $GITHUB_STEP_SUMMARY
           echo "chart: gpuhealth-agent-${{ steps.version.outputs.version }}.tgz" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
