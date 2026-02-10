@@ -13,7 +13,7 @@ Common values (defaults from `values.yaml`):
 
 | Value | Default | Description |
 | --- | --- | --- |
-| `image.repository` | `nvcr.io/nvidian/gpu-health/gpuhealth-agent` | Agent image repository. |
+| `image.repository` | `nvcr.io/0753215517602916/gpuhealth-agent` | Agent image repository. |
 | `image.tag` | `""` | Image tag (empty uses chart `appVersion`). |
 | `image.pullPolicy` | `IfNotPresent` | Image pull policy. |
 | `imagePullSecrets[0].name` | `nvcr-pull-secret` | Secret for pulling from NVCR. |
