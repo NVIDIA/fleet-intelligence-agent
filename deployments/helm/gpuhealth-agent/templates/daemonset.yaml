@@ -67,7 +67,6 @@ spec:
           volumeMounts:
             - name: dev
               mountPath: /dev
-              readOnly: true
             - name: state
               mountPath: /var/lib/gpuhealth
       {{- else }}
@@ -98,7 +97,6 @@ spec:
           volumeMounts:
             - name: dev
               mountPath: /dev
-              readOnly: true
             - name: state
               mountPath: /var/lib/gpuhealth
       {{- end }}
