@@ -46,7 +46,7 @@ RUN CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH:-amd64} \
       -X github.com/NVIDIA/gpuhealth/internal/version.Package=github.com/NVIDIA/gpuhealth" \
     -o /out/gpuhealth ./cmd/gpuhealth
 
-FROM nvcr.io/nvidia/cloud-native/dcgm:${DCGM_VERSION} AS runtime
+FROM nvidia/dcgm:${DCGM_VERSION} AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN set -eux; \
