@@ -1,5 +1,5 @@
 image:
-  repository: nvcr.io/nvidian/gpu-health/gpuhealth-agent
+  repository: nvcr.io/0753215517602916/gpu-health/gpuhealth-agent
   tag: ""
   pullPolicy: IfNotPresent
 

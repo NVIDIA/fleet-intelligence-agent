@@ -11,7 +11,7 @@ metadata:
 spec:
   packages:
     gpuhealth:
-      image: nvcr.io/nvidian/gpu-health/gpuhealth-skyhook
+      image: nvcr.io/0753215517602916/gpu-health/gpuhealth-skyhook
       version: 0.0.1
       env:
         - name: GPUHEALTH_VERSION

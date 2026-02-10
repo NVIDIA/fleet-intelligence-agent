@@ -15,7 +15,7 @@
 # limitations under the License.
 
 
-# docker buildx build --platform linux/amd64,linux/arm64 -t nvcr.io/nvidian/gpu-health/gpuhealth-skyhook:0.0.1 --push .
+# docker buildx build --platform linux/amd64,linux/arm64 -t nvcr.io/0753215517602916/gpu-health/gpuhealth-skyhook:0.0.1 --push .
 
 FROM busybox:latest
 
