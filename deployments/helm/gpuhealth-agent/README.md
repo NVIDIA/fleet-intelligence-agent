@@ -5,7 +5,7 @@ This chart deploys the `gpuhealth-agent` DaemonSet.
 ## Install
 
 For installation steps (NGC Helm repo, image pull secret, enrollment, and
-`helm install`/`helm upgrade`), see `docs/installation.md`.
+`helm install`/`helm upgrade`), see `docs/install-helm.md`.
 
 ## Configuration
 
@@ -49,7 +49,7 @@ Common values (defaults from `values.yaml`):
 
 ### Enrollment (per node via init container)
 
-See `docs/installation.md` for the enrollment flow and secret creation steps.
+See `docs/install-helm.md` for the enrollment flow and secret creation steps.
 
 ## Notes
 

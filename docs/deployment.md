@@ -22,7 +22,7 @@ Key points:
 The GPU Health Agent is deployed via a Helm chart published in NGC (source lives
 in `deployments/helm/gpuhealth-agent`). The agent does not deploy DCGM itself; it
 expects DCGM HostEngine to already be running in the cluster (most commonly via
-the NVIDIA GPU Operator). For install steps, see `docs/installation.md`.
+the NVIDIA GPU Operator). For install steps, see `docs/install-helm.md`.
 
 In the DaemonSet/Helm chart, this is configured via:
 
