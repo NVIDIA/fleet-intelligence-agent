@@ -48,7 +48,7 @@ Example:
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t nvcr.io/0753215517602916/gpuhealth-skyhook:<tag> --push .
+  -t nvcr.io/0753215517602916/agent-artifact/gpuhealth-skyhook:<tag> --push .
 ```
 
 ### GitHub Release pipeline (NVCR publish)

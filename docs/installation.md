@@ -135,7 +135,7 @@ ENROLL_TOKEN_SECRET_NAME='gpuhealth-enroll-token'  # Recommended secret name
 ### Add the Helm repo
 
 ```bash
-helm repo add gpuhealth https://helm.ngc.nvidia.com/0753215517602916 \
+helm repo add gpuhealth https://helm.ngc.nvidia.com/0753215517602916/agent-artifact \
   --username='$oauthtoken' \
   --password="$NGC_API_KEY"
 helm repo update
