@@ -21,6 +21,10 @@ GPUHEALTH_METRICS_LOOKBACK="1m"
 GPUHEALTH_EVENTS_LOOKBACK="1m"
 GPUHEALTH_CHECK_INTERVAL="1m"
 GPUHEALTH_RETRY_MAX_ATTEMPTS="3"
+GPUHEALTH_ATTESTATION_JITTER_ENABLED="true"
+GPUHEALTH_ATTESTATION_INTERVAL="24h"
+HTTP_PROXY=""
+HTTPS_PROXY=""
 ```
 
 
@@ -38,6 +42,8 @@ GPUHEALTH_RETRY_MAX_ATTEMPTS="3"
 | `GPUHEALTH_EVENTS_LOOKBACK` | How far back to look for events | `1m` |
 | `GPUHEALTH_CHECK_INTERVAL` | Component health check frequency (1s to 24h) | `1m` |
 | `GPUHEALTH_RETRY_MAX_ATTEMPTS` | Max retry attempts for failed exports | `3` |
+| `GPUHEALTH_ATTESTATION_JITTER_ENABLED` | Enable/disable attestation jitter | `true` |
+| `GPUHEALTH_ATTESTATION_INTERVAL` | Attestation interval override | `24h` |
 | `HTTP_PROXY` | HTTP proxy server URL | - |
 | `HTTPS_PROXY` | HTTPS proxy server URL | - |
 
