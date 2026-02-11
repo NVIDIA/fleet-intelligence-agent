@@ -38,6 +38,7 @@ Lightweight GPU health monitoring and reporting agent for NVIDIA GPU infrastruct
 - [Helm Installation](docs/install-helm.md) - Kubernetes (Helm) installation and troubleshooting
 - [DEB Installation](docs/install-deb.md) - Ubuntu package install, update, and uninstall
 - [RPM Installation](docs/install-rpm.md) - RHEL/Rocky/Alma/Amazon package install, update, and uninstall
+- [Architecture](docs/architecture.md) - Bare metal and Kubernetes architecture, dependencies, and runtime flow
 - [Usage](docs/usage.md) - Commands, HTTP API, integration, and troubleshooting
 - [Configuration](docs/configuration.md) - Environment variables and service configuration
 - [Development](docs/development.md) - Building from source and contributing
