@@ -89,53 +89,6 @@ jobs:
           echo "source=$SOURCE" >> $GITHUB_OUTPUT
           echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
 
-      # Build and publish the Skyhook package image to NVCR using the release DEB/RPM artifacts.
-      #
-      # Required secrets:
-      # - NVCR_API_KEY: NGC API key for nvcr.io (docker username is the literal '$oauthtoken')
-      #
-      # Image is pushed to:
-      # - nvcr.io/0753215517602916/agent-artifact/gpuhealth-skyhook:<version>
-      # - nvcr.io/0753215517602916/agent-artifact/gpuhealth-skyhook:latest (stable releases only)
-      - name: Prepare Skyhook package payload (DEB/RPM + config.json)
-        id: skyhook
-        run: |
-          set -euo pipefail
-          VERSION="${{ steps.version.outputs.version }}"
-          SKYHOOK_DIR="deployments/skyhooks"
-
-          mkdir -p "${SKYHOOK_DIR}/skyhook_dir"
-
-          # Copy the release OS packages into the Skyhook payload directory.
-          cp "dist/gpuhealth_${VERSION}_amd64.deb" "${SKYHOOK_DIR}/skyhook_dir/"
-          cp "dist/gpuhealth_${VERSION}_arm64.deb" "${SKYHOOK_DIR}/skyhook_dir/"
-          cp "dist/gpuhealth-${VERSION}-1.x86_64.rpm" "${SKYHOOK_DIR}/skyhook_dir/"
-          cp "dist/gpuhealth-${VERSION}-1.aarch64.rpm" "${SKYHOOK_DIR}/skyhook_dir/"
-
-          # Keep the Skyhook package metadata aligned with the release version.
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          import os
-
-          version = os.environ["VERSION"]
-          path = Path("deployments/skyhooks/config.json")
-          data = json.loads(path.read_text(encoding="utf-8"))
-          data["package_version"] = version
-          path.write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
-          PY
-
-          IMAGE="nvcr.io/0753215517602916/agent-artifact/gpuhealth-skyhook"
-          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "tags<<EOF" >> "$GITHUB_OUTPUT"
-          echo "${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
-          if [ "${{ steps.version.outputs.is_prerelease }}" = "false" ]; then
-            echo "${IMAGE}:latest" >> "$GITHUB_OUTPUT"
-          fi
-          echo "EOF" >> "$GITHUB_OUTPUT"
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-
       - name: Prepare gpuhealth-agent image tags
         id: agent_image
         run: |
@@ -176,14 +129,6 @@ jobs:
             VERSION=${{ steps.version.outputs.version }}
             REVISION=${{ steps.version.outputs.commit }}
             BUILD_TIMESTAMP=${{ github.event.head_commit.timestamp }}
-
-      - name: Build and push Skyhook package image
-        uses: docker/build-push-action@v6
-        with:
-          context: deployments/skyhooks
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.skyhook.outputs.tags }}
 
       - name: Package Helm chart
         run: |
@@ -259,9 +204,6 @@ jobs:
           echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ steps.version.outputs.commit }}" >> $GITHUB_STEP_SUMMARY
           echo "**Pre-release:** ${{ steps.version.outputs.is_prerelease }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Skyhook image tags:**" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.skyhook.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**gpuhealth-agent image tags:**" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.agent_image.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
