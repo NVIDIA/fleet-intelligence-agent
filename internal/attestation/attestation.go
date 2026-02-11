@@ -128,7 +128,11 @@ func (c *cache) isUpdatedSince(since time.Time) bool {
 	return c.lastUpdated.After(since)
 }
 
-// Start begins the 24-hour attestation ticker with jitter to prevent thundering herd
+// retryInterval is the shorter interval used when agent is not enrolled yet
+const retryInterval = 5 * time.Minute
+
+// Start begins the attestation loop with jitter to prevent thundering herd
+// Uses dynamic intervals: shorter retry interval when not enrolled, normal interval otherwise
 func (m *Manager) Start() {
 	log.Logger.Infow("Starting attestation manager with thundering herd prevention")
 
@@ -153,13 +157,14 @@ func (m *Manager) Start() {
 		}
 
 		// Run first attestation with additional jitter
-		m.runAttestationWithJitter()
+		shouldRetrySoon := m.runAttestationWithJitter()
 
 		// Create ticker with configurable interval (default 24 hours)
-		ticker := time.NewTicker(m.config.Interval.Duration)
+		// Will be reset after each attestation based on result
+		ticker := time.NewTicker(m.getNextInterval(shouldRetrySoon))
 		defer ticker.Stop()
 
-		log.Logger.Infow("Attestation ticker started", "interval", m.config.Interval.Duration)
+		log.Logger.Infow("Attestation ticker started", "interval", m.getNextInterval(shouldRetrySoon))
 
 		for {
 			select {
@@ -167,10 +172,30 @@ func (m *Manager) Start() {
 				log.Logger.Infow("Context done, stopping attestation manager")
 				return
 			case <-ticker.C:
-				m.runAttestationWithJitter()
+				shouldRetrySoon = m.runAttestationWithJitter()
+				nextInterval := m.getNextInterval(shouldRetrySoon)
+				ticker.Reset(nextInterval)
 			}
 		}
 	}()
+}
+
+// getNextInterval returns the appropriate interval based on whether we should retry soon
+func (m *Manager) getNextInterval(shouldRetrySoon bool) time.Duration {
+	if shouldRetrySoon {
+		// Use the shorter of retryInterval and configured interval
+		// to avoid slowing down attestation in fast-retry environments (e.g., testing)
+		interval := retryInterval
+		if m.config.Interval.Duration < retryInterval {
+			interval = m.config.Interval.Duration
+		}
+		log.Logger.Infow("Agent not enrolled, using retry interval",
+			"retry_interval", interval)
+		return interval
+	}
+	log.Logger.Infow("Using normal attestation interval",
+		"interval", m.config.Interval.Duration)
+	return m.config.Interval.Duration
 }
 
 // Stop gracefully shuts down the attestation manager
@@ -180,7 +205,8 @@ func (m *Manager) Stop() {
 }
 
 // runAttestation performs the attestation process and updates the cache
-func (m *Manager) runAttestation() {
+// Returns true if attestation should be retried soon (e.g., agent not enrolled yet)
+func (m *Manager) runAttestation() bool {
 	log.Logger.Infow("Starting attestation process")
 
 	// Always update cache with result (success or failure) so server knows status
@@ -195,7 +221,7 @@ func (m *Manager) runAttestation() {
 		attestationData.Success = false
 		attestationData.ErrorMessage = err.Error()
 		m.cache.updateAttestationData(attestationData)
-		return
+		return false
 	}
 
 	log.Logger.Debugw("Machine ID retrieved in Attestation",
@@ -210,14 +236,14 @@ func (m *Manager) runAttestation() {
 			attestationData.Success = false
 			attestationData.ErrorMessage = "JWT token not found in agent metadata while agent is enrolled"
 			m.cache.updateAttestationData(attestationData)
-			return
+			return false
 		} else {
-			log.Logger.Infow("No backend endpoint found in metadata, agent not enrolled")
+			log.Logger.Infow("No backend endpoint found in metadata, agent not enrolled, will retry soon")
 			// SDKResponse and NonceRefreshTimestamp are nil
 			attestationData.Success = false
 			attestationData.ErrorMessage = "No backend endpoint found in metadata, agent is not enrolled"
 			m.cache.updateAttestationData(attestationData)
-			return
+			return true // Retry soon - agent may enroll shortly
 		}
 	}
 
@@ -230,7 +256,7 @@ func (m *Manager) runAttestation() {
 		attestationData.Success = false
 		attestationData.ErrorMessage = err.Error()
 		m.cache.updateAttestationData(attestationData)
-		return
+		return false
 	}
 
 	// Update nonce refresh timestamp with actual server response
@@ -245,7 +271,7 @@ func (m *Manager) runAttestation() {
 		attestationData.Success = false
 		attestationData.ErrorMessage = err.Error()
 		m.cache.updateAttestationData(attestationData)
-		return
+		return false
 	}
 
 	// Success case: populate all data
@@ -256,6 +282,7 @@ func (m *Manager) runAttestation() {
 
 	// Update the attestation cache
 	m.cache.updateAttestationData(attestationData)
+	return false
 }
 
 func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time, error) {
@@ -484,11 +511,11 @@ func (m *Manager) calculateJitter(maxJitter time.Duration) time.Duration {
 }
 
 // runAttestationWithJitter runs attestation with additional per-request jitter
-func (m *Manager) runAttestationWithJitter() {
+// Returns true if attestation should be retried soon (e.g., agent not enrolled yet)
+func (m *Manager) runAttestationWithJitter() bool {
 	if !m.config.JitterEnabled {
 		log.Logger.Infow("Running attestation immediately (jitter disabled)")
-		m.runAttestation()
-		return
+		return m.runAttestation()
 	}
 
 	// Add significant jitter (0–30 minutes) for each request to spread load across a window,
@@ -500,8 +527,8 @@ func (m *Manager) runAttestationWithJitter() {
 
 	select {
 	case <-m.ctx.Done():
-		return
+		return false
 	case <-time.After(requestJitter):
-		m.runAttestation()
+		return m.runAttestation()
 	}
 }

@@ -496,6 +496,91 @@ func TestManager_CalculateJitter(t *testing.T) {
 	}
 }
 
+func TestManager_RunAttestation_ReturnsRetrySoon(t *testing.T) {
+	// This test verifies that runAttestation returns the correct retry hint
+	// When agent is not enrolled, it should return true (retry soon)
+	// When there's a real failure, it should return false (normal interval)
+
+	ctx := context.Background()
+	cfg := &config.AttestationConfig{
+		Interval:      metav1.Duration{Duration: 24 * time.Hour},
+		JitterEnabled: false,
+	}
+	manager := NewManager(ctx, nil, cfg)
+
+	// Run attestation - in test environment, this will fail at getMachineId
+	// (which is a real failure, not "not enrolled"), so it should return false
+	shouldRetrySoon := manager.runAttestation()
+
+	// Since we don't have the metadata database with machine ID in test environment,
+	// attestation fails with a real error (not "not enrolled"), so shouldRetrySoon should be false
+	assert.False(t, shouldRetrySoon, "Should return false for real failures (not 'not enrolled')")
+
+	// Verify the cache has the failure info
+	attestationData := manager.GetAttestationData()
+	require.NotNil(t, attestationData)
+	assert.False(t, attestationData.Success)
+	assert.NotEmpty(t, attestationData.ErrorMessage)
+
+	// The error should NOT be about enrollment
+	assert.NotContains(t, attestationData.ErrorMessage, "not enrolled",
+		"Error should be about machine ID, not enrollment")
+}
+
+func TestRetryInterval_Constant(t *testing.T) {
+	// Verify the retry interval constant is set appropriately
+	assert.Equal(t, 5*time.Minute, retryInterval,
+		"Retry interval should be 5 minutes for quick recovery after enrollment")
+}
+
+func TestManager_GetNextInterval(t *testing.T) {
+	tests := []struct {
+		name             string
+		configInterval   time.Duration
+		shouldRetrySoon  bool
+		expectedInterval time.Duration
+	}{
+		{
+			name:             "normal interval when not retrying",
+			configInterval:   24 * time.Hour,
+			shouldRetrySoon:  false,
+			expectedInterval: 24 * time.Hour,
+		},
+		{
+			name:             "retry interval when config is longer",
+			configInterval:   24 * time.Hour,
+			shouldRetrySoon:  true,
+			expectedInterval: 5 * time.Minute, // retryInterval
+		},
+		{
+			name:             "config interval when config is shorter than retry",
+			configInterval:   20 * time.Second,
+			shouldRetrySoon:  true,
+			expectedInterval: 20 * time.Second, // use config, not retryInterval
+		},
+		{
+			name:             "config interval when config equals retry",
+			configInterval:   5 * time.Minute,
+			shouldRetrySoon:  true,
+			expectedInterval: 5 * time.Minute,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			cfg := &config.AttestationConfig{
+				Interval:      metav1.Duration{Duration: tt.configInterval},
+				JitterEnabled: false,
+			}
+			manager := NewManager(ctx, nil, cfg)
+
+			interval := manager.getNextInterval(tt.shouldRetrySoon)
+			assert.Equal(t, tt.expectedInterval, interval)
+		})
+	}
+}
+
 func TestManager_RunAttestationWithJitter_Disabled(t *testing.T) {
 	ctx := context.Background()
 	cfg := &config.AttestationConfig{
