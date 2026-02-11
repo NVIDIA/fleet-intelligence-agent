@@ -6,7 +6,7 @@ Lightweight GPU health monitoring and reporting agent for NVIDIA GPU infrastruct
 
 **Prerequisites:**
 - NVIDIA DCGM (Data Center GPU Manager) - automatically installed from NVIDIA CUDA repositories
-- See [Installation Guide](docs/installation.md) for CUDA repository setup instructions
+- See [DEB Installation](docs/install-deb.md) or [RPM Installation](docs/install-rpm.md) for CUDA repository setup instructions
 
 **What It Monitors:**
 - GPU Metrics: Power, temperature, clocks, utilization, memory, Xid events
@@ -23,9 +23,21 @@ Lightweight GPU health monitoring and reporting agent for NVIDIA GPU infrastruct
 - Non-intrusive: Read-only operations, no system modifications
 - Production-ready: 24/7 datacenter operation
 
+## Supported Platforms
+
+| OS Family | Supported Versions | Architecture |
+|-----------|--------------------|--------------|
+| Ubuntu | 22.04, 24.04 | x86_64, ARM64 |
+| RHEL | 8, 9, 10 | x86_64, ARM64 |
+| Rocky Linux | 8, 9, 10 | x86_64, ARM64 |
+| AlmaLinux | 8, 9, 10 | x86_64, ARM64 |
+| Amazon Linux | 2023 | x86_64, ARM64 |
+
 ## Documentation
 
-- [Installation](docs/installation.md) - Installation, updating, and uninstalling
+- [Helm Installation](docs/install-helm.md) - Kubernetes (Helm) installation and troubleshooting
+- [DEB Installation](docs/install-deb.md) - Ubuntu package install, update, and uninstall
+- [RPM Installation](docs/install-rpm.md) - RHEL/Rocky/Alma/Amazon package install, update, and uninstall
 - [Usage](docs/usage.md) - Commands, HTTP API, integration, and troubleshooting
 - [Configuration](docs/configuration.md) - Environment variables and service configuration
 - [Development](docs/development.md) - Building from source and contributing
