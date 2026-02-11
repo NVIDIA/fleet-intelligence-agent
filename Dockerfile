@@ -60,6 +60,7 @@ RUN set -eux; \
     pciutils \
     wget \
     gnupg \
+    gnupg2 \
   ; \
   arch="$(dpkg --print-architecture)"; \
   case "${arch}" in \
