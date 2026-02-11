@@ -112,10 +112,12 @@ spec:
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
-            - name: DCGM_URL
-              value: {{ .Values.env.DCGM_URL | quote }}
-            - name: DCGM_URL_IS_UNIX_SOCKET
-              value: {{ .Values.env.DCGM_URL_IS_UNIX_SOCKET | quote }}
+            {{- range $name, $value := .Values.env }}
+            {{- if ne (toString $value) "" }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
             - name: HOSTNAME
               valueFrom:
                 fieldRef:
