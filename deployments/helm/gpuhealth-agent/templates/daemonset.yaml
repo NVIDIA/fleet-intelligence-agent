@@ -39,6 +39,13 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if and .Values.enroll.enabled .Values.enroll.unenroll }}
+      {{- fail "enroll.enabled and enroll.unenroll cannot both be true" }}
+      {{- end }}
+      {{- if not (has .Values.deployEnv (list "prod" "canary" "stg" "dev")) }}
+      {{- fail "deployEnv must be one of: prod, canary, stg, dev" }}
+      {{- end }}
+      {{- if or .Values.enroll.enabled .Values.enroll.unenroll }}
       initContainers:
       {{- if .Values.enroll.enabled }}
         - name: enroll
@@ -51,7 +58,7 @@ spec:
             - >
               /usr/bin/gpuhealth enroll
               --endpoint {{ required "enroll.endpoint is required when enroll.enabled=true" .Values.enroll.endpoint | quote }}
-              --token "${GPUHEALTH_TOKEN}" || true
+              --token "${GPUHEALTH_TOKEN}"
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
@@ -69,29 +76,14 @@ spec:
               mountPath: /dev
             - name: state
               mountPath: /var/lib/gpuhealth
-      {{- else }}
+      {{- else if .Values.enroll.unenroll }}
         - name: unenroll
           image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
-            - /bin/bash
-            - -c
+            - /usr/bin/gpuhealth
           args:
-            - |-
-              if output=$(/usr/bin/gpuhealth unenroll 2>&1); then
-                echo "${output}"
-                echo "gpuhealth: unenroll completed"
-                exit 0
-              fi
-
-              if echo "${output}" | grep -q "no such table: gpud_metadata"; then
-                echo "gpuhealth: no enrollment metadata table found; treating node as already unenrolled"
-                exit 0
-              fi
-
-              echo "${output}"
-              echo "gpuhealth: unenroll failed (enroll.enabled=false), continuing startup"
-              exit 0
+            - unenroll
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:
@@ -99,6 +91,7 @@ spec:
               mountPath: /dev
             - name: state
               mountPath: /var/lib/gpuhealth
+      {{- end }}
       {{- end }}
       containers:
         - name: gpuhealth-agent

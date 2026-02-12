@@ -44,6 +44,11 @@ func unenrollCommand(c *cli.Context) error {
 	}
 	defer dbRW.Close()
 
+	// Ensure metadata table exists so unenroll is idempotent even on fresh nodes.
+	if err := pkgmetadata.CreateTableMetadata(context.Background(), dbRW); err != nil {
+		return fmt.Errorf("failed to create metadata table: %w", err)
+	}
+
 	// Remove enrollment metadata entries
 	if err := removeEnrollmentMetadata(context.Background(), dbRW); err != nil {
 		return fmt.Errorf("failed to remove enrollment metadata: %w", err)
