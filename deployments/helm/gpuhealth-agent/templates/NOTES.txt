@@ -1,8 +1,14 @@
 ✓ GPU Health Agent deployed successfully!
 
 NAMESPACE: {{ .Release.Namespace }}
+DEPLOY_ENV: {{ .Values.deployEnv }}
 {{- if .Values.enroll.enabled }}
-ENROLLMENT: Enabled ({{ .Values.enroll.endpoint }})
+ENROLLMENT: Enabled
+{{- if eq .Values.deployEnv "prod" }}
+Open https://gpuhealth.ngc.nvidia.com to view your GPU health status.
+{{- else }}
+Open {{ printf "https://gpuhealth.%s.ngc.nvidia.com" .Values.deployEnv }} to view your GPU health status.
+{{- end }}
 {{- else }}
 ENROLLMENT: Disabled (standalone mode)
 {{- end }}

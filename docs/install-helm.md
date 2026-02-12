@@ -100,6 +100,17 @@ helm upgrade gpuhealth-agent gpuhealth/gpuhealth-agent \
   --namespace "$NS"
 ```
 
+Upgrade and explicitly remove persisted enrollment metadata:
+
+```bash
+helm upgrade gpuhealth-agent gpuhealth/gpuhealth-agent \
+  --namespace "$NS" \
+  --set enroll.enabled=false \
+  --set enroll.unenroll=true
+```
+
+`enroll.enabled` and `enroll.unenroll` are mutually exclusive. Setting both to `true` causes Helm template rendering to fail.
+
 If DCGM is exposed at a different service name or port, set `env.DCGM_URL`:
 
 ```bash
