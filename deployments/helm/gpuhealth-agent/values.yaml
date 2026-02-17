@@ -1,10 +1,9 @@
 image:
-  repository: nvcr.io/0753215517602916/agent-artifact/gpuhealth-agent
+  repository: ghcr.io/nvidia/gpuhealth-agent
   tag: ""
   pullPolicy: IfNotPresent
 
-imagePullSecrets:
-  - name: nvcr-pull-secret
+imagePullSecrets: []
 
 hostPID: true
 runtimeClassName: nvidia

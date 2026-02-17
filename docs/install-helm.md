@@ -4,7 +4,7 @@
 
 - NVIDIA GPU Operator installed with DCGM HostEngine enabled.
 - A DCGM service endpoint reachable from the cluster (defaults to `nvidia-dcgm.gpu-operator.svc:5555`).
-- Access to container images and Helm charts: contact the GPU Health team to obtain an NGC API key.
+- Access to GitHub Container Registry (`ghcr.io`) from your cluster/network.
 
 Set shared variables once for the examples below:
 
@@ -12,9 +12,7 @@ Set shared variables once for the examples below:
 # Namespace (override if needed)
 NS=gpuhealth
 
-# NGC API key for pulling Helm charts and container images
-# Contact the GPU Health team to obtain this key
-NGC_API_KEY='<ngc-api-key>'
+CHART_VERSION='<version>'  # e.g. 0.3.2 or 0.3.2-rc.1
 
 # DCGM endpoint (usually the default is correct)
 DCGM_URL='nvidia-dcgm.gpu-operator.svc:5555'
@@ -27,31 +25,10 @@ ENROLL_TOKEN='<enroll-token>'
 ENROLL_TOKEN_SECRET_NAME='gpuhealth-enroll-token'  # Recommended secret name
 ```
 
-## Add the Helm repo
+## Create namespace
 
 ```bash
-helm repo add gpuhealth https://helm.ngc.nvidia.com/0753215517602916/agent-artifact \
-  --username='$oauthtoken' \
-  --password="$NGC_API_KEY"
-helm repo update
-```
-
-## Create NVCR image pull secret
-
-Create the namespace first:
-
-```bash
-kubectl create namespace "$NS"
-```
-
-Create a registry secret so the DaemonSet can pull the agent image:
-
-```bash
-kubectl create secret docker-registry nvcr-pull-secret \
-  --namespace "$NS" \
-  --docker-server=nvcr.io \
-  --docker-username='$oauthtoken' \
-  --docker-password="$NGC_API_KEY"
+kubectl create namespace "$NS" || true
 ```
 
 ## Create enrollment secret
@@ -69,7 +46,8 @@ kubectl create secret generic "$ENROLL_TOKEN_SECRET_NAME" \
 Install:
 
 ```bash
-helm install gpuhealth-agent gpuhealth/gpuhealth-agent \
+helm install gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
+  --version "$CHART_VERSION" \
   --namespace "$NS" \
   --set enroll.enabled=true \
   --set enroll.endpoint="$ENROLL_ENDPOINT" \
@@ -79,14 +57,16 @@ helm install gpuhealth-agent gpuhealth/gpuhealth-agent \
 Install (no enrollment):
 
 ```bash
-helm install gpuhealth-agent gpuhealth/gpuhealth-agent \
+helm install gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
+  --version "$CHART_VERSION" \
   --namespace "$NS"
 ```
 
 Upgrade:
 
 ```bash
-helm upgrade gpuhealth-agent gpuhealth/gpuhealth-agent \
+helm upgrade gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
+  --version "$CHART_VERSION" \
   --namespace "$NS" \
   --set enroll.enabled=true \
   --set enroll.endpoint="$ENROLL_ENDPOINT" \
@@ -96,20 +76,28 @@ helm upgrade gpuhealth-agent gpuhealth/gpuhealth-agent \
 Upgrade (no enrollment):
 
 ```bash
-helm upgrade gpuhealth-agent gpuhealth/gpuhealth-agent \
+helm upgrade gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
+  --version "$CHART_VERSION" \
   --namespace "$NS"
 ```
 
 Upgrade and explicitly remove persisted enrollment metadata:
 
 ```bash
-helm upgrade gpuhealth-agent gpuhealth/gpuhealth-agent \
+helm upgrade gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
+  --version "$CHART_VERSION" \
   --namespace "$NS" \
   --set enroll.enabled=false \
   --set enroll.unenroll=true
 ```
 
 `enroll.enabled` and `enroll.unenroll` are mutually exclusive. Setting both to `true` causes Helm template rendering to fail.
+
+To use a different image registry/repository, add:
+
+```bash
+--set image.repository="<custom-image-repo>"
+```
 
 If DCGM is exposed at a different service name or port, set `env.DCGM_URL`:
 
@@ -158,7 +146,7 @@ kubectl describe pod -n "$NS" -l app.kubernetes.io/name=gpuhealth-agent
 ```
 
 Common issues:
-- **ImagePullBackOff**: Verify the `nvcr-pull-secret` exists in the namespace
+- **ImagePullBackOff**: Verify nodes can reach `ghcr.io` and the image tag exists
 - **Pending**: Check node labels match `nodeSelector` (default: `nvidia.com/gpu.present=true`)
 - **CrashLoopBackOff**: Check logs for errors
 
@@ -191,7 +179,8 @@ kubectl get pods -n "$NS" "$POD_NAME" -o jsonpath='{.spec.containers[0].env[?(@.
 If DCGM is at a different location, update the URL:
 
 ```bash
-helm upgrade gpuhealth-agent gpuhealth/gpuhealth-agent \
+helm upgrade gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
+  --version "$CHART_VERSION" \
   --namespace "$NS" \
   --reuse-values \
   --set env.DCGM_URL="<dcgm-service>:<port>"
@@ -213,7 +202,8 @@ If you need a different node selector or tolerations for GPU taints, you can ove
 Using `--set` (quote the tolerations for zsh, and escape dots in the label key):
 
 ```bash
-helm upgrade --install gpuhealth-agent gpuhealth/gpuhealth-agent \
+helm upgrade --install gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
+  --version "$CHART_VERSION" \
   --namespace "$NS" \
   --set-string nodeSelector.nvidia\\.com/gpu\\.deploy\\.dcgm=true \
   --set 'tolerations[0].key=nvidia.com/gpu' \
