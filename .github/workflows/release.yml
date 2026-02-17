@@ -13,6 +13,7 @@ env:
 
 permissions:
   contents: write  # Needed for creating GitHub releases
+  packages: write  # Needed for pushing images/charts to GHCR
 
 jobs:
   release:
@@ -103,6 +104,22 @@ jobs:
           fi
           echo "EOF" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare gpuhealth-agent GHCR image tags
+        id: agent_image_ghcr
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          IMAGE="ghcr.io/${OWNER_LC}/gpuhealth-agent"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "owner_lc=${OWNER_LC}" >> "$GITHUB_OUTPUT"
+          echo "tags<<EOF" >> "$GITHUB_OUTPUT"
+          echo "${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
+          if [ "${{ steps.version.outputs.is_prerelease }}" = "false" ]; then
+            echo "${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+          fi
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -116,6 +133,13 @@ jobs:
           username: $oauthtoken
           password: ${{ secrets.NVCR_API_KEY }}
 
+      - name: Login to GHCR (ghcr.io)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push gpuhealth-agent image
         uses: docker/build-push-action@v6
         with:
@@ -123,7 +147,9 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.agent_image.outputs.tags }}
+          tags: |
+            ${{ steps.agent_image.outputs.tags }}
+            ${{ steps.agent_image_ghcr.outputs.tags }}
           ssh: default
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
@@ -161,6 +187,20 @@ jobs:
           set -euo pipefail
           CHART_VERSION="${{ steps.version.outputs.version }}"
           helm cm-push "dist/gpuhealth-agent-${CHART_VERSION}.tgz" ngc
+
+      - name: Login to GHCR Helm registry
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io \
+            --username "${{ github.actor }}" \
+            --password-stdin
+
+      - name: Push Helm chart to GHCR (OCI)
+        run: |
+          set -euo pipefail
+          CHART_VERSION="${{ steps.version.outputs.version }}"
+          OWNER_LC="${{ steps.agent_image_ghcr.outputs.owner_lc }}"
+          helm push "dist/gpuhealth-agent-${CHART_VERSION}.tgz" "oci://ghcr.io/${OWNER_LC}/charts"
       
       - name: Setup JFrog CLI
         if: steps.version.outputs.is_prerelease == 'false'
@@ -207,10 +247,15 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**gpuhealth-agent image tags:**" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.agent_image.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.agent_image_ghcr.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Helm chart (NGC Helm repo):**" >> $GITHUB_STEP_SUMMARY
           echo "repo: https://helm.ngc.nvidia.com/0753215517602916/agent-artifact" >> $GITHUB_STEP_SUMMARY
           echo "chart: gpuhealth-agent-${{ steps.version.outputs.version }}.tgz" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Helm chart (GHCR OCI):**" >> $GITHUB_STEP_SUMMARY
+          echo "repo: oci://ghcr.io/${{ steps.agent_image_ghcr.outputs.owner_lc }}/charts" >> $GITHUB_STEP_SUMMARY
+          echo "chart: gpuhealth-agent:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [[ "${{ steps.version.outputs.is_prerelease }}" == "true" ]]; then
