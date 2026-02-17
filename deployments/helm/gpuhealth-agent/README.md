@@ -4,7 +4,7 @@ This chart deploys the `gpuhealth-agent` DaemonSet.
 
 ## Install
 
-For installation steps (NGC Helm repo, image pull secret, enrollment, and
+For installation steps (GHCR OCI chart, enrollment, and
 `helm install`/`helm upgrade`), see `docs/install-helm.md`.
 
 ## Configuration
@@ -13,10 +13,10 @@ Common values (defaults from `values.yaml`):
 
 | Value | Default | Description |
 | --- | --- | --- |
-| `image.repository` | `nvcr.io/0753215517602916/agent-artifact/gpuhealth-agent` | Agent image repository. |
+| `image.repository` | `ghcr.io/nvidia/gpuhealth-agent` | Agent image repository. |
 | `image.tag` | `""` | Image tag (empty uses chart `appVersion`). |
 | `image.pullPolicy` | `IfNotPresent` | Image pull policy. |
-| `imagePullSecrets[0].name` | `nvcr-pull-secret` | Secret for pulling from NVCR. |
+| `imagePullSecrets` | `[]` | Optional image pull secrets (set when pulling from private registries). |
 | `hostPID` | `true` | Use host PID namespace. |
 | `runtimeClassName` | `nvidia` | RuntimeClass for NVIDIA runtime. |
 | `securityContext.privileged` | `true` | Run privileged. |
