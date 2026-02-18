@@ -35,6 +35,10 @@ import (
 const (
 	// defaultRetryDelay is the default delay between retry attempts
 	defaultRetryDelay = 5 * time.Second
+
+	// maxInitialJitter caps the initial jitter so that even with very long
+	// collection intervals the pre-push delay stays reasonable.
+	maxInitialJitter = 1 * time.Minute
 )
 
 // HTTPError represents an HTTP error with status code
@@ -56,7 +60,7 @@ type JWTRefreshFunc func(ctx context.Context) (string, error)
 
 // HTTPWriter defines the interface for sending health data via HTTP
 type HTTPWriter interface {
-	Send(ctx context.Context, data *collector.HealthData, metricsEndpoint string, logsEndpoint string, maxRetries int, authToken string) (newToken string, err error)
+	Send(ctx context.Context, data *collector.HealthData, metricsEndpoint string, logsEndpoint string, maxRetries int, authToken string, collectionInterval time.Duration) (newToken string, err error)
 	SetJWTRefreshFunc(refreshFunc JWTRefreshFunc)
 }
 
@@ -81,7 +85,33 @@ func (w *httpWriter) SetJWTRefreshFunc(refreshFunc JWTRefreshFunc) {
 }
 
 // Send sends health data to the specified endpoint
-func (w *httpWriter) Send(ctx context.Context, data *collector.HealthData, metricsEndpoint string, logsEndpoint string, maxRetries int, authToken string) (string, error) {
+func (w *httpWriter) Send(ctx context.Context, data *collector.HealthData, metricsEndpoint string, logsEndpoint string, maxRetries int, authToken string, collectionInterval time.Duration) (string, error) {
+	// Add jitter before the initial push to spread agent requests and prevent
+	// thundering herd when many agents share the same collection tick.
+	// Use 5% of the collection interval, capped at maxInitialJitter
+	jitterCap := collectionInterval / 20 // 5%
+	if jitterCap > maxInitialJitter {
+		jitterCap = maxInitialJitter
+	}
+	if jitterCap <= 0 {
+		jitterCap = defaultRetryDelay / 2 // fallback for zero/negative intervals
+	}
+
+	// Apply a further limit to the initial jitter of half the remaining context deadline.
+	// This is to prevent the jitter from consuming the entire timeout budget.
+	if deadline, ok := ctx.Deadline(); ok {
+		if remaining := time.Until(deadline) / 2; remaining > 0 && jitterCap > remaining {
+			jitterCap = remaining
+		}
+	}
+	if jitter := calculateJitter(jitterCap); jitter > 0 {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(jitter):
+		}
+	}
+
 	// Convert to OTLP format
 	otlpData := w.otlpConverter.Convert(data)
 
