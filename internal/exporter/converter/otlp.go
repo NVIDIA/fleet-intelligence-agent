@@ -246,6 +246,46 @@ func (c *otlpConverter) convertToOTLPLogs(data *collector.HealthData) []*logsv1.
 	// Add events as log records
 	if len(data.Events) > 0 {
 		for _, event := range data.Events {
+			attributes := []*commonv1.KeyValue{
+				{
+					Key: "component",
+					Value: &commonv1.AnyValue{
+						Value: &commonv1.AnyValue_StringValue{StringValue: event.Component},
+					},
+				},
+				{
+					Key: "event_name",
+					Value: &commonv1.AnyValue{
+						Value: &commonv1.AnyValue_StringValue{StringValue: event.Name},
+					},
+				},
+				{
+					Key: "event_type",
+					Value: &commonv1.AnyValue{
+						Value: &commonv1.AnyValue_StringValue{StringValue: event.Type},
+					},
+				},
+				{
+					Key: "log_type",
+					Value: &commonv1.AnyValue{
+						Value: &commonv1.AnyValue_StringValue{StringValue: "event"},
+					},
+				},
+			}
+			extraInfo := event.ExtraInfo
+			if extraInfo == nil {
+				extraInfo = map[string]string{}
+			}
+			extraInfoJSON, err := json.Marshal(extraInfo)
+			if err == nil {
+				attributes = append(attributes, &commonv1.KeyValue{
+					Key: "extra_info",
+					Value: &commonv1.AnyValue{
+						Value: &commonv1.AnyValue_StringValue{StringValue: string(extraInfoJSON)},
+					},
+				})
+			}
+
 			logRecord := &logsv1.LogRecord{
 				TimeUnixNano:   uint64(event.Time.UnixNano()),
 				SeverityNumber: logsv1.SeverityNumber_SEVERITY_NUMBER_INFO,
@@ -255,32 +295,7 @@ func (c *otlpConverter) convertToOTLPLogs(data *collector.HealthData) []*logsv1.
 						StringValue: fmt.Sprintf("[%s] %s: %s", event.Type, event.Component, event.Message),
 					},
 				},
-				Attributes: []*commonv1.KeyValue{
-					{
-						Key: "component",
-						Value: &commonv1.AnyValue{
-							Value: &commonv1.AnyValue_StringValue{StringValue: event.Component},
-						},
-					},
-					{
-						Key: "event_name",
-						Value: &commonv1.AnyValue{
-							Value: &commonv1.AnyValue_StringValue{StringValue: event.Name},
-						},
-					},
-					{
-						Key: "event_type",
-						Value: &commonv1.AnyValue{
-							Value: &commonv1.AnyValue_StringValue{StringValue: event.Type},
-						},
-					},
-					{
-						Key: "log_type",
-						Value: &commonv1.AnyValue{
-							Value: &commonv1.AnyValue_StringValue{StringValue: "event"},
-						},
-					},
-				},
+				Attributes: attributes,
 			}
 			logRecords = append(logRecords, logRecord)
 		}
