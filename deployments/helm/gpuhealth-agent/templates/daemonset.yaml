@@ -115,6 +115,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            - name: IS_K8S
+              value: "true"
           ports:
             - name: http
               containerPort: {{ .Values.ports.http }}
