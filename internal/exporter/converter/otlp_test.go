@@ -16,6 +16,7 @@
 package converter
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -108,6 +109,9 @@ func TestOTLPConverter_Convert_WithEvents(t *testing.T) {
 				Name:      "temperature_warning",
 				Type:      "warning",
 				Message:   "GPU temperature high",
+				ExtraInfo: map[string]string{
+					"xid": "79",
+				},
 			},
 		},
 	}
@@ -133,6 +137,101 @@ func TestOTLPConverter_Convert_WithEvents(t *testing.T) {
 	// Body should contain either the event name or message
 	assert.True(t, contains(body, "temperature_warning") || contains(body, "GPU temperature high"),
 		"Log should contain event name or message")
+
+	attributes := logs[0].Attributes
+	var extraInfoRaw string
+	for _, attr := range attributes {
+		if attr.Key == "extra_info" {
+			extraInfoRaw = attr.Value.GetStringValue()
+			break
+		}
+	}
+	require.NotEmpty(t, extraInfoRaw, "event log should include extra_info attribute")
+
+	var extraInfo map[string]string
+	err := json.Unmarshal([]byte(extraInfoRaw), &extraInfo)
+	require.NoError(t, err)
+	assert.Equal(t, "79", extraInfo["xid"])
+}
+
+func TestOTLPConverter_Convert_WithEvents_EmptyExtraInfo(t *testing.T) {
+	data := &collector.HealthData{
+		Timestamp: time.Now(),
+		MachineID: "test-machine",
+		Events: eventstore.Events{
+			{
+				Time:      time.Date(2025, 11, 5, 12, 0, 0, 0, time.UTC),
+				Component: "gpu",
+				Name:      "temperature_warning",
+				Type:      "warning",
+				Message:   "GPU temperature high",
+			},
+		},
+	}
+
+	converter := NewOTLPConverter()
+	otlpData := converter.Convert(data)
+
+	require.NotNil(t, otlpData)
+	require.NotNil(t, otlpData.Logs)
+	require.Len(t, otlpData.Logs.ResourceLogs, 1)
+
+	logs := otlpData.Logs.ResourceLogs[0].ScopeLogs[0].LogRecords
+	require.GreaterOrEqual(t, len(logs), 1)
+
+	var extraInfoRaw string
+	for _, attr := range logs[0].Attributes {
+		if attr.Key == "extra_info" {
+			extraInfoRaw = attr.Value.GetStringValue()
+			break
+		}
+	}
+	require.Equal(t, "{}", extraInfoRaw, "event log should always include extra_info as empty JSON object")
+}
+
+func TestOTLPConverter_Convert_WithEvents_ExtraInfoDataPayload(t *testing.T) {
+	rawData := `{"time":"2026-02-20T23:22:44Z","data_source":"kmsg","xid":149}`
+	data := &collector.HealthData{
+		Timestamp: time.Now(),
+		MachineID: "test-machine",
+		Events: eventstore.Events{
+			{
+				Time:      time.Date(2025, 11, 5, 12, 0, 0, 0, time.UTC),
+				Component: "accelerator-nvidia-error-xid",
+				Name:      "error_xid",
+				Type:      "Fatal",
+				Message:   "XID 149 NETIR",
+				ExtraInfo: map[string]string{
+					"data":        rawData,
+					"device_uuid": "PCI:0000:04:00",
+				},
+			},
+		},
+	}
+
+	converter := NewOTLPConverter()
+	otlpData := converter.Convert(data)
+
+	require.NotNil(t, otlpData)
+	require.NotNil(t, otlpData.Logs)
+	require.Len(t, otlpData.Logs.ResourceLogs, 1)
+
+	logs := otlpData.Logs.ResourceLogs[0].ScopeLogs[0].LogRecords
+	require.GreaterOrEqual(t, len(logs), 1)
+
+	var extraInfoRaw string
+	for _, attr := range logs[0].Attributes {
+		if attr.Key == "extra_info" {
+			extraInfoRaw = attr.Value.GetStringValue()
+			break
+		}
+	}
+	require.NotEmpty(t, extraInfoRaw)
+
+	var extraInfo map[string]string
+	require.NoError(t, json.Unmarshal([]byte(extraInfoRaw), &extraInfo))
+	assert.Equal(t, rawData, extraInfo["data"])
+	assert.Equal(t, "PCI:0000:04:00", extraInfo["device_uuid"])
 }
 
 func TestOTLPConverter_Convert_WithComponentData(t *testing.T) {
