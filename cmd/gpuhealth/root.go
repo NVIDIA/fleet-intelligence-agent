@@ -134,7 +134,7 @@ func App() *cli.App {
 				},
 				&cli.BoolFlag{
 					Name:  "enable-dcgm-policy",
-					Usage: "enable DCGM policy violation monitoring for all policies (XID, PCIe, DBE, NVLink, Power, Thermal, Page Retirement) (default: false)",
+					Usage: "enable DCGM policy violation monitoring for non-XID policies (PCIe, DBE, NVLink, Power, Thermal, Page Retirement) -- XID policy is always enabled (default: false)",
 				},
 				&cli.BoolFlag{
 					Name:  "enable-fault-injection",

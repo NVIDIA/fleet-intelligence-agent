@@ -30,6 +30,7 @@ import (
 	componentsdcgmprof "github.com/leptonai/gpud/components/accelerator/nvidia/dcgm/prof"
 	componentsdcgmthermal "github.com/leptonai/gpud/components/accelerator/nvidia/dcgm/thermal"
 	componentsdcgmutilization "github.com/leptonai/gpud/components/accelerator/nvidia/dcgm/utilization"
+	componentsdcgmxid "github.com/leptonai/gpud/components/accelerator/nvidia/dcgm/xid"
 	componentsfabricmanager "github.com/leptonai/gpud/components/accelerator/nvidia/fabric-manager"
 	componentsnvidiagpucounts "github.com/leptonai/gpud/components/accelerator/nvidia/gpu-counts"
 	componentsinfiniband "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband"
@@ -39,7 +40,6 @@ import (
 	componentspersistencemode "github.com/leptonai/gpud/components/accelerator/nvidia/persistence-mode"
 	componentsprocesses "github.com/leptonai/gpud/components/accelerator/nvidia/processes"
 	componentssxid "github.com/leptonai/gpud/components/accelerator/nvidia/sxid"
-	componentsxid "github.com/leptonai/gpud/components/accelerator/nvidia/xid"
 	componentscpu "github.com/leptonai/gpud/components/cpu"
 	componentsdisk "github.com/leptonai/gpud/components/disk"
 	componentskernelmodule "github.com/leptonai/gpud/components/kernel-module"
@@ -108,12 +108,7 @@ func All() []Component {
 			InitFunc:         componentssxid.New,
 			EnabledByDefault: true,
 		},
-		{
-			Name:             componentsxid.Name,
-			InitFunc:         componentsxid.New,
-			EnabledByDefault: true,
-		},
-		// DCGM Components
+		// DCGM Components - all enabled by default
 		{
 			Name:             componentsdcgmclock.Name,
 			InitFunc:         componentsdcgmclock.New,
@@ -167,6 +162,11 @@ func All() []Component {
 		{
 			Name:             componentsdcgmutilization.Name,
 			InitFunc:         componentsdcgmutilization.New,
+			EnabledByDefault: true,
+		},
+		{
+			Name:             componentsdcgmxid.Name,
+			InitFunc:         componentsdcgmxid.New,
 			EnabledByDefault: true,
 		},
 

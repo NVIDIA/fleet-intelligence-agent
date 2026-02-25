@@ -536,9 +536,6 @@ func TestCollector_CollectEvents_WithComponents(t *testing.T) {
 				Name:      "test-event",
 				Type:      apiv1.EventTypeWarning,
 				Message:   "Test warning",
-				ExtraInfo: map[string]string{
-					"xid_code": "79",
-				},
 			},
 		},
 	}
@@ -557,7 +554,6 @@ func TestCollector_CollectEvents_WithComponents(t *testing.T) {
 	assert.Len(t, data.Events, 1, "Should have 1 event")
 	assert.Equal(t, "test-component", data.Events[0].Component)
 	assert.Equal(t, "test-event", data.Events[0].Name)
-	assert.Equal(t, map[string]string{"xid_code": "79"}, data.Events[0].ExtraInfo)
 }
 
 func TestCollector_CollectEvents_NoComponents(t *testing.T) {
