@@ -230,7 +230,6 @@ func (c *collector) collectEvents(ctx context.Context, data *HealthData) error {
 				Name:      event.Name,
 				Type:      string(event.Type),
 				Message:   event.Message,
-				ExtraInfo: event.ExtraInfo,
 			})
 		}
 	}

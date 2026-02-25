@@ -255,10 +255,9 @@ func TestGetEvents(t *testing.T) {
 				name: "component1",
 				events: apiv1.Events{
 					{
-						Name:      "event1",
-						Type:      apiv1.EventTypeInfo,
-						Message:   "test event",
-						ExtraInfo: map[string]string{"xid": "31"},
+						Name:    "event1",
+						Type:    apiv1.EventTypeInfo,
+						Message: "test event",
 					},
 				},
 			},
@@ -282,14 +281,6 @@ func TestGetEvents(t *testing.T) {
 				err := json.Unmarshal(body, &events)
 				require.NoError(t, err)
 				assert.Contains(t, events, "component1")
-				componentEvents, ok := events["component1"].([]interface{})
-				require.True(t, ok)
-				require.Len(t, componentEvents, 1)
-				event, ok := componentEvents[0].(map[string]interface{})
-				require.True(t, ok)
-				extraInfo, ok := event["extra_info"].(map[string]interface{})
-				require.True(t, ok)
-				assert.Equal(t, "31", extraInfo["xid"])
 			},
 		},
 		{
