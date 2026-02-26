@@ -60,9 +60,8 @@ type Config struct {
 	selectedComponents map[string]any `json:"-"`
 	disabledComponents map[string]any `json:"-"`
 
-	// EnableDCGMPolicy enables DCGM policy violation monitoring for all policies except XID.
-	// XID policy is always enabled by default as it's the most critical.
-	// Other policies (PCIe, DBE, NVLink, Power, Thermal, Page Retirement) are disabled by default.
+	// EnableDCGMPolicy enables DCGM policy violation monitoring.
+	// All policies (XID, PCIe, DBE, NVLink, Power, Thermal, Page Retirement) are disabled by default.
 	// PCIe, DBE, and NVLink have false-positive issues with monotonic counter checks.
 	EnableDCGMPolicy bool `json:"enable_dcgm_policy"`
 

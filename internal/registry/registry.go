@@ -40,6 +40,7 @@ import (
 	componentspersistencemode "github.com/leptonai/gpud/components/accelerator/nvidia/persistence-mode"
 	componentsprocesses "github.com/leptonai/gpud/components/accelerator/nvidia/processes"
 	componentssxid "github.com/leptonai/gpud/components/accelerator/nvidia/sxid"
+	componentsxid "github.com/leptonai/gpud/components/accelerator/nvidia/xid"
 	componentscpu "github.com/leptonai/gpud/components/cpu"
 	componentsdisk "github.com/leptonai/gpud/components/disk"
 	componentskernelmodule "github.com/leptonai/gpud/components/kernel-module"
@@ -108,7 +109,12 @@ func All() []Component {
 			InitFunc:         componentssxid.New,
 			EnabledByDefault: true,
 		},
-		// DCGM Components - all enabled by default
+		{
+			Name:             componentsxid.Name,
+			InitFunc:         componentsxid.New,
+			EnabledByDefault: true,
+		},
+		// DCGM Components
 		{
 			Name:             componentsdcgmclock.Name,
 			InitFunc:         componentsdcgmclock.New,

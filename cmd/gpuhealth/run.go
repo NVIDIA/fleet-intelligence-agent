@@ -268,9 +268,9 @@ func runCommand(cliContext *cli.Context) error {
 
 	cfg.EnableDCGMPolicy = enableDCGMPolicy
 	if enableDCGMPolicy {
-		log.Logger.Infow("DCGM policy violation monitoring enabled for all policies (PCIe, DBE, NVLink, Power, Thermal, Page Retirement)")
+		log.Logger.Infow("DCGM policy violation monitoring enabled for all policies (XID, PCIe, DBE, NVLink, Power, Thermal, Page Retirement)")
 	} else {
-		log.Logger.Infow("DCGM policy violation monitoring disabled by default (only XID policy will be enabled)")
+		log.Logger.Infow("DCGM policy violation monitoring disabled by default")
 	}
 
 	// Only apply CLI flag if true, to avoid overwriting env var setting
