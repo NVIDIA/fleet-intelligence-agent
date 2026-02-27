@@ -84,13 +84,9 @@ nfpms:
     formats:
       - deb
     dependencies:
-      - systemd
-    recommends:
-      - datacenter-gpu-manager-4-core
+      - datacenter-gpu-manager-4-proprietary
       - nvattest
       - corelib
-    suggests:
-      - nvidia-driver-535 | nvidia-driver-545 | nvidia-driver-550
     bindir: /usr/bin
     contents:
       # License and notices
@@ -128,13 +124,9 @@ nfpms:
     formats:
       - rpm
     dependencies:
-      - systemd
-    recommends:
-      - datacenter-gpu-manager-4-core
+      - datacenter-gpu-manager-4-proprietary
       - nvattest
       - corelib
-    suggests:
-      - nvidia-driver >= 535
     bindir: /usr/bin
     contents:
       # License and notices
