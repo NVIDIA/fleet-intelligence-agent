@@ -165,7 +165,7 @@ snapshot:
 release:
   github:
     owner: NVIDIA
-    name: fleetint
+    name: fleet-intelligence-agent
   header: |
     ## NVIDIA Fleet Intelligence Agent v{{.Version}}
     
