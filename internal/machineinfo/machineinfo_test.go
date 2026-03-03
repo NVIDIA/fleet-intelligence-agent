@@ -208,7 +208,7 @@ func TestRenderTable_BasicFields(t *testing.T) {
 	assert.Contains(t, output, "12.4")
 
 	// Verify labels are present
-	assert.Contains(t, output, "GPUHealth Version")
+	assert.Contains(t, output, "Fleetint Version")
 	assert.Contains(t, output, "Container Runtime Version")
 	assert.Contains(t, output, "OS Image")
 	assert.Contains(t, output, "Kernel Version")
@@ -494,7 +494,7 @@ func TestRenderTable_WithNilSubStructs(t *testing.T) {
 
 	// Should still show basic info
 	assert.Contains(t, output, "1.0.0-test")
-	assert.Contains(t, output, "GPUHealth Version")
+	assert.Contains(t, output, "Fleetint Version")
 }
 
 // TestRenderTable_EmptyNICList tests RenderTable with empty NIC list
