@@ -88,7 +88,7 @@ func GetMachineInfo(nvmlInstance nvidianvml.Instance) (*MachineInfo, error) {
 
 	// Convert to our custom MachineInfo struct with Fleet Intelligence version
 	return &MachineInfo{
-		FleetintVersion:        version.Version,
+		FleetintVersion:         version.Version,
 		GPUDriverVersion:        gpudInfo.GPUDriverVersion,
 		CUDAVersion:             gpudInfo.CUDAVersion,
 		ContainerRuntimeVersion: gpudInfo.ContainerRuntimeVersion,
