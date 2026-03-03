@@ -7,7 +7,7 @@ GOFLAGS ?= -trimpath
 DOCKER ?= docker
 
 # Container image build settings
-IMAGE ?= gpuhealth:dev
+IMAGE ?= fleetint:dev
 DOCKER_BUILDKIT ?= 1
 DOCKER_BUILD_PROGRESS ?= auto
 # By default, use ssh-agent forwarding for private module access during `docker build`.
@@ -21,7 +21,7 @@ ROOTDIR=$(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 BUILD_TIMESTAMP ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 VERSION ?= $(shell git describe --match 'v[0-9]*' --dirty='.m' --always)
 REVISION=$(shell git rev-parse HEAD)$(shell if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi)
-PACKAGE=github.com/NVIDIA/gpuhealth
+PACKAGE=github.com/NVIDIA/fleet-intelligence-agent
 
 ifneq "$(strip $(shell command -v $(GO) 2>/dev/null))" ""
 	GOOS ?= $(shell $(GO) env GOOS)
@@ -59,9 +59,9 @@ else
 	DEBUG_TAGS := static_build
 endif
 
-RELEASE=gpuhealth-$(VERSION:v%=%)-${GOOS}-${GOARCH}
+RELEASE=fleetint-$(VERSION:v%=%)-${GOOS}-${GOARCH}
 
-COMMANDS=gpuhealth
+COMMANDS=fleetint
 
 GO_BUILD_FLAGS=-ldflags '-s -X $(PACKAGE)/internal/version.BuildTimestamp=$(BUILD_TIMESTAMP) -X $(PACKAGE)/internal/version.Version=$(VERSION) -X $(PACKAGE)/internal/version.Revision=$(REVISION) -X $(PACKAGE)/internal/version.Package=$(PACKAGE)'
 
@@ -81,7 +81,7 @@ GOPATHS=$(shell echo ${GOPATH} | tr ":" "\n" | tr ";" "\n")
 
 BINARIES=$(addprefix bin/,$(COMMANDS))
 
-.PHONY: clean all binaries gpuhealth lint test fmt help package-snapshot docker-build
+.PHONY: clean all binaries fleetint lint test fmt help package-snapshot docker-build
 .DEFAULT: help
 
 help: ## show this help message
@@ -105,7 +105,7 @@ binaries: $(BINARIES) ## build binaries
 	@echo "Built binaries: $(BINARIES)"
 
 # Build container image (requires BuildKit for --ssh/--secret mounts used in Dockerfile)
-docker-build: ## build container image (IMAGE=gpuhealth:dev)
+docker-build: ## build container image (IMAGE=fleetint:dev)
 	@echo "Building container image: $(IMAGE)"
 	@DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) $(DOCKER) build \
 		$(if $(DOCKER_SSH),--ssh $(DOCKER_SSH),) \
@@ -114,9 +114,9 @@ docker-build: ## build container image (IMAGE=gpuhealth:dev)
 		$(DOCKER_BUILD_EXTRA_FLAGS) \
 		.
 
-# Specific target for gpuhealth (your main binary)
-gpuhealth: bin/gpuhealth ## build gpuhealth binary
-	@echo "gpuhealth built successfully at bin/gpuhealth"
+# Specific target for fleetint (your main binary)
+fleetint: bin/fleetint ## build fleetint binary
+	@echo "fleetint built successfully at bin/fleetint"
 
 lint: ## run linting tools
 	@echo "Running linting..."
@@ -144,13 +144,13 @@ test: ## run tests with coverage
 	@echo "Coverage report generated: coverage/coverage.html"
 	@$(GO) tool cover -func=coverage/coverage.out | tail -1
 
-vuln: gpuhealth ## run vulnerability check
+vuln: fleetint ## run vulnerability check
 	@echo "Running vulnerability check..."
 	@if ! command -v govulncheck >/dev/null 2>&1; then \
 		echo "Installing govulncheck..."; \
 		$(GO) install golang.org/x/vuln/cmd/govulncheck@latest; \
 	fi
-	@govulncheck -mode=binary ./bin/gpuhealth
+	@govulncheck -mode=binary ./bin/fleetint
 
 clean: ## clean up binaries and build artifacts
 	@echo "Cleaning up..."

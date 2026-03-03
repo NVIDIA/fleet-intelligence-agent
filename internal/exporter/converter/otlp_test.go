@@ -28,9 +28,9 @@ import (
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/NVIDIA/gpuhealth/internal/attestation"
-	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
-	"github.com/NVIDIA/gpuhealth/internal/machineinfo"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
 func TestNewOTLPConverter(t *testing.T) {
@@ -632,7 +632,7 @@ func TestOTLPConverter_SummaryMetric(t *testing.T) {
 	// Find summary metric
 	var summaryMetric *metricsv1.Metric
 	for _, m := range metrics {
-		if m.Name == "gpuhealth_agent_collection_summary" {
+		if m.Name == "fleetint_agent_collection_summary" {
 			summaryMetric = m
 			break
 		}
@@ -680,7 +680,7 @@ func TestOTLPConverter_ResourceAttributes(t *testing.T) {
 		}
 	}
 
-	assert.Equal(t, "gpu-health-agent", attrMap["service.name"])
+	assert.Equal(t, "fleet-intelligence-agent", attrMap["service.name"])
 	assert.Equal(t, "test-machine-123", attrMap["machine.id"])
 }
 

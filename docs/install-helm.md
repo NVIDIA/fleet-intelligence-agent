@@ -10,19 +10,19 @@ Set shared variables once for the examples below:
 
 ```bash
 # Namespace (override if needed)
-NS=gpuhealth
+NS=fleetint
 
 CHART_VERSION='<version>'  # e.g. 0.3.2 or 0.3.2-rc.1
 
 # DCGM endpoint (usually the default is correct)
 DCGM_URL='nvidia-dcgm.gpu-operator.svc:5555'
 
-# Enrollment configuration - Go to the GPU Health UI to:
+# Enrollment configuration - Go to the Fleet Intelligence UI to:
 #   1. Generate an enrollment token (ENROLL_TOKEN)
 #   2. Get the enrollment endpoint URL (ENROLL_ENDPOINT)
 ENROLL_ENDPOINT='<enroll-endpoint>'
 ENROLL_TOKEN='<enroll-token>'
-ENROLL_TOKEN_SECRET_NAME='gpuhealth-enroll-token'  # Recommended secret name
+ENROLL_TOKEN_SECRET_NAME='fleetint-enroll-token'  # Recommended secret name
 ```
 
 ## Create namespace
@@ -46,7 +46,7 @@ kubectl create secret generic "$ENROLL_TOKEN_SECRET_NAME" \
 Install:
 
 ```bash
-helm install gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
+helm install fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intelligence-agent \
   --version "$CHART_VERSION" \
   --namespace "$NS" \
   --set enroll.enabled=true \
@@ -57,7 +57,7 @@ helm install gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
 Install (no enrollment):
 
 ```bash
-helm install gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
+helm install fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intelligence-agent \
   --version "$CHART_VERSION" \
   --namespace "$NS"
 ```
@@ -65,7 +65,7 @@ helm install gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
 Upgrade:
 
 ```bash
-helm upgrade gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
+helm upgrade fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intelligence-agent \
   --version "$CHART_VERSION" \
   --namespace "$NS" \
   --set enroll.enabled=true \
@@ -76,7 +76,7 @@ helm upgrade gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
 Upgrade (no enrollment):
 
 ```bash
-helm upgrade gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
+helm upgrade fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intelligence-agent \
   --version "$CHART_VERSION" \
   --namespace "$NS"
 ```
@@ -84,7 +84,7 @@ helm upgrade gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
 Upgrade and explicitly remove persisted enrollment metadata:
 
 ```bash
-helm upgrade gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
+helm upgrade fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intelligence-agent \
   --version "$CHART_VERSION" \
   --namespace "$NS" \
   --set enroll.enabled=false \
@@ -111,23 +111,23 @@ After installation, verify the agent is running correctly:
 
 ```bash
 # Check DaemonSet status
-kubectl get daemonset gpuhealth-agent -n "$NS"
+kubectl get daemonset fleet-intelligence-agent -n "$NS"
 
 # Check pods (should be one per GPU node)
-kubectl get pods -n "$NS" -l app.kubernetes.io/name=gpuhealth-agent
+kubectl get pods -n "$NS" -l app.kubernetes.io/name=fleet-intelligence-agent
 
 # View pod logs
-kubectl logs -n "$NS" -l app.kubernetes.io/name=gpuhealth-agent --tail=50
+kubectl logs -n "$NS" -l app.kubernetes.io/name=fleet-intelligence-agent --tail=50
 
 # Watch rollout status
-kubectl rollout status daemonset/gpuhealth-agent -n "$NS"
+kubectl rollout status daemonset/fleet-intelligence-agent -n "$NS"
 ```
 
 Check a specific pod in detail:
 
 ```bash
 # Get a pod name
-POD_NAME=$(kubectl get pods -n "$NS" -l app.kubernetes.io/name=gpuhealth-agent -o jsonpath='{.items[0].metadata.name}')
+POD_NAME=$(kubectl get pods -n "$NS" -l app.kubernetes.io/name=fleet-intelligence-agent -o jsonpath='{.items[0].metadata.name}')
 
 # Describe the pod
 kubectl describe pod -n "$NS" "$POD_NAME"
@@ -142,7 +142,7 @@ kubectl logs -n "$NS" "$POD_NAME" --follow
 
 ```bash
 # Check pod events
-kubectl describe pod -n "$NS" -l app.kubernetes.io/name=gpuhealth-agent
+kubectl describe pod -n "$NS" -l app.kubernetes.io/name=fleet-intelligence-agent
 ```
 
 Common issues:
@@ -179,7 +179,7 @@ kubectl get pods -n "$NS" "$POD_NAME" -o jsonpath='{.spec.containers[0].env[?(@.
 If DCGM is at a different location, update the URL:
 
 ```bash
-helm upgrade gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
+helm upgrade fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intelligence-agent \
   --version "$CHART_VERSION" \
   --namespace "$NS" \
   --reuse-values \
@@ -202,7 +202,7 @@ If you need a different node selector or tolerations for GPU taints, you can ove
 Using `--set` (quote the tolerations for zsh, and escape dots in the label key):
 
 ```bash
-helm upgrade --install gpuhealth-agent oci://ghcr.io/nvidia/charts/gpuhealth-agent \
+helm upgrade --install fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intelligence-agent \
   --version "$CHART_VERSION" \
   --namespace "$NS" \
   --set-string nodeSelector.nvidia\\.com/gpu\\.deploy\\.dcgm=true \

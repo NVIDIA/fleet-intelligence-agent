@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/NVIDIA/gpuhealth/internal/cmdutil"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/cmdutil"
 )
 
 func main() {

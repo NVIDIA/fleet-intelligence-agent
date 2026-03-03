@@ -1,6 +1,6 @@
-# gpuhealth-agent Helm chart
+# fleet-intelligence-agent Helm chart
 
-This chart deploys the `gpuhealth-agent` DaemonSet.
+This chart deploys the `fleet-intelligence-agent` DaemonSet.
 
 ## Install
 
@@ -13,7 +13,7 @@ Common values (defaults from `values.yaml`):
 
 | Value | Default | Description |
 | --- | --- | --- |
-| `image.repository` | `ghcr.io/nvidia/gpuhealth-agent` | Agent image repository. |
+| `image.repository` | `ghcr.io/nvidia/fleet-intelligence-agent` | Agent image repository. |
 | `image.tag` | `""` | Image tag (empty uses chart `appVersion`). |
 | `image.pullPolicy` | `IfNotPresent` | Image pull policy. |
 | `imagePullSecrets` | `[]` | Optional image pull secrets (set when pulling from private registries). |
@@ -24,17 +24,17 @@ Common values (defaults from `values.yaml`):
 | `securityContext.runAsGroup` | `0` | Run as root group. |
 | `env.DCGM_URL` | `nvidia-dcgm.gpu-operator.svc:5555` | DCGM HostEngine endpoint. |
 | `env.DCGM_URL_IS_UNIX_SOCKET` | `"false"` | Treat `DCGM_URL` as a unix socket path. |
-| `env.GPUHEALTH_COLLECT_INTERVAL` | `"1m"` | Data collection interval (1s to 24h). |
-| `env.GPUHEALTH_INCLUDE_METRICS` | `"true"` | Include metrics in export. |
-| `env.GPUHEALTH_INCLUDE_EVENTS` | `"true"` | Include events in export. |
-| `env.GPUHEALTH_INCLUDE_MACHINEINFO` | `"true"` | Include machine info in export. |
-| `env.GPUHEALTH_INCLUDE_HEALTHCHECKS` | `"true"` | Include component health data in export. |
-| `env.GPUHEALTH_METRICS_LOOKBACK` | `"1m"` | Lookback window for metrics export. |
-| `env.GPUHEALTH_EVENTS_LOOKBACK` | `"1m"` | Lookback window for events export. |
-| `env.GPUHEALTH_CHECK_INTERVAL` | `"1m"` | Health check frequency (1s to 24h). |
-| `env.GPUHEALTH_RETRY_MAX_ATTEMPTS` | `"3"` | Max retry attempts for failed exports. |
-| `env.GPUHEALTH_ATTESTATION_JITTER_ENABLED` | `"true"` | Enable/disable attestation jitter. |
-| `env.GPUHEALTH_ATTESTATION_INTERVAL` | `"24h"` | Attestation interval override. |
+| `env.FLEETINT_COLLECT_INTERVAL` | `"1m"` | Data collection interval (1s to 24h). |
+| `env.FLEETINT_INCLUDE_METRICS` | `"true"` | Include metrics in export. |
+| `env.FLEETINT_INCLUDE_EVENTS` | `"true"` | Include events in export. |
+| `env.FLEETINT_INCLUDE_MACHINEINFO` | `"true"` | Include machine info in export. |
+| `env.FLEETINT_INCLUDE_HEALTHCHECKS` | `"true"` | Include component health data in export. |
+| `env.FLEETINT_METRICS_LOOKBACK` | `"1m"` | Lookback window for metrics export. |
+| `env.FLEETINT_EVENTS_LOOKBACK` | `"1m"` | Lookback window for events export. |
+| `env.FLEETINT_CHECK_INTERVAL` | `"1m"` | Health check frequency (1s to 24h). |
+| `env.FLEETINT_RETRY_MAX_ATTEMPTS` | `"3"` | Max retry attempts for failed exports. |
+| `env.FLEETINT_ATTESTATION_JITTER_ENABLED` | `"true"` | Enable/disable attestation jitter. |
+| `env.FLEETINT_ATTESTATION_INTERVAL` | `"24h"` | Attestation interval override. |
 | `env.HTTP_PROXY` | `""` | Optional HTTP proxy for outbound requests. |
 | `env.HTTPS_PROXY` | `""` | Optional HTTPS proxy for outbound requests. |
 | `logLevel` | `warn` | Log level. |

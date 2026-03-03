@@ -1,14 +1,14 @@
 # Configuration
 
 This page is a quick reference for runtime configuration shared by:
-- bare metal installs (`gpuhealthd` via systemd)
+- bare metal installs (`fleetintd` via systemd)
 - Kubernetes installs (Helm chart)
 
 ## Where to configure
 
-- **Bare metal**: edit `/etc/default/gpuhealth`, then restart:
+- **Bare metal**: edit `/etc/default/fleetint`, then restart:
   ```bash
-  sudo systemctl restart gpuhealthd
+  sudo systemctl restart fleetintd
   ```
 - **Helm**: set values in `values.yaml` or with `--set`.
   - Env vars live under `env.*`
@@ -18,25 +18,25 @@ This page is a quick reference for runtime configuration shared by:
 
 | Environment variable | Description | Default |
 |---|---|---|
-| `GPUHEALTH_COLLECT_INTERVAL` | Data collection interval (1s to 24h) | `1m` |
-| `GPUHEALTH_INCLUDE_METRICS` | Include metrics in export | `true` |
-| `GPUHEALTH_INCLUDE_EVENTS` | Include events in export | `true` |
-| `GPUHEALTH_INCLUDE_MACHINEINFO` | Include machine info in export | `true` |
-| `GPUHEALTH_INCLUDE_HEALTHCHECKS` | Include component health data in export | `true` |
-| `GPUHEALTH_METRICS_LOOKBACK` | Metrics lookback window | `1m` |
-| `GPUHEALTH_EVENTS_LOOKBACK` | Events lookback window | `1m` |
-| `GPUHEALTH_CHECK_INTERVAL` | Component health check interval (1s to 24h) | `1m` |
-| `GPUHEALTH_RETRY_MAX_ATTEMPTS` | Max retry attempts for failed exports | `3` |
-| `GPUHEALTH_ATTESTATION_JITTER_ENABLED` | Enable/disable attestation startup jitter | `true` |
-| `GPUHEALTH_ATTESTATION_INTERVAL` | Attestation interval override | `24h` |
+| `FLEETINT_COLLECT_INTERVAL` | Data collection interval (1s to 24h) | `1m` |
+| `FLEETINT_INCLUDE_METRICS` | Include metrics in export | `true` |
+| `FLEETINT_INCLUDE_EVENTS` | Include events in export | `true` |
+| `FLEETINT_INCLUDE_MACHINEINFO` | Include machine info in export | `true` |
+| `FLEETINT_INCLUDE_HEALTHCHECKS` | Include component health data in export | `true` |
+| `FLEETINT_METRICS_LOOKBACK` | Metrics lookback window | `1m` |
+| `FLEETINT_EVENTS_LOOKBACK` | Events lookback window | `1m` |
+| `FLEETINT_CHECK_INTERVAL` | Component health check interval (1s to 24h) | `1m` |
+| `FLEETINT_RETRY_MAX_ATTEMPTS` | Max retry attempts for failed exports | `3` |
+| `FLEETINT_ATTESTATION_JITTER_ENABLED` | Enable/disable attestation startup jitter | `true` |
+| `FLEETINT_ATTESTATION_INTERVAL` | Attestation interval override | `24h` |
 | `HTTP_PROXY` | HTTP proxy URL | empty |
 | `HTTPS_PROXY` | HTTPS proxy URL | empty |
 
 ## Configurable CLI flags
 
-These are `gpuhealth run` flags.
+These are `fleetint run` flags.
 
-- **Bare metal**: set via `GPUHEALTH_FLAGS="..."` in `/etc/default/gpuhealth`
+- **Bare metal**: set via `FLEETINT_FLAGS="..."` in `/etc/default/fleetint`
 - **Helm**: use dedicated chart values when available
 
 | CLI flag | Description | Default | Helm value |
@@ -51,11 +51,11 @@ These are `gpuhealth run` flags.
 
 - **Bare metal**:
   ```bash
-  sudo gpuhealth metadata
-  sudo journalctl -u gpuhealthd -f
+  sudo fleetint metadata
+  sudo journalctl -u fleetintd -f
   ```
 - **Helm**:
   ```bash
-  helm get values gpuhealth-agent -n <namespace>
-  kubectl logs -n <namespace> -l app.kubernetes.io/name=gpuhealth-agent --tail=100
+  helm get values fleet-intelligence-agent -n <namespace>
+  kubectl logs -n <namespace> -l app.kubernetes.io/name=fleet-intelligence-agent --tail=100
   ```

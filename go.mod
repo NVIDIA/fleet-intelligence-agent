@@ -1,4 +1,4 @@
-module github.com/NVIDIA/gpuhealth
+module github.com/NVIDIA/fleet-intelligence-agent
 
 go 1.24.13
 

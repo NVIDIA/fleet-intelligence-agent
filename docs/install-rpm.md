@@ -2,9 +2,9 @@
 
 ## Prerequisites: NVIDIA CUDA Repository
 
-The GPU Health Agent requires NVIDIA DCGM (Data Center GPU Manager) for GPU monitoring. DCGM is available through NVIDIA's CUDA repository and will be automatically installed when you install the GPU Health Agent package.
+The Fleet Intelligence Agent requires NVIDIA DCGM (Data Center GPU Manager) for GPU monitoring. DCGM is available through NVIDIA's CUDA repository and will be automatically installed when you install the Fleet Intelligence Agent package.
 
-Before installing the GPU Health Agent, add the appropriate NVIDIA CUDA repository for your system.
+Before installing the Fleet Intelligence Agent, add the appropriate NVIDIA CUDA repository for your system.
 
 ### RHEL/Rocky/AlmaLinux Systems
 
@@ -46,25 +46,25 @@ sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute
 sudo dnf clean all
 ```
 
-After adding the CUDA repository, DCGM (`datacenter-gpu-manager-4-core`) will be automatically installed as a recommended dependency when you install the GPU Health Agent package.
+After adding the CUDA repository, DCGM (`datacenter-gpu-manager-4-core`) will be automatically installed as a recommended dependency when you install the Fleet Intelligence Agent package.
 
 ## Install package
 
-Download the package from [Releases](https://github.com/NVIDIA/gpuhealth/releases), then install:
+Download the package from [Releases](https://github.com/NVIDIA/fleet-intelligence-agent/releases), then install:
 
 ```bash
 # RHEL/Rocky/AlmaLinux/Amazon Linux (x86_64)
-sudo dnf install ./gpuhealth-VERSION-1.x86_64.rpm
+sudo dnf install ./fleetint-VERSION-1.x86_64.rpm
 
 # RHEL/Rocky/AlmaLinux/Amazon Linux (ARM64)
-sudo dnf install ./gpuhealth-VERSION-1.aarch64.rpm
+sudo dnf install ./fleetint-VERSION-1.aarch64.rpm
 ```
 
 Verify:
 
 ```bash
-gpuhealth --version
-systemctl status gpuhealthd
+fleetint --version
+systemctl status fleetintd
 ```
 
 ## Update
@@ -73,10 +73,10 @@ Install the newer package version:
 
 ```bash
 # RHEL/Rocky/AlmaLinux/Amazon Linux (x86_64)
-sudo dnf install ./gpuhealth-VERSION-1.x86_64.rpm
+sudo dnf install ./fleetint-VERSION-1.x86_64.rpm
 
 # RHEL/Rocky/AlmaLinux/Amazon Linux (ARM64)
-sudo dnf install ./gpuhealth-VERSION-1.aarch64.rpm
+sudo dnf install ./fleetint-VERSION-1.aarch64.rpm
 ```
 
 The service will automatically restart with the new version.
@@ -84,6 +84,6 @@ The service will automatically restart with the new version.
 ## Uninstall
 
 ```bash
-sudo dnf remove gpuhealth
+sudo dnf remove fleetint
 ```
 

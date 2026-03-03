@@ -1,6 +1,6 @@
 # Architecture
 
-This document explains how the GPU Health Agent works at runtime on bare metal and Kubernetes.
+This document explains how the Fleet Intelligence Agent works at runtime on bare metal and Kubernetes.
 
 ## Agent runtime model
 
@@ -25,7 +25,7 @@ On bare metal, the agent runs directly on the host and talks to local NVIDIA sta
 flowchart LR
   GPU["NVIDIA GPUs"] --> DRV["NVIDIA Driver"] --> NVML["NVML"]
   NVML --> DCGM["DCGM HostEngine"]
-  DCGM --> AGENT["gpuhealth agent process"]
+  DCGM --> AGENT["fleetint agent process"]
 
   AGENT --> COMP["Component checks + health evaluation"]
   COMP --> API["HTTP API + /metrics"]
@@ -56,8 +56,8 @@ flowchart LR
         SVC["DCGM Service endpoint"]
       end
 
-      subgraph POD["gpuhealth-agent pod"]
-        AGENT["gpuhealth runtime"]
+      subgraph POD["fleet-intelligence-agent pod"]
+        AGENT["fleetint runtime"]
         COMP["Component checks + health evaluation"]
         API["HTTP API + /metrics"]
       end

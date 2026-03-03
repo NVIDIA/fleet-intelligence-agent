@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package scan provides system scanning functionality for GPU health monitoring.
+// Package scan provides system scanning functionality for Fleet Intelligence monitoring.
 // This implementation is based on the upstream gpud scan package but maintained
-// independently to give gpuhealth full control over the scanning behavior.
+// independently to give fleetint full control over the scanning behavior.
 package scan
 
 import (
@@ -35,8 +35,8 @@ import (
 	nvidiadcgm "github.com/leptonai/gpud/pkg/nvidia-query/dcgm"
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
 
-	"github.com/NVIDIA/gpuhealth/internal/machineinfo"
-	"github.com/NVIDIA/gpuhealth/internal/registry"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/registry"
 )
 
 // Op holds the configuration for a scan operation.
@@ -93,7 +93,7 @@ func printSummary(result components.CheckResult) {
 }
 
 // Scan performs a comprehensive system scan to detect any major issues with
-// GPU health, infiniband connectivity, NFS mounts, and other critical components.
+// Fleet Intelligence, infiniband connectivity, NFS mounts, and other critical components.
 // It returns an error if the scan fails to execute, but prints warnings for
 // detected issues.
 func Scan(ctx context.Context, opts ...Option) error {
@@ -172,7 +172,7 @@ func Scan(ctx context.Context, opts ...Option) error {
 		FailureInjector: op.failureInjector,
 	}
 
-	// Initialize all components first using gpuhealth's component registry
+	// Initialize all components first using fleetint's component registry
 	var initializedComponents []components.Component
 	for _, c := range registry.All() {
 		comp, err := c.InitFunc(gpudInstance)

@@ -1,4 +1,4 @@
-# Contributing to gpuhealth
+# Contributing to fleetint
 
 ## Issue Tracking
 
@@ -14,16 +14,16 @@ Please start all enhancement, bugfix, or change requests by opening a GitHub iss
 First clone the source code from GitHub
 
 ```bash
-git clone https://github.com/NVIDIA/gpuhealth.git
+git clone https://github.com/NVIDIA/fleet-intelligence-agent.git
 ```
 
-Build `gpuhealth` from source
+Build `fleetint` from source
 
 ```bash
-cd gpuhealth
-make all           # or: make gpuhealth
+cd fleetint
+make all           # or: make fleetint
 
-./bin/gpuhealth -h
+./bin/fleetint -h
 ```
 
 Common development targets:
@@ -173,7 +173,7 @@ Ensure your code is clean, readable, and well-commented. We use the following to
 - Follow standard Go conventions and idioms
 - Use `gofmt` for code formatting (run `make fmt`)
 - Use `golangci-lint` for linting (run `make lint`)
-- Import grouping: third-party imports must be separated from local imports. goimports is configured with `local-prefixes: github.com/NVIDIA/gpuhealth` in `.golangci.yml`. If imports are regrouped incorrectly, run `make fmt` and `make lint`.
+- Import grouping: third-party imports must be separated from local imports. goimports is configured with `local-prefixes: github.com/NVIDIA/fleet-intelligence-agent` in `.golangci.yml`. If imports are regrouped incorrectly, run `make fmt` and `make lint`.
 
 To run linting locally:
 

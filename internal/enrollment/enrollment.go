@@ -57,7 +57,7 @@ func PerformEnrollment(ctx context.Context, enrollEndpoint, sakToken string) (st
 	}
 
 	// Set headers (no Content-Type since no body is sent)
-	req.Header.Set("User-Agent", "gpuhealth-agent")
+	req.Header.Set("User-Agent", "fleet-intelligence-agent")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", sakToken))
 
 	// Make the request

@@ -13,8 +13,8 @@ import (
 	"github.com/leptonai/gpud/pkg/systemd"
 	"github.com/urfave/cli"
 
-	"github.com/NVIDIA/gpuhealth/internal/cmdutil"
-	"github.com/NVIDIA/gpuhealth/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/cmdutil"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
 
 func compactCommand(cliContext *cli.Context) error {
@@ -28,21 +28,21 @@ func compactCommand(cliContext *cli.Context) error {
 	log.Logger.Debugw("starting compact command")
 
 	if systemd.SystemctlExists() {
-		active, err := systemd.IsActive("gpuhealthd.service")
+		active, err := systemd.IsActive("fleetintd.service")
 		if err != nil {
 			return err
 		}
 		if active {
-			return fmt.Errorf("gpuhealthd service is running (must be stopped before running compact)")
+			return fmt.Errorf("fleetintd service is running (must be stopped before running compact)")
 		}
 	}
 
-	portOpen := netutil.IsPortOpen(config.DefaultHealthPort) // gpuhealth uses port 15133
+	portOpen := netutil.IsPortOpen(config.DefaultHealthPort) // fleetint uses port 15133
 	if portOpen {
-		return fmt.Errorf("gpuhealth is running on port %d (must be stopped before running compact)", config.DefaultHealthPort)
+		return fmt.Errorf("fleetint is running on port %d (must be stopped before running compact)", config.DefaultHealthPort)
 	}
 
-	log.Logger.Infow("successfully checked gpuhealthd is not running")
+	log.Logger.Infow("successfully checked fleetintd is not running")
 
 	rootCtx, rootCancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer rootCancel()

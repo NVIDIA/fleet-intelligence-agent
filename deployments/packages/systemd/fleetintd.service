@@ -1,12 +1,12 @@
 [Unit]
-Description=GPU Health Daemon
+Description=Fleet Intelligence Daemon
 Wants=nvidia-dcgm.service
 After=network.target local-fs.target nvidia-dcgm.service
 
 [Service]
-EnvironmentFile=-/etc/default/gpuhealth
+EnvironmentFile=-/etc/default/fleetint
 
-ExecStart=/usr/bin/gpuhealth run $GPUHEALTH_FLAGS
+ExecStart=/usr/bin/fleetint run $FLEETINT_FLAGS
 ExecReload=/bin/kill -HUP $MAINPID
 
 Restart=always

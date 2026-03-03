@@ -33,7 +33,7 @@ import (
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
 	"github.com/leptonai/gpud/pkg/sqlite"
 
-	"github.com/NVIDIA/gpuhealth/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
 
 // EvidenceItem represents a single evidence item from the attestation SDK

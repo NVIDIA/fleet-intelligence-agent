@@ -24,8 +24,8 @@ import (
 	"github.com/leptonai/gpud/pkg/sqlite"
 	"github.com/urfave/cli"
 
-	"github.com/NVIDIA/gpuhealth/internal/config"
-	"github.com/NVIDIA/gpuhealth/internal/enrollment"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/enrollment"
 )
 
 func enrollCommand(cliContext *cli.Context) error {

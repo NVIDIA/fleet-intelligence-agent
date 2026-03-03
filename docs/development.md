@@ -5,8 +5,8 @@
 ### Clone Repository
 
 ```bash
-git clone https://github.com/NVIDIA/gpuhealth.git
-cd gpuhealth
+git clone https://github.com/NVIDIA/fleet-intelligence-agent.git
+cd fleetint
 ```
 
 ### Prerequisites
@@ -27,7 +27,7 @@ go env -w GOPRIVATE=gitlab-master.nvidia.com/*
 
 ```bash
 # Build the binary
-make gpuhealth
+make fleetint
 
 # Build all targets
 make all
@@ -39,9 +39,9 @@ make test
 ## Project Structure
 
 ```
-gpuhealth/
+fleetint/
 ├── cmd/
-│   └── gpuhealth/          # Main CLI application
+│   └── fleetint/          # Main CLI application
 ├── internal/
 │   ├── cmdutil/            # Command utilities
 │   ├── config/             # Configuration management
@@ -148,14 +148,14 @@ Scans the built binary for known vulnerabilities using `govulncheck`.
 
 ```bash
 # Build and run locally
-make gpuhealth
-./bin/gpuhealth scan
+make fleetint
+./bin/fleetint scan
 
 # Test with different configurations
-./bin/gpuhealth run --log-level=debug --port=8080
+./bin/fleetint run --log-level=debug --port=8080
 
 # Test offline mode
-./bin/gpuhealth run --offline-mode --path=/tmp/test --duration=00:01:00 --format=csv
+./bin/fleetint run --offline-mode --path=/tmp/test --duration=00:01:00 --format=csv
 ```
 
 ## Development Workflow
@@ -165,7 +165,7 @@ make gpuhealth
 3. **Run tests**: `make test`
 4. **Format code**: `make fmt`
 5. **Run linting**: `make lint`
-6. **Build locally**: `make gpuhealth`
+6. **Build locally**: `make fleetint`
 7. **Test changes** manually
 8. **Build packages** (optional): `make package-snapshot`
 9. **Submit PR** with description of changes
@@ -184,7 +184,7 @@ make gpuhealth
 ```bash
 make help        # Show all available targets
 make all         # Build all binaries
-make gpuhealth   # Build gpuhealth binary
+make fleetint   # Build fleetint binary
 make test        # Run tests with coverage
 make lint        # Run linting tools
 make fmt         # Format Go code

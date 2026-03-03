@@ -99,7 +99,7 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 	return cfg, nil
 }
 
-const defaultVarLibDir = "/var/lib/gpuhealth"
+const defaultVarLibDir = "/var/lib/fleetint"
 
 // setupDefaultDir creates the default directory for health data
 func setupDefaultDir() (string, error) {
@@ -112,7 +112,7 @@ func setupDefaultDir() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		d = filepath.Join(homeDir, ".gpuhealth")
+		d = filepath.Join(homeDir, ".fleetint")
 	}
 
 	if _, err := stdos.Stat(d); stdos.IsNotExist(err) {
@@ -129,5 +129,5 @@ func DefaultStateFile() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "gpuhealth.state"), nil
+	return filepath.Join(dir, "fleetint.state"), nil
 }

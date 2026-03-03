@@ -26,7 +26,7 @@ import (
 	"github.com/leptonai/gpud/components"
 	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
 
-	"github.com/NVIDIA/gpuhealth/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
 
 type globalHandler struct {
@@ -218,7 +218,7 @@ func (g *globalHandler) machineInfo(c *gin.Context) {
 
 	info := gin.H{
 		"machine_id": g.gpudInstance.MachineID,
-		"service":    "gpuhealth",
+		"service":    "fleetint",
 	}
 
 	if g.gpudInstance.NVMLInstance != nil {

@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package healthserver provides a simplified HTTP server for GPU health metrics export.
+// Package healthserver provides a simplified HTTP server for Fleet Intelligence metrics export.
 // This server focuses only on health monitoring and metrics export, removing all
 // management functionality like package management, control plane connectivity,
 // fault injection, and plugin systems.
@@ -49,9 +49,9 @@ import (
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
 	"github.com/leptonai/gpud/pkg/sqlite"
 
-	"github.com/NVIDIA/gpuhealth/internal/config"
-	"github.com/NVIDIA/gpuhealth/internal/exporter"
-	"github.com/NVIDIA/gpuhealth/internal/registry"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/registry"
 )
 
 // Server is a simplified health metrics exporter server
@@ -459,7 +459,7 @@ func (s *Server) startServer(ctx context.Context, nvmlInstance nvidianvml.Instan
 		log.Logger.Debugw("fault injection endpoint disabled")
 	}
 
-	log.Logger.Infow("gpuhealth started serving with HTTP", "address", s.config.Address)
+	log.Logger.Infow("fleetint started serving with HTTP", "address", s.config.Address)
 
 	srv := &http.Server{
 		Addr:    s.config.Address,
@@ -467,7 +467,7 @@ func (s *Server) startServer(ctx context.Context, nvmlInstance nvidianvml.Instan
 	}
 
 	if err := srv.ListenAndServe(); err != nil {
-		log.Logger.Warnw("gpuhealth serve failed", "address", s.config.Address, "error", err)
+		log.Logger.Warnw("fleetint serve failed", "address", s.config.Address, "error", err)
 		stdos.Exit(1)
 	}
 }

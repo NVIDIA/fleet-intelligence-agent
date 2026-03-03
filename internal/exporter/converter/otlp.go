@@ -28,7 +28,7 @@ import (
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
 	resourcev1 "go.opentelemetry.io/proto/otlp/resource/v1"
 
-	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
 )
 
 // OTLPData holds both metrics and logs for OTLP export
@@ -63,7 +63,7 @@ func (c *otlpConverter) Convert(data *collector.HealthData) *OTLPData {
 				ScopeMetrics: []*metricsv1.ScopeMetrics{
 					{
 						Scope: &commonv1.InstrumentationScope{
-							Name:    "gpuhealth-exporter",
+							Name:    "fleetint-exporter",
 							Version: "1.0.0",
 						},
 						Metrics: c.convertMetricsToOTLP(data),
@@ -81,7 +81,7 @@ func (c *otlpConverter) Convert(data *collector.HealthData) *OTLPData {
 				ScopeLogs: []*logsv1.ScopeLogs{
 					{
 						Scope: &commonv1.InstrumentationScope{
-							Name:    "gpuhealth-exporter",
+							Name:    "fleetint-exporter",
 							Version: "1.0.0",
 						},
 						LogRecords: c.convertToOTLPLogs(data),
@@ -103,7 +103,7 @@ func (c *otlpConverter) createOTLPResource(data *collector.HealthData) *resource
 		{
 			Key: "service.name",
 			Value: &commonv1.AnyValue{
-				Value: &commonv1.AnyValue_StringValue{StringValue: "gpu-health-agent"},
+				Value: &commonv1.AnyValue_StringValue{StringValue: "fleet-intelligence-agent"},
 			},
 		},
 		{
@@ -178,7 +178,7 @@ func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metr
 
 	// Add a summary metric with collection info
 	summaryMetric := &metricsv1.Metric{
-		Name:        "gpuhealth_agent_collection_summary",
+		Name:        "fleetint_agent_collection_summary",
 		Description: "Summary of GPU health data collection including counts of metrics, events, and components",
 		Unit:        "1",
 		Data: &metricsv1.Metric_Gauge{

@@ -25,8 +25,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
-	"github.com/NVIDIA/gpuhealth/internal/exporter/converter"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/converter"
 )
 
 // FileWriter defines the interface for writing health data to files
@@ -56,14 +56,14 @@ func (w *fileWriter) WriteJSON(data *collector.HealthData, outputPath string) er
 
 	// Write OTLP JSON files for direct use with OTEL collectors
 	if otlpData.Metrics != nil {
-		filename := filepath.Join(outputPath, fmt.Sprintf("gpuhealth_metrics_%s.json", timestamp))
+		filename := filepath.Join(outputPath, fmt.Sprintf("fleetint_metrics_%s.json", timestamp))
 		if err := w.writeOTLPJSONFile(filename, otlpData.Metrics); err != nil {
 			return fmt.Errorf("failed to write OTLP metrics file: %w", err)
 		}
 	}
 
 	if otlpData.Logs != nil {
-		filename := filepath.Join(outputPath, fmt.Sprintf("gpuhealth_logs_%s.json", timestamp))
+		filename := filepath.Join(outputPath, fmt.Sprintf("fleetint_logs_%s.json", timestamp))
 		if err := w.writeOTLPJSONFile(filename, otlpData.Logs); err != nil {
 			return fmt.Errorf("failed to write OTLP logs file: %w", err)
 		}

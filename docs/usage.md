@@ -5,17 +5,17 @@
 ### Quick Health Scan
 
 ```bash
-sudo gpuhealth scan
+sudo fleetint scan
 ```
 
 Performs a quick health scan of GPUs and system components. Returns immediately with a summary of any detected issues.
 
-**Aliases:** `sudo gpuhealth check`, `sudo gpuhealth s`
+**Aliases:** `sudo fleetint check`, `sudo fleetint s`
 
 ### Start Monitoring Server
 
 ```bash
-sudo gpuhealth run
+sudo fleetint run
 ```
 
 Starts the HTTP API server on port 15133. The server provides REST endpoints and Prometheus metrics.
@@ -29,17 +29,17 @@ Starts the HTTP API server on port 15133. The server provides REST endpoints and
 ### Check Status
 
 ```bash
-sudo gpuhealth status
+sudo fleetint status
 ```
 
-Displays the current status of the gpuhealth service and monitored components.
+Displays the current status of the fleetint service and monitored components.
 
-**Alias:** `sudo gpuhealth st`
+**Alias:** `sudo fleetint st`
 
 ### Machine Information
 
 ```bash
-sudo gpuhealth machine-info
+sudo fleetint machine-info
 ```
 
 Shows detailed information about the machine:
@@ -54,10 +54,10 @@ Shows detailed information about the machine:
 
 ```bash
 # View current metadata
-sudo gpuhealth metadata
+sudo fleetint metadata
 
 # Set metadata key-value pair
-sudo gpuhealth metadata --set-key="key" --set-value="value"
+sudo fleetint metadata --set-key="key" --set-value="value"
 ```
 
 Used to view or update the agent's metadata store, including remote export configuration.
@@ -65,13 +65,13 @@ Used to view or update the agent's metadata store, including remote export confi
 ### Enroll Agent
 
 ```bash
-sudo gpuhealth enroll --endpoint=https://api.example.com --token=<your-sak-token>
+sudo fleetint enroll --endpoint=https://api.example.com --token=<your-sak-token>
 ```
 
-Enrolls the agent with the GPU Health backend by exchanging a Service Account Key (SAK) token for a JWT token. The JWT token and backend endpoints are stored locally for subsequent data exports.
+Enrolls the agent with the Fleet Intelligence backend by exchanging a Service Account Key (SAK) token for a JWT token. The JWT token and backend endpoints are stored locally for subsequent data exports.
 
 **Required Options:**
-- `--endpoint`: Base endpoint URL for the GPU Health backend (must use HTTPS)
+- `--endpoint`: Base endpoint URL for the Fleet Intelligence backend (must use HTTPS)
 - `--token`: Service Account Key (SAK) token for authentication
 
 **What it does:**
@@ -96,7 +96,7 @@ Enrollment succeeded
 ### Unenroll Agent
 
 ```bash
-sudo gpuhealth unenroll
+sudo fleetint unenroll
 ```
 
 Removes all enrollment credentials and backend endpoints from the agent. After unenrolling, the agent will no longer export data to the backend until re-enrolled.
@@ -116,7 +116,7 @@ Use this command when:
 For environments without network access or when you need to collect data to files:
 
 ```bash
-sudo gpuhealth run --offline-mode --path=/tmp/gpu-health --duration=00:05:00 --format=csv
+sudo fleetint run --offline-mode --path=/tmp/gpu-health --duration=00:05:00 --format=csv
 ```
 
 **Options:**
@@ -131,20 +131,20 @@ After package installation, the agent runs as a systemd service:
 
 ```bash
 # Check service status
-sudo systemctl status gpuhealthd
+sudo systemctl status fleetintd
 
 # Start/stop/restart service
-sudo systemctl start gpuhealthd
-sudo systemctl stop gpuhealthd
-sudo systemctl restart gpuhealthd
+sudo systemctl start fleetintd
+sudo systemctl stop fleetintd
+sudo systemctl restart fleetintd
 
 # View logs
-sudo journalctl -u gpuhealthd -f
+sudo journalctl -u fleetintd -f
 ```
 
 ## HTTP API
 
-The gpuhealth HTTP API server runs on port 15133 by default and provides REST endpoints for monitoring data.
+The fleetint HTTP API server runs on port 15133 by default and provides REST endpoints for monitoring data.
 
 ### Health Check
 
@@ -170,7 +170,7 @@ curl http://localhost:15133/machine-info
 
 Returns basic machine info
 
-Note: Detailed hardware and GPU information is available via the `gpuhealth machine-info` CLI command.
+Note: Detailed hardware and GPU information is available via the `fleetint machine-info` CLI command.
 
 ### Current Health States
 
@@ -232,14 +232,14 @@ Returns metrics in Prometheus exposition format for integration with monitoring 
 
 ## Exposing the Agent for External Monitoring
 
-By default, gpuhealth binds to `127.0.0.1:15133` (localhost only) for security. To allow external monitoring tools like Prometheus to scrape metrics, you can expose the agent on a network interface using the `--listen-address` flag:
+By default, fleetint binds to `127.0.0.1:15133` (localhost only) for security. To allow external monitoring tools like Prometheus to scrape metrics, you can expose the agent on a network interface using the `--listen-address` flag:
 
 ```bash
 # Expose on all interfaces
-sudo gpuhealth run --listen-address=0.0.0.0:15133
+sudo fleetint run --listen-address=0.0.0.0:15133
 
 # Or expose on a specific IP address
-sudo gpuhealth run --listen-address=192.168.1.100:15133
+sudo fleetint run --listen-address=192.168.1.100:15133
 ```
 
 ### Prometheus Configuration Example
@@ -249,7 +249,7 @@ Configure Prometheus to scrape the exposed endpoint:
 ```yaml
 # prometheus.yml
 scrape_configs:
-  - job_name: 'gpuhealth'
+  - job_name: 'fleetint'
     scrape_interval: 60s
     static_configs:
       - targets:
@@ -266,12 +266,12 @@ scrape_configs:
 
 1. Check service status:
    ```bash
-   sudo systemctl status gpuhealthd
+   sudo systemctl status fleetintd
    ```
 
 2. View recent logs:
    ```bash
-   sudo journalctl -u gpuhealthd -n 50
+   sudo journalctl -u fleetintd -n 50
    ```
 
 3. Verify NVIDIA drivers are installed (if using GPUs):
@@ -288,24 +288,24 @@ scrape_configs:
 
 1. Check the logs:
    ```bash
-   sudo journalctl -u gpuhealthd -f
+   sudo journalctl -u fleetintd -f
    ```
 
 2. Verify your configuration:
    ```bash
-   sudo gpuhealth metadata
+   sudo fleetint metadata
    ```
 
 3. Test connectivity to the export endpoint manually with `curl`
 
-4. Check proxy settings in `/etc/default/gpuhealth` if behind a firewall
+4. Check proxy settings in `/etc/default/fleetint` if behind a firewall
 
 ### High resource usage
 
 The agent should use <100MB RAM and <1% CPU. Higher usage might indicate:
 
-- Very frequent collection intervals (check `GPUHEALTH_COLLECT_INTERVAL`)
-- Large lookback windows (check `GPUHEALTH_METRICS_LOOKBACK` and `GPUHEALTH_EVENTS_LOOKBACK`)
+- Very frequent collection intervals (check `FLEETINT_COLLECT_INTERVAL`)
+- Large lookback windows (check `FLEETINT_METRICS_LOOKBACK` and `FLEETINT_EVENTS_LOOKBACK`)
 - Many GPUs in the system (resource usage scales with GPU count)
 - Debug logging enabled (use `--log-level=warn` or `error`)
 

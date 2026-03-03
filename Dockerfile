@@ -1,7 +1,7 @@
 # This repo depends on a private module on gitlab-master.nvidia.com (see go.mod replace),
 # so you must provide credentials at build time via SSH agent forwarding:
 #     eval "$(ssh-agent -s)"; ssh-add ~/.ssh/id_ed25519
-#     DOCKER_BUILDKIT=1 docker build --ssh default -t gpuhealth:dev .
+#     DOCKER_BUILDKIT=1 docker build --ssh default -t fleetint:dev .
 ARG DCGM_VERSION="4.4.2-1-ubuntu22.04"
 
 FROM golang:1.24.13 AS build
@@ -40,11 +40,11 @@ ARG REVISION=""
 RUN CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH:-amd64} \
   go build -trimpath \
     -ldflags "-s -w \
-      -X github.com/NVIDIA/gpuhealth/internal/version.BuildTimestamp=${BUILD_TIMESTAMP} \
-      -X github.com/NVIDIA/gpuhealth/internal/version.Version=${VERSION} \
-      -X github.com/NVIDIA/gpuhealth/internal/version.Revision=${REVISION} \
-      -X github.com/NVIDIA/gpuhealth/internal/version.Package=github.com/NVIDIA/gpuhealth" \
-    -o /out/gpuhealth ./cmd/gpuhealth
+      -X github.com/NVIDIA/fleet-intelligence-agent/internal/version.BuildTimestamp=${BUILD_TIMESTAMP} \
+      -X github.com/NVIDIA/fleet-intelligence-agent/internal/version.Version=${VERSION} \
+      -X github.com/NVIDIA/fleet-intelligence-agent/internal/version.Revision=${REVISION} \
+      -X github.com/NVIDIA/fleet-intelligence-agent/internal/version.Package=github.com/NVIDIA/fleet-intelligence-agent" \
+    -o /out/fleetint ./cmd/fleetint
 
 FROM nvidia/dcgm:${DCGM_VERSION} AS runtime
 
@@ -80,10 +80,10 @@ RUN set -eux; \
   ; \
   rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /out/gpuhealth /usr/bin/gpuhealth
+COPY --from=build /out/fleetint /usr/bin/fleetint
 
 EXPOSE 15133
-VOLUME ["/var/lib/gpuhealth"]
+VOLUME ["/var/lib/fleetint"]
 
-ENTRYPOINT ["/usr/bin/gpuhealth"]
+ENTRYPOINT ["/usr/bin/fleetint"]
 CMD ["run"]

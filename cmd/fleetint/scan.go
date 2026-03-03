@@ -13,7 +13,7 @@ import (
 	infinibandtypes "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband/types"
 	"github.com/leptonai/gpud/pkg/log"
 
-	"github.com/NVIDIA/gpuhealth/internal/scan"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/scan"
 )
 
 func scanCreateCommand() func(*cli.Context) error {

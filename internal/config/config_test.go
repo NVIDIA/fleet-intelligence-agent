@@ -164,7 +164,7 @@ func TestDefaultStateFile(t *testing.T) {
 	path, err := DefaultStateFile()
 	require.NoError(t, err)
 	assert.NotEmpty(t, path)
-	assert.Contains(t, path, "gpuhealth.state")
+	assert.Contains(t, path, "fleetint.state")
 }
 
 func TestValidateHealthExporter(t *testing.T) {
@@ -523,7 +523,7 @@ func TestToConfigEntries(t *testing.T) {
 		cfg := &Config{
 			APIVersion:      "v1",
 			Address:         "0.0.0.0:8080",
-			State:           "/var/lib/gpuhealth",
+			State:           "/var/lib/fleetint",
 			RetentionPeriod: metav1.Duration{Duration: 24 * time.Hour},
 			Components:      []string{},
 		}
@@ -551,7 +551,7 @@ func TestToConfigEntries(t *testing.T) {
 
 		assert.Equal(t, "v1", apiVersion)
 		assert.Equal(t, "0.0.0.0:8080", address)
-		assert.Equal(t, "/var/lib/gpuhealth", state)
+		assert.Equal(t, "/var/lib/fleetint", state)
 		assert.Equal(t, "86400", retentionPeriod)
 
 		// Verify JSONB array format
@@ -570,7 +570,7 @@ func TestToConfigEntries(t *testing.T) {
 		cfg := &Config{
 			APIVersion:      "v1",
 			Address:         "0.0.0.0:8080",
-			State:           "/var/lib/gpuhealth",
+			State:           "/var/lib/fleetint",
 			RetentionPeriod: metav1.Duration{Duration: 24 * time.Hour},
 			Components:      []string{},
 			HealthExporter: &HealthExporterConfig{
@@ -632,7 +632,7 @@ func TestToConfigEntries(t *testing.T) {
 		cfg := &Config{
 			APIVersion:      "v1",
 			Address:         "0.0.0.0:8080",
-			State:           "/var/lib/gpuhealth",
+			State:           "/var/lib/fleetint",
 			RetentionPeriod: metav1.Duration{Duration: 24 * time.Hour},
 			Components:      []string{"*", "-memory", "-disk"},
 		}
@@ -665,7 +665,7 @@ func TestToConfigEntries(t *testing.T) {
 		cfg := &Config{
 			APIVersion:      "v1",
 			Address:         "0.0.0.0:8080",
-			State:           "/var/lib/gpuhealth",
+			State:           "/var/lib/fleetint",
 			RetentionPeriod: metav1.Duration{Duration: 24 * time.Hour},
 			Components:      []string{"cpu", "memory"},
 		}

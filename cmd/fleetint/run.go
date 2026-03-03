@@ -22,9 +22,9 @@ import (
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/NVIDIA/gpuhealth/internal/config"
-	"github.com/NVIDIA/gpuhealth/internal/server"
-	"github.com/NVIDIA/gpuhealth/internal/version"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/server"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/version"
 )
 
 // parseDuration parses duration in HH:MM:SS format
@@ -114,49 +114,49 @@ func configureHealthExporterFromEnv(cfg *config.Config) error {
 	}
 	he := cfg.HealthExporter
 
-	if err := setBoolFromEnv("GPUHEALTH_INCLUDE_METRICS", &he.IncludeMetrics, "set health exporter include metrics from env", "include_metrics"); err != nil {
+	if err := setBoolFromEnv("FLEETINT_INCLUDE_METRICS", &he.IncludeMetrics, "set health exporter include metrics from env", "include_metrics"); err != nil {
 		return err
 	}
 
-	if err := setBoolFromEnv("GPUHEALTH_INCLUDE_EVENTS", &he.IncludeEvents, "set health exporter include events from env", "include_events"); err != nil {
+	if err := setBoolFromEnv("FLEETINT_INCLUDE_EVENTS", &he.IncludeEvents, "set health exporter include events from env", "include_events"); err != nil {
 		return err
 	}
 
-	if err := setBoolFromEnv("GPUHEALTH_INCLUDE_MACHINEINFO", &he.IncludeMachineInfo, "set health exporter include machine info from env", "include_machine_info"); err != nil {
+	if err := setBoolFromEnv("FLEETINT_INCLUDE_MACHINEINFO", &he.IncludeMachineInfo, "set health exporter include machine info from env", "include_machine_info"); err != nil {
 		return err
 	}
 
-	if err := setBoolFromEnv("GPUHEALTH_INCLUDE_HEALTHCHECKS", &he.IncludeComponentData, "set health exporter include component data from env", "include_component_data"); err != nil {
+	if err := setBoolFromEnv("FLEETINT_INCLUDE_HEALTHCHECKS", &he.IncludeComponentData, "set health exporter include component data from env", "include_component_data"); err != nil {
 		return err
 	}
 
-	if err := setDurationFromEnv("GPUHEALTH_COLLECT_INTERVAL", &he.Interval, "set health exporter interval from env", "interval", time.Second, 24*time.Hour); err != nil {
+	if err := setDurationFromEnv("FLEETINT_COLLECT_INTERVAL", &he.Interval, "set health exporter interval from env", "interval", time.Second, 24*time.Hour); err != nil {
 		return err
 	}
 
-	// GPUHEALTH_ATTESTATION_JITTER_ENABLED - Enable/disable attestation jitter
-	if err := setBoolFromEnv("GPUHEALTH_ATTESTATION_JITTER_ENABLED", &he.Attestation.JitterEnabled, "set attestation jitter enabled from env", "attestation_jitter_enabled"); err != nil {
+	// FLEETINT_ATTESTATION_JITTER_ENABLED - Enable/disable attestation jitter
+	if err := setBoolFromEnv("FLEETINT_ATTESTATION_JITTER_ENABLED", &he.Attestation.JitterEnabled, "set attestation jitter enabled from env", "attestation_jitter_enabled"); err != nil {
 		return err
 	}
 
-	if err := setDurationFromEnv("GPUHEALTH_ATTESTATION_INTERVAL", &he.Attestation.Interval, "set attestation interval from env", "attestation_interval", 0, 0); err != nil {
+	if err := setDurationFromEnv("FLEETINT_ATTESTATION_INTERVAL", &he.Attestation.Interval, "set attestation interval from env", "attestation_interval", 0, 0); err != nil {
 		return err
 	}
 
 	// Lookbacks
-	if err := setDurationFromEnv("GPUHEALTH_METRICS_LOOKBACK", &he.MetricsLookback, "set health exporter metrics lookback from env", "metrics_lookback", 0, 0); err != nil {
+	if err := setDurationFromEnv("FLEETINT_METRICS_LOOKBACK", &he.MetricsLookback, "set health exporter metrics lookback from env", "metrics_lookback", 0, 0); err != nil {
 		return err
 	}
 
-	if err := setDurationFromEnv("GPUHEALTH_EVENTS_LOOKBACK", &he.EventsLookback, "set health exporter events lookback from env", "events_lookback", 0, 0); err != nil {
+	if err := setDurationFromEnv("FLEETINT_EVENTS_LOOKBACK", &he.EventsLookback, "set health exporter events lookback from env", "events_lookback", 0, 0); err != nil {
 		return err
 	}
 
-	if err := setDurationFromEnv("GPUHEALTH_CHECK_INTERVAL", &he.HealthCheckInterval, "set health exporter health check interval from env", "health_check_interval", time.Second, 24*time.Hour); err != nil {
+	if err := setDurationFromEnv("FLEETINT_CHECK_INTERVAL", &he.HealthCheckInterval, "set health exporter health check interval from env", "health_check_interval", time.Second, 24*time.Hour); err != nil {
 		return err
 	}
 
-	if err := setIntFromEnv("GPUHEALTH_RETRY_MAX_ATTEMPTS", &he.RetryMaxAttempts, "set health exporter retry max attempts from env", "retry_max_attempts", 0); err != nil {
+	if err := setIntFromEnv("FLEETINT_RETRY_MAX_ATTEMPTS", &he.RetryMaxAttempts, "set health exporter retry max attempts from env", "retry_max_attempts", 0); err != nil {
 		return err
 	}
 
@@ -175,7 +175,7 @@ func runCommand(cliContext *cli.Context) error {
 	log.Logger.Debugw("starting run command")
 
 	if runtime.GOOS != "linux" {
-		fmt.Printf("gpuhealth run on %q not supported\n", runtime.GOOS)
+		fmt.Printf("fleetint run on %q not supported\n", runtime.GOOS)
 		os.Exit(1)
 	}
 
@@ -196,7 +196,7 @@ func runCommand(cliContext *cli.Context) error {
 	enableDCGMPolicy := cliContext.Bool("enable-dcgm-policy")
 	enableFaultInjection := cliContext.Bool("enable-fault-injection")
 
-	// GPU Health Exporter configuration
+	// Fleet Intelligence Exporter configuration
 	offlineMode := cliContext.Bool("offline-mode")
 	offlineModePath := cliContext.String("path")
 	offlineModeDurationStr := cliContext.String("duration")
@@ -340,7 +340,7 @@ func runCommand(cliContext *cli.Context) error {
 	signals := make(chan os.Signal, 1)
 	done := make(chan struct{})
 
-	log.Logger.Infof("starting gpuhealth %v", version.Version)
+	log.Logger.Infof("starting fleetint %v", version.Version)
 
 	// Setup signal handling for graceful shutdown
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)

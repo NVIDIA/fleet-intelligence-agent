@@ -11,8 +11,8 @@ import (
 	"github.com/leptonai/gpud/pkg/sqlite"
 	"github.com/urfave/cli"
 
-	"github.com/NVIDIA/gpuhealth/internal/cmdutil"
-	"github.com/NVIDIA/gpuhealth/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/cmdutil"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
 
 func metadataCommand(cliContext *cli.Context) error {

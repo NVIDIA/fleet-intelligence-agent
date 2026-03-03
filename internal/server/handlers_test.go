@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/NVIDIA/gpuhealth/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
 
 // MockComponent is a mock implementation of components.Component
@@ -508,7 +508,7 @@ func TestMachineInfo(t *testing.T) {
 				err := json.Unmarshal(body, &response)
 				require.NoError(t, err)
 				assert.Equal(t, "test-machine-id", response["machine_id"])
-				assert.Equal(t, "gpuhealth", response["service"])
+				assert.Equal(t, "fleetint", response["service"])
 				assert.Equal(t, false, response["nvidia_available"])
 			},
 		},

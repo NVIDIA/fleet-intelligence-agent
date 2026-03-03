@@ -28,8 +28,8 @@ import (
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
-	"github.com/NVIDIA/gpuhealth/internal/exporter/converter"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/converter"
 )
 
 func TestNewHTTPWriter(t *testing.T) {
@@ -581,7 +581,7 @@ func TestHTTPWriter_sendOTLPRequest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify headers
 		assert.Equal(t, "application/x-protobuf", r.Header.Get("Content-Type"))
-		assert.Equal(t, "gpuhealth-exporter", r.Header.Get("User-Agent"))
+		assert.Equal(t, "fleetint-exporter", r.Header.Get("User-Agent"))
 		// X-Machine-ID might be empty in test environments - just check it exists as header
 		assert.Contains(t, r.Header, "X-Machine-Id")
 		assert.Equal(t, "metrics", r.Header.Get("X-Data-Type"))

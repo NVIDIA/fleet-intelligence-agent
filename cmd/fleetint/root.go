@@ -20,15 +20,15 @@ import (
 
 	"github.com/urfave/cli"
 
-	"github.com/NVIDIA/gpuhealth/internal/config"
-	"github.com/NVIDIA/gpuhealth/internal/version"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/version"
 )
 
 func App() *cli.App {
 	app := cli.NewApp()
 
-	app.Name = "gpuhealth"
-	app.Usage = "NVIDIA GPU health monitoring and reporting tool"
+	app.Name = "fleetint"
+	app.Usage = "NVIDIA Fleet Intelligence monitoring and reporting tool"
 	app.Version = version.Version
 	app.Description = "Use this tool to monitor the health of your NVIDIA GPUs and export metrics for analysis"
 
@@ -72,7 +72,7 @@ func App() *cli.App {
 		},
 		{
 			Name:   "run",
-			Usage:  "starts the gpuhealth server",
+			Usage:  "starts the fleetint server",
 			Action: runCommand,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -145,7 +145,7 @@ func App() *cli.App {
 		{
 			Name:    "status",
 			Aliases: []string{"st"},
-			Usage:   "checks the status of the gpuhealth server",
+			Usage:   "checks the status of the fleetint server",
 			Action:  statusCommand,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -162,7 +162,7 @@ func App() *cli.App {
 		{
 			Name:      "machine-info",
 			Usage:     "gets machine information (useful for debugging)",
-			UsageText: "gpuhealth machine-info",
+			UsageText: "fleetint machine-info",
 			Action:    machineInfoCommand,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -192,7 +192,7 @@ func App() *cli.App {
 		},
 		{
 			Name:   "compact",
-			Usage:  "compacts the gpuhealth state database to reduce disk usage (gpuhealth daemon/server must be stopped)",
+			Usage:  "compacts the fleetint state database to reduce disk usage (fleetint daemon/server must be stopped)",
 			Action: compactCommand,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -203,7 +203,7 @@ func App() *cli.App {
 		},
 		{
 			Name:   "enroll",
-			Usage:  "enroll the agent with GPU Health backend endpoints and credentials",
+			Usage:  "enroll the agent with Fleet Intelligence backend endpoints and credentials",
 			Action: enrollCommand,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -220,7 +220,7 @@ func App() *cli.App {
 		},
 		{
 			Name:   "unenroll",
-			Usage:  "un-enroll the agent from GPU Health backend (removes credentials and endpoints)",
+			Usage:  "un-enroll the agent from Fleet Intelligence backend (removes credentials and endpoints)",
 			Action: unenrollCommand,
 		},
 		{
