@@ -1,7 +1,7 @@
 # This repo depends on a private module on gitlab-master.nvidia.com (see go.mod replace),
 # so you must provide credentials at build time via SSH agent forwarding:
 #     eval "$(ssh-agent -s)"; ssh-add ~/.ssh/id_ed25519
-#     DOCKER_BUILDKIT=1 docker build --ssh default -t fleetint:dev .
+#     DOCKER_BUILDKIT=1 docker build --ssh default -t fleet-intelligence-agent:dev .
 ARG DCGM_VERSION="4.4.2-1-ubuntu22.04"
 
 FROM golang:1.24.13 AS build

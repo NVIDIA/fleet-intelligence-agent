@@ -7,7 +7,7 @@ GOFLAGS ?= -trimpath
 DOCKER ?= docker
 
 # Container image build settings
-IMAGE ?= fleetint:dev
+IMAGE ?= fleet-intelligence-agent:dev
 DOCKER_BUILDKIT ?= 1
 DOCKER_BUILD_PROGRESS ?= auto
 # By default, use ssh-agent forwarding for private module access during `docker build`.
@@ -105,7 +105,7 @@ binaries: $(BINARIES) ## build binaries
 	@echo "Built binaries: $(BINARIES)"
 
 # Build container image (requires BuildKit for --ssh/--secret mounts used in Dockerfile)
-docker-build: ## build container image (IMAGE=fleetint:dev)
+docker-build: ## build container image (IMAGE=fleet-intelligence-agent:dev)
 	@echo "Building container image: $(IMAGE)"
 	@DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) $(DOCKER) build \
 		$(if $(DOCKER_SSH),--ssh $(DOCKER_SSH),) \
