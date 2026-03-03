@@ -121,7 +121,7 @@ fleetint: bin/fleetint ## build fleetint binary
 lint: ## run linting tools
 	@echo "Running linting..."
 	@if command -v $(GOLANGCI_LINT) >/dev/null 2>&1; then \
-		$(GOLANGCI_LINT) run ./...; \
+		GOWORK=off $(GOLANGCI_LINT) run ./...; \
 	else \
 		echo "golangci-lint not found, running basic checks..."; \
 		$(GOFMT) -l -s . | tee /tmp/gofmt.out; \
@@ -129,7 +129,7 @@ lint: ## run linting tools
 			echo "Code formatting issues found. Run 'make fmt' to fix."; \
 			exit 1; \
 		fi; \
-		go vet ./...; \
+		GOWORK=off go vet ./...; \
 	fi
 
 fmt: ## format Go code

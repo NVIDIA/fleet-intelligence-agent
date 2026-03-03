@@ -75,7 +75,7 @@ func TestMachineInfoStruct(t *testing.T) {
 	now := metav1.Now()
 
 	testInfo := &MachineInfo{
-		FleetintVersion:        "1.0.0-test",
+		FleetintVersion:         "1.0.0-test",
 		GPUDriverVersion:        "550.54.15",
 		CUDAVersion:             "12.4",
 		ContainerRuntimeVersion: "containerd://1.7.13",
@@ -187,7 +187,7 @@ func TestRenderTable_Empty(t *testing.T) {
 // TestRenderTable_BasicFields tests RenderTable with basic fields
 func TestRenderTable_BasicFields(t *testing.T) {
 	info := &MachineInfo{
-		FleetintVersion:        "1.0.0-test",
+		FleetintVersion:         "1.0.0-test",
 		ContainerRuntimeVersion: "containerd://1.7.13",
 		OSImage:                 "Ubuntu 22.04.4 LTS",
 		KernelVersion:           "6.5.0-28-generic",
@@ -270,7 +270,7 @@ func TestRenderTable_WithMemoryInfo(t *testing.T) {
 // TestRenderTable_WithGPUInfo tests RenderTable with GPU information
 func TestRenderTable_WithGPUInfo(t *testing.T) {
 	info := &MachineInfo{
-		FleetintVersion: "1.0.0-test",
+		FleetintVersion:  "1.0.0-test",
 		GPUDriverVersion: "550.54.15",
 		GPUInfo: &apiv1.MachineGPUInfo{
 			Product:      "NVIDIA A100-SXM4-80GB",
@@ -365,7 +365,7 @@ func TestRenderTable_Complete(t *testing.T) {
 	now := metav1.NewTime(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 
 	info := &MachineInfo{
-		FleetintVersion:        "1.0.0-test",
+		FleetintVersion:         "1.0.0-test",
 		GPUDriverVersion:        "550.54.15",
 		CUDAVersion:             "12.4",
 		ContainerRuntimeVersion: "containerd://1.7.13",
@@ -451,7 +451,7 @@ func TestMachineInfo_JSONMarshaling(t *testing.T) {
 	// The actual marshaling is tested implicitly through the struct definition
 
 	info := &MachineInfo{
-		FleetintVersion:        "1.0.0",
+		FleetintVersion:         "1.0.0",
 		GPUDriverVersion:        "550.54.15",
 		CUDAVersion:             "12.4",
 		ContainerRuntimeVersion: "containerd://1.7.13",
