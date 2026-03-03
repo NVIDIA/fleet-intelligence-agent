@@ -1,4 +1,4 @@
-# Contributing to fleetint
+# Contributing to Fleet Intelligence Agent
 
 ## Issue Tracking
 
@@ -17,7 +17,7 @@ First clone the source code from GitHub
 git clone https://github.com/NVIDIA/fleet-intelligence-agent.git
 ```
 
-Build `fleetint` from source
+Build Fleet Intelligence Agent from source
 
 ```bash
 cd fleetint
