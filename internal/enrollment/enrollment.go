@@ -25,7 +25,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/leptonai/gpud/pkg/log"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 )
 
 // EnrollResponse represents the response from the enrollment endpoint

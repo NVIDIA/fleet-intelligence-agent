@@ -25,7 +25,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	nvidiacommon "github.com/leptonai/gpud/pkg/config/common"
+	nvidiacommon "github.com/NVIDIA/fleet-intelligence-sdk/pkg/config/common"
 )
 
 const (

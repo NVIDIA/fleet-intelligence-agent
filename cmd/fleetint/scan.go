@@ -8,10 +8,10 @@ import (
 	"github.com/urfave/cli"
 	"go.uber.org/zap"
 
-	componentsnvidiagpucounts "github.com/leptonai/gpud/components/accelerator/nvidia/gpu-counts"
-	nvidiainfiniband "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband"
-	infinibandtypes "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband/types"
-	"github.com/leptonai/gpud/pkg/log"
+	componentsnvidiagpucounts "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/gpu-counts"
+	nvidiainfiniband "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband"
+	infinibandtypes "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband/types"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/scan"
 )

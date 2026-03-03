@@ -22,9 +22,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/NVIDIA/fleet-intelligence-sdk/components"
+	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
 	"github.com/gin-gonic/gin"
-	"github.com/leptonai/gpud/components"
-	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )

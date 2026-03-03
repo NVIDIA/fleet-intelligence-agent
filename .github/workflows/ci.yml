@@ -7,11 +7,12 @@ on:
     branches: [ main ]
 
 env:
-  GO_VERSION: '1.24.11'
+  GO_VERSION: '1.24.13'
   GOFLAGS: '-trimpath'
   GOPRIVATE: gitlab-master.nvidia.com/*
   GONOPROXY: gitlab-master.nvidia.com/*
   GONOSUMDB: gitlab-master.nvidia.com/*
+  GOWORK: off
 
 jobs:
   secret-detection:
@@ -80,6 +81,8 @@ jobs:
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v8
+        env:
+          GOWORK: off
         with:
           version: latest
           args: --timeout=5m

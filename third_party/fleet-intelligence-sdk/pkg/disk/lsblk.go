@@ -1,0 +1,672 @@
+/*
+Copyright © 2020-2024 Dell Inc. or its subsidiaries. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+// Modified from https://github.com/dell/csi-baremetal/blob/v1.7.0/pkg/base/linuxutils/lsblk/lsblk.go
+
+package disk
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/dustin/go-humanize"
+	"github.com/olekukonko/tablewriter"
+
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/file"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/process"
+)
+
+// Mockable function variables for testing
+var (
+	findMntExecutor               = FindMnt
+	lsblkCommandExecutor          = executeLsblkCommand
+	getLsblkBinPathAndVersionFunc = getLsblkBinPathAndVersion
+)
+
+type BlockDevices []BlockDevice
+
+// BlockDevice represents output of lsblk command for a device
+type BlockDevice struct {
+	Name             string        `json:"name,omitempty"`
+	ParentDeviceName string        `json:"parent_device_name,omitempty"`
+	Type             string        `json:"type,omitempty"`
+	Size             CustomUint64  `json:"size,omitempty"`
+	Rota             CustomBool    `json:"rota,omitempty"`
+	Serial           string        `json:"serial,omitempty"`
+	WWN              string        `json:"wwn,omitempty"`
+	Vendor           string        `json:"vendor,omitempty"`
+	Model            string        `json:"model,omitempty"`
+	Rev              string        `json:"rev,omitempty"`
+	MountPoint       string        `json:"mountpoint,omitempty"`
+	FSType           string        `json:"fstype,omitempty"`
+	FSUsed           CustomUint64  `json:"fsused,omitempty"`
+	PartUUID         string        `json:"partuuid,omitempty"`
+	PKName           string        `json:"-"`
+	Children         []BlockDevice `json:"children,omitempty"`
+}
+
+// GetBlockDevicesWithLsblk run "lsblk" command for device and construct BlockDevice struct based on output
+// Receives device path. If device is empty string, info about all devices will be collected
+// Returns slice of BlockDevice structs or error if something went wrong
+func GetBlockDevicesWithLsblk(ctx context.Context, opts ...OpOption) (BlockDevices, error) {
+	return getBlockDevicesWithLsblk(ctx, getLsblkBinPathAndVersionFunc, opts...)
+}
+
+// getBlockDevicesWithLsblk run "lsblk" command for device and construct BlockDevice struct based on output
+// Receives device path. If device is empty string, info about all devices will be collected
+// Returns slice of BlockDevice structs or error if something went wrong
+func getBlockDevicesWithLsblk(
+	ctx context.Context,
+	getLsblkBinPathAndVersionFunc func(context.Context) (string, string, error),
+	opts ...OpOption) (BlockDevices, error) {
+	lsblkBin, verOut, err := getLsblkBinPathAndVersionFunc(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	flags, parseFunc, checkErr := decideLsblkFlag(ctx, verOut)
+	if checkErr != nil {
+		log.Logger.Warnw("failed to decide lsblk flag and parser -- falling back to latest version", "error", checkErr)
+		flags = lsblkFlags + " " + lsblkJsonFlag
+		parseFunc = func(b []byte, opts ...OpOption) (BlockDevices, error) {
+			return parseLsblkJSON(ctx, b, opts...)
+		}
+	}
+
+	b, err := lsblkCommandExecutor(ctx, lsblkBin, flags)
+	if err != nil {
+		return nil, err
+	}
+
+	devs, err := parseFunc(b, opts...)
+	if err != nil {
+		return nil, err
+	}
+	if len(devs) == 0 {
+		log.Logger.Warnw("no block device found from lsblk command", "lsblk", lsblkBin, "flags", flags, "output", string(b))
+	}
+
+	return devs, nil
+}
+
+const (
+	lsblkVersionFlags = "--version"
+	// lsblkFlags adds device name, if add empty string - command will print info about all devices
+	lsblkFlags = "--paths --bytes --fs --output NAME,TYPE,SIZE,ROTA,SERIAL,WWN,VENDOR,MODEL,REV,MOUNTPOINT,FSTYPE,FSUSED,PARTUUID"
+	// lsblkFlagsLegacy is for versions that don't support FSUSED (added in util-linux 2.33)
+	lsblkFlagsLegacy = "--paths --bytes --fs --output NAME,TYPE,SIZE,ROTA,SERIAL,WWN,VENDOR,MODEL,REV,MOUNTPOINT,FSTYPE,PARTUUID"
+	// lsblkJsonFlag lsblk from version 2.27 support json response
+	lsblkJsonFlag = "--json"
+	// lsblkMinSupportJsonVersion lsblk from version 2.27 support json response
+	// https://github.com/util-linux/util-linux/blob/stable/v2.27/misc-utils/lsblk.c#L1626
+	lsblkMinSupportJsonVersion = 2.27
+	// lsblkMinSupportFsUsedVersion lsblk from version 2.33 supports FSUSED column
+	// https://github.com/util-linux/util-linux/blob/75a776c64040c260b2cfe5e637a8cb8aa56e4b68/Documentation/releases/v2.33-ReleaseNotes#L373
+	lsblkMinSupportFsUsedVersion = 2.33
+	// lsblkPairsFlag lsblk lower than 2.27 only support raw and pairs response
+	lsblkPairsFlag = "--pairs"
+	// outputKey is the key to find block devices in lsblk json output
+	outputKey = "blockdevices"
+)
+
+var lsblkVersionRegPattern = regexp.MustCompile(`\d+\.\d+`)
+
+// decideLsblkFlag decides the lsblk command flags, based on the "lsblk --version" output
+func decideLsblkFlag(ctx context.Context, verOutput string) (string, func([]byte, ...OpOption) (BlockDevices, error), error) {
+	matches := lsblkVersionRegPattern.FindString(verOutput)
+	if matches != "" {
+		if versionF, parseErr := strconv.ParseFloat(matches, 64); parseErr == nil {
+			// Determine which column set to use based on version
+			columnFlags := lsblkFlags
+			if versionF < lsblkMinSupportFsUsedVersion {
+				// Use legacy column set for versions < 2.33 (FSUSED not available)
+				columnFlags = lsblkFlagsLegacy
+				log.Logger.Debugw("using legacy lsblk columns (FSUSED not supported)", "version", versionF)
+			}
+
+			if versionF >= lsblkMinSupportJsonVersion {
+				return columnFlags + " " + lsblkJsonFlag, func(b []byte, opts ...OpOption) (BlockDevices, error) {
+					return parseLsblkJSON(ctx, b, opts...)
+				}, nil
+			}
+
+			return columnFlags + " " + lsblkPairsFlag, func(b []byte, opts ...OpOption) (BlockDevices, error) {
+				return parseLsblkPairs(ctx, b, opts...)
+			}, nil
+		}
+	}
+
+	return "", nil, fmt.Errorf("failed to parse 'lsblk --version' output: %q", verOutput)
+}
+
+// executeLsblkCommand executes the lsblk command and returns its output.
+// This is a separate function to make it mockable for testing.
+func executeLsblkCommand(ctx context.Context, lsblkBin string, flags string) ([]byte, error) {
+	p, err := process.New(
+		process.WithCommand(lsblkBin+" "+flags),
+		process.WithRunAsBashScript(),
+		process.WithRunBashInline(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := p.Close(ctx); err != nil {
+			log.Logger.Warnw("failed to abort command", "err", err)
+		}
+	}()
+
+	b, err := p.StartAndWaitForCombinedOutput(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to run lsblk command: %w", err)
+	}
+	return b, nil
+}
+
+// getLsblkBinPathAndVersion returns the "lsblk" executable path and the output of "lsblk --version".
+func getLsblkBinPathAndVersion(ctx context.Context) (string, string, error) {
+	lsblkBin, err := file.LocateExecutable("lsblk")
+	if err != nil {
+		return "", "", err
+	}
+
+	p, err := process.New(
+		process.WithCommand(lsblkBin+" "+lsblkVersionFlags),
+		process.WithRunAsBashScript(),
+		process.WithRunBashInline(),
+	)
+	if err != nil {
+		return "", "", err
+	}
+	defer func() {
+		if err := p.Close(ctx); err != nil {
+			log.Logger.Warnw("failed to abort command", "err", err)
+		}
+	}()
+
+	output, err := p.StartAndWaitForCombinedOutput(ctx)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to check lsblk version: %w", err)
+	}
+
+	line := strings.TrimSpace(string(output))
+
+	return lsblkBin, line, nil
+}
+
+// fillFstypeFromFindmnt is a helper to populate FSType using findmnt if it's missing.
+// It modifies the BlockDevice in place and uses a cache to avoid redundant calls.
+func fillFstypeFromFindmnt(ctx context.Context, dev *BlockDevice, cache map[string]string) {
+	if dev.FSType != "" || dev.MountPoint == "" {
+		return
+	}
+
+	if fstype, ok := cache[dev.MountPoint]; ok {
+		dev.FSType = fstype
+		log.Logger.Debugw("retrieved fstype from cache", "dev", dev.Name, "mount_point", dev.MountPoint, "fstype", fstype)
+		return
+	}
+
+	if fstype := getFstypeFromFindmnt(ctx, dev.MountPoint); fstype != "" {
+		dev.FSType = fstype
+		cache[dev.MountPoint] = fstype
+		log.Logger.Debugw("retrieved fstype from findmnt", "dev", dev.Name, "mount_point", dev.MountPoint, "fstype", fstype)
+	}
+}
+
+// Maximum recursion depth to prevent stack overflow.
+// Real-world block device hierarchies are typically 3-5 levels deep:
+//   - Simple: disk → partition (2 levels)
+//   - LVM: disk → partition → lvm (3 levels)
+//   - Complex LVM: disk → LVM PV → LVM rimage → LVM LV (4 levels)
+//   - RAID + LVM: disk → partition → raid → lvm (4 levels)
+//
+// Setting limit to 20 provides a large safety margin while preventing infinite loops
+// from malformed data or circular references.
+const maxRecursionDepth = 20
+
+// processBlockDevice recursively processes a block device and all its descendants.
+// This recursive approach is necessary to handle deeply nested device hierarchies
+// that were causing false "no block device found" warnings.
+//
+// GitHub Issue: https://github.com/NVIDIA/fleet-intelligence-sdk/issues/1107
+// Problem: The previous implementation only checked direct children, causing devices
+// with nested hierarchies (e.g., disk → LVM PV → LVM rimage → LVM LV) to be filtered
+// out when intermediate layers had no mountpoint, even though the final descendant did.
+//
+// Solution: Recursively traverse the entire device tree. A device is included if:
+// 1. It matches all filters (fstype, device type, mountpoint), OR
+// 2. Any of its descendants (at any depth) match all filters
+//
+// This ensures that parent devices are preserved when any descendant in the chain
+// has a mountpoint, fixing issues with:
+// - Multi-level LVM setups (nvme → rimage → final LV with mountpoint)
+// - RAID arrays (disk → partition → raid device with mountpoint)
+// - Any nested storage configuration where mountpoints appear at leaf nodes
+//
+// Parameters:
+//   - ctx: Context for logging
+//   - dev: The device to process (modified in place)
+//   - parentName: Name of the parent device (for setting ParentDeviceName)
+//   - depth: Current recursion depth (for stack overflow protection)
+//   - op: Filter functions to apply
+//   - fstypeCache: Cache for findmnt results to avoid duplicate calls
+//
+// Returns: true if the device should be included in the results, false otherwise
+func processBlockDevice(
+	ctx context.Context,
+	dev *BlockDevice,
+	parentName string,
+	depth int,
+	op *Op,
+	fstypeCache map[string]string,
+) bool {
+	// Protect against stack overflow from malformed data or circular references
+	if depth > maxRecursionDepth {
+		log.Logger.Warnw("maximum recursion depth exceeded, possible circular reference or malformed data",
+			"dev", dev.Name, "depth", depth, "max_depth", maxRecursionDepth)
+		return false
+	}
+
+	fillFstypeFromFindmnt(ctx, dev, fstypeCache)
+
+	log.Logger.Debugw("processing block device",
+		"dev", dev.Name,
+		"fstype", dev.FSType,
+		"type", dev.Type,
+		"mount_point", dev.MountPoint,
+		"parent", parentName,
+		"depth", depth)
+
+	// Check if this device matches all filters
+	fstypeMatch := op.matchFuncFstype(dev.FSType)
+	deviceTypeMatch := op.matchFuncDeviceType(dev.Type)
+	mountPointMatch := op.matchFuncMountPoint(dev.MountPoint)
+	matches := fstypeMatch && deviceTypeMatch && mountPointMatch
+
+	// Recursively process all children to determine if any descendants match.
+	// We must process ALL children even if this device matches, because we need
+	// to filter children that don't match and preserve the tree structure.
+	matchedChildren := make([]BlockDevice, 0, len(dev.Children))
+	for j := range dev.Children {
+		child := &dev.Children[j]
+		child.ParentDeviceName = dev.Name
+		// Increment depth for recursive call to track nesting level
+		if include := processBlockDevice(ctx, child, dev.Name, depth+1, op, fstypeCache); include {
+			matchedChildren = append(matchedChildren, *child)
+		}
+	}
+	dev.Children = matchedChildren
+
+	// Include this device if:
+	// 1. It matches all filters itself, OR
+	// 2. It has at least one descendant that matches (at any depth)
+	//
+	// This is critical for issue #1107: parent devices with no mountpoint
+	// must still be included if they have grandchildren with mountpoints.
+	if matches {
+		log.Logger.Debugw("including block device", "dev", dev.Name, "reason", "matched filters")
+		return true
+	}
+	if len(matchedChildren) > 0 {
+		log.Logger.Debugw("including block device",
+			"dev", dev.Name,
+			"reason", "matched descendants",
+			"matched_children", len(matchedChildren))
+		return true
+	}
+
+	// Device doesn't match and has no matching descendants, so exclude it
+	switch {
+	case !fstypeMatch:
+		log.Logger.Debugw("skipping block device due to fstype mismatch",
+			"dev", dev.Name, "fstype", dev.FSType)
+	case !deviceTypeMatch:
+		log.Logger.Debugw("skipping block device due to device type mismatch",
+			"dev", dev.Name, "type", dev.Type)
+	case !mountPointMatch:
+		log.Logger.Debugw("skipping block device due to mount point mismatch",
+			"dev", dev.Name, "mount_point", dev.MountPoint)
+	default:
+		log.Logger.Debugw("skipping block device (no match and no matching children)",
+			"dev", dev.Name)
+	}
+	return false
+}
+
+// parseLsblkJSON parses the "lsblk --json" output and filters devices based on provided options.
+// This function orchestrates the parsing and filtering process.
+func parseLsblkJSON(ctx context.Context, b []byte, opts ...OpOption) (BlockDevices, error) {
+	if len(b) == 0 {
+		return nil, errors.New("empty input provided to Parse")
+	}
+
+	op := &Op{}
+	if err := op.applyOpts(opts); err != nil {
+		return nil, err
+	}
+
+	raw := make(map[string][]BlockDevice, 1)
+	if err := json.Unmarshal(b, &raw); err != nil {
+		log.Logger.Debugw("failed to unmarshal lsblk output", "error", err, "bytes", len(b), "raw_input", string(b))
+		return nil, fmt.Errorf("failed to unmarshal lsblk output (len=%d): %w", len(b), err)
+	}
+
+	rawDevs, ok := raw[outputKey]
+	if !ok {
+		return nil, fmt.Errorf("unexpected lsblk output format, missing %q key", outputKey)
+	}
+
+	// Create a cache for findmnt results to avoid duplicate calls
+	fstypeCache := make(map[string]string)
+	devs := make(BlockDevices, 0, len(rawDevs))
+
+	// Process all top-level devices (starting at depth 0)
+	for i := range rawDevs {
+		parentDev := &rawDevs[i]
+		if processBlockDevice(ctx, parentDev, "", 0, op, fstypeCache) {
+			devs = append(devs, *parentDev)
+		}
+	}
+
+	sort.Slice(devs, func(i, j int) bool {
+		return devs[i].Name < devs[j].Name
+	})
+	log.Logger.Debugw("parsed block devices", "devs", len(devs))
+
+	return devs, nil
+}
+
+// parseLsblkPairs parses the "lsblk --pairs" output.
+func parseLsblkPairs(ctx context.Context, b []byte, opts ...OpOption) (BlockDevices, error) {
+	if len(b) == 0 {
+		return nil, errors.New("empty input provided to ParsePairs")
+	}
+
+	devs := make(BlockDevices, 0)
+
+	// parse each line
+	lines := strings.Split(string(b), "\n")
+	for _, line := range lines {
+		// skip empty line
+		if len(line) == 0 {
+			continue
+		}
+
+		// parse each row then return BlockDevice
+		disk, err := parseLineToDisk(line)
+		if err != nil {
+			return nil, err
+		}
+
+		// parse each block then add blocks slice
+		devs = append(devs, disk)
+	}
+
+	// build disk hierarchy
+	devs = buildDiskHierarchy(devs)
+	if len(devs) == 0 {
+		return nil, errors.New("build disk hierarchy failed")
+	}
+
+	// to JSON bytes
+	jsonData, err := json.MarshalIndent(struct {
+		BlockDevices BlockDevices `json:"blockdevices"`
+	}{BlockDevices: devs}, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal lsblk-blockdevices json mode")
+	}
+
+	return parseLsblkJSON(ctx, jsonData, opts...)
+}
+
+func parseLineToDisk(line string) (BlockDevice, error) {
+	disk := BlockDevice{}
+	parts := strings.Fields(line)
+
+	for _, part := range parts {
+		kv := strings.Split(part, "=")
+		if len(kv) != 2 {
+			continue
+		}
+
+		key, value := strings.TrimSpace(kv[0]), strings.Trim(strings.TrimSpace(kv[1]), "\"")
+		switch key {
+		case "NAME":
+			disk.Name = value
+		case "TYPE":
+			disk.Type = value
+		case "SIZE":
+			disk.Size = toCustomUint64(value)
+		case "ROTA":
+			disk.Rota = toCustomBool(value)
+		case "SERIAL":
+			disk.Serial = value
+		case "WWN":
+			disk.WWN = value
+		case "VENDOR":
+			disk.Vendor = value
+		case "MODEL":
+			disk.Model = value
+		case "REV":
+			disk.Rev = value
+		case "MOUNTPOINT":
+			disk.MountPoint = value
+		case "FSTYPE":
+			disk.FSType = value
+		case "FSUSED":
+			disk.FSUsed = toCustomUint64(value)
+		case "PARTUUID":
+			disk.PartUUID = value
+		case "PKNAME":
+			disk.PKName = value
+		}
+	}
+
+	return disk, nil
+}
+
+// getFstypeFromFindmnt tries to get the filesystem type using findmnt command
+// Returns empty string if unable to get fstype
+func getFstypeFromFindmnt(ctx context.Context, mountPoint string) string {
+	if mountPoint == "" {
+		return ""
+	}
+
+	mntOutput, err := findMntExecutor(ctx, mountPoint)
+	if err != nil {
+		log.Logger.Warnw("failed to get fstype from findmnt", "mount_point", mountPoint, "error", err)
+		return ""
+	}
+
+	if len(mntOutput.Filesystems) > 0 && mntOutput.Filesystems[0].Fstype != "" {
+		return mntOutput.Filesystems[0].Fstype
+	}
+
+	return ""
+}
+
+func buildDiskHierarchy(disks BlockDevices) (finalDisks BlockDevices) {
+	// Recursive function to nest child disks into their parent disks
+	var recursiveAdd func(disk BlockDevice, disks *BlockDevices)
+
+	// Implementation of the recursive nesting function
+	recursiveAdd = func(disk BlockDevice, disks *BlockDevices) {
+		// Find the parent disk of the current disk and recursively nest
+		for i := range *disks {
+			if (*disks)[i].Name == disk.PKName {
+				// Found the parent disk, add the current disk to the parent's Children
+				(*disks)[i].Children = append((*disks)[i].Children, disk)
+				return
+			}
+
+			// If the current disk has children, continue recursively
+			recursiveAdd(disk, (*BlockDevices)(&(*disks)[i].Children))
+		}
+	}
+
+	// Add disks that don't have a parent disk to finalDisks
+	for i := range disks {
+		if disks[i].PKName == "" {
+			finalDisks = append(finalDisks, disks[i])
+		}
+	}
+
+	// Perform recursive nesting for each disk
+	for i := range disks {
+		if disks[i].PKName != "" {
+			recursiveAdd(disks[i], &finalDisks)
+		}
+	}
+
+	return finalDisks
+}
+
+func (blks BlockDevices) RenderTable(wr io.Writer) {
+	table := tablewriter.NewWriter(wr)
+	table.SetHeader([]string{"Name", "Parent", "Type", "FSType", "Size", "Mount Point"})
+
+	for _, blk := range blks {
+		table.Append([]string{
+			blk.Name,
+			"",
+			blk.Type,
+			blk.FSType,
+			humanize.IBytes(blk.Size.Uint64),
+			blk.MountPoint,
+		})
+
+		for _, child := range blk.Children {
+			table.Append([]string{
+				child.Name,
+				child.ParentDeviceName,
+				child.Type,
+				child.FSType,
+				humanize.IBytes(child.Size.Uint64),
+				child.MountPoint,
+			})
+		}
+	}
+
+	table.Render()
+}
+
+// Returns the total bytes of all block devices.
+func (blks BlockDevices) GetTotalBytes() uint64 {
+	var total uint64
+	for _, blk := range blks {
+		total += blk.Size.Uint64
+	}
+	return total
+}
+
+// "63.9M" should be parsed to 63.9 million (63900000)
+func parseLsblkSize(data []byte) (uint64, error) {
+	s := strings.TrimSpace(string(data))
+	if len(s) == 0 || s == "null" {
+		return 0, nil
+	}
+
+	// remove quotes if present
+	if len(s) > 1 && s[0] == '"' && s[len(s)-1] == '"' {
+		s = strings.TrimSpace(s[1 : len(s)-1])
+		if s == "" {
+			return 0, nil
+		}
+	}
+
+	// try to parse as a human-readable size
+	val, err := humanize.ParseBytes(s)
+
+	if err != nil {
+		// if failed, try to parse as a plain number
+		if numVal, numErr := strconv.ParseUint(s, 10, 64); numErr == nil {
+			return numVal, nil
+		}
+
+		if err := json.Unmarshal([]byte(s), &val); err != nil {
+			return 0, fmt.Errorf("failed to unmarshal uint64: %w", err)
+		}
+	}
+
+	return val, nil
+}
+
+// CustomUint64 to handle Size lsblk output - 8001563222016 or "8001563222016"
+type CustomUint64 struct {
+	Uint64 uint64
+}
+
+// MarshalJSON customizes size marshaling
+func (ci *CustomUint64) MarshalJSON() ([]byte, error) {
+	return []byte(strconv.FormatUint(ci.Uint64, 10)), nil
+}
+
+// UnmarshalJSON customizes string size unmarshaling
+// "63.9M" should be parsed to 63.9 million (63900000)
+func (ci *CustomUint64) UnmarshalJSON(data []byte) error {
+	var err error
+	ci.Uint64, err = parseLsblkSize(data)
+	return err
+}
+
+func toCustomUint64(value string) CustomUint64 {
+	n, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return CustomUint64{}
+	}
+	return CustomUint64{n}
+}
+
+// CustomBool to handle Rota lsblk output - true/false or "1"/"0"
+type CustomBool struct {
+	Bool bool
+}
+
+// MarshalJSON customizes rota marshaling
+func (cb CustomBool) MarshalJSON() ([]byte, error) {
+	return json.Marshal(cb.Bool)
+}
+
+// UnmarshalJSON customizes string rota unmarshaling
+func (cb *CustomBool) UnmarshalJSON(data []byte) error {
+	switch strings.TrimSpace(string(data)) {
+	case "\"true\"", `true`, "\"1\"", `1`:
+		cb.Bool = true
+		return nil
+	case "\"false\"", `false`, "\"0\"", `0`, `""`:
+		cb.Bool = false
+		return nil
+	default:
+		return errors.New("CustomBool: parsing \"" + string(data) + "\": unknown value")
+	}
+}
+
+func toCustomBool(value string) CustomBool {
+	n, err := strconv.ParseBool(value)
+	if err != nil {
+		return CustomBool{}
+	}
+	return CustomBool{n}
+}

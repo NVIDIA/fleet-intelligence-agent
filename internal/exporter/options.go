@@ -21,10 +21,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/leptonai/gpud/components"
-	"github.com/leptonai/gpud/pkg/eventstore"
-	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
-	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
+	"github.com/NVIDIA/fleet-intelligence-sdk/components"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
+	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
+	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )

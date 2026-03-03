@@ -6,11 +6,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/netutil"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/systemd"
 	"github.com/dustin/go-humanize"
-	"github.com/leptonai/gpud/pkg/log"
-	"github.com/leptonai/gpud/pkg/netutil"
-	"github.com/leptonai/gpud/pkg/sqlite"
-	"github.com/leptonai/gpud/pkg/systemd"
 	"github.com/urfave/cli"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/cmdutil"

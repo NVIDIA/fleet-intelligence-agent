@@ -22,8 +22,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/leptonai/gpud/pkg/errdefs"
-	pkgfaultinjector "github.com/leptonai/gpud/pkg/fault-injector"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/errdefs"
+	pkgfaultinjector "github.com/NVIDIA/fleet-intelligence-sdk/pkg/fault-injector"
 )
 
 const URLPathInjectFault = "/inject-fault"

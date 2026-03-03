@@ -1,0 +1,184 @@
+package sxid
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
+)
+
+func createSXidEvent(eventTime time.Time, sxid uint64, eventType apiv1.EventType, suggestedAction apiv1.RepairActionType) eventstore.Event {
+	sxidErr := sxidErrorEventDetail{
+		SXid:       sxid,
+		DataSource: "test",
+		DeviceUUID: "PCI:0000:9b:00",
+		SuggestedActionsByGPUd: &apiv1.SuggestedActions{
+			RepairActions: []apiv1.RepairActionType{suggestedAction},
+		},
+	}
+	sxidData, _ := json.Marshal(sxidErr)
+	ret := eventstore.Event{
+		Name:      EventNameErrorSXid,
+		Type:      string(eventType),
+		ExtraInfo: map[string]string{EventKeyErrorSXidData: string(sxidData)},
+	}
+	if !eventTime.IsZero() {
+		ret.Time = eventTime
+	}
+	return ret
+}
+
+func TestStateUpdateBasedOnEvents(t *testing.T) {
+	t.Run("no event found", func(t *testing.T) {
+		state := evolveHealthyState(eventstore.Events{})
+		assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health)
+		assert.Equal(t, "SXIDComponent is healthy", state.Reason)
+	})
+
+	t.Run("critical sxid", func(t *testing.T) {
+		events := eventstore.Events{
+			createSXidEvent(time.Time{}, 123, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
+		}
+		state := evolveHealthyState(events)
+		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, state.Health)
+		assert.Equal(t, "SXID 123 detected on PCI:0000:9b:00", state.Reason)
+	})
+
+	t.Run("fatal xid", func(t *testing.T) {
+		events := eventstore.Events{
+			createSXidEvent(time.Time{}, 456, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
+		}
+		state := evolveHealthyState(events)
+		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, state.Health)
+		assert.Equal(t, "SXID 456 detected on PCI:0000:9b:00", state.Reason)
+	})
+
+	t.Run("reboot recover", func(t *testing.T) {
+		events := eventstore.Events{
+			{Name: "reboot"},
+			createSXidEvent(time.Time{}, 789, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
+		}
+		state := evolveHealthyState(events)
+		assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health)
+	})
+
+	t.Run("reboot multiple time cannot recover", func(t *testing.T) {
+		events := eventstore.Events{
+			createSXidEvent(time.Time{}, 94, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
+			{Name: "reboot"},
+			createSXidEvent(time.Time{}, 94, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
+			{Name: "reboot"},
+			createSXidEvent(time.Time{}, 94, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
+			createSXidEvent(time.Time{}, 31, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
+		}
+		state := evolveHealthyState(events)
+		assert.Equal(t, apiv1.RepairActionTypeHardwareInspection, state.SuggestedActions.RepairActions[0])
+	})
+
+	t.Run("EmptyEvents_ReturnsHealthy", func(t *testing.T) {
+		events := eventstore.Events{}
+		state := evolveHealthyState(events)
+		assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health)
+		assert.Nil(t, state.SuggestedActions)
+		assert.Equal(t, "SXIDComponent is healthy", state.Reason)
+	})
+
+	t.Run("rebootCountingResetAfterPurgeMatchesLegacy", func(t *testing.T) {
+		now := time.Now()
+		localEvents := eventstore.Events{
+			createSXidEvent(now, 94, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
+			{Time: now.Add(-1 * time.Minute), Name: "SetHealthy"},
+			createSXidEvent(now.Add(-2*time.Minute), 94, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
+			createSXidEvent(now.Add(-4*time.Minute), 94, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
+		}
+
+		trimmed := trimEventsAfterSetHealthy(localEvents)
+		require.Len(t, trimmed, 1)
+		assert.Equal(t, now.Unix(), trimmed[0].Time.Unix())
+
+		rebootEvents := eventstore.Events{
+			{Time: now.Add(-3 * time.Minute), Name: "reboot"},
+			{Time: now.Add(-5 * time.Minute), Name: "reboot"},
+		}
+
+		merged := mergeEvents(rebootEvents, trimmed)
+		require.Len(t, merged, 3)
+		assert.Equal(t, []string{"error_sxid", "reboot", "reboot"}, []string{merged[0].Name, merged[1].Name, merged[2].Name})
+
+		state := evolveHealthyState(merged)
+		require.NotNil(t, state.SuggestedActions)
+		require.NotEmpty(t, state.SuggestedActions.RepairActions)
+		assert.Equal(t, apiv1.RepairActionTypeRebootSystem, state.SuggestedActions.RepairActions[0])
+		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, state.Health)
+	})
+
+	t.Run("invalid sxid", func(t *testing.T) {
+		events := eventstore.Events{
+			{
+				Name:      EventNameErrorSXid,
+				Type:      string(apiv1.EventTypeFatal),
+				ExtraInfo: map[string]string{EventKeyErrorSXidData: "invalid json"},
+			},
+		}
+		state := evolveHealthyState(events)
+		assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health)
+	})
+}
+
+func Test_sxidErrorEventDetailJSON(t *testing.T) {
+	testTime := metav1.Time{Time: time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)}
+
+	t.Run("successful marshaling", func(t *testing.T) {
+		sxidErr := sxidErrorEventDetail{
+			Time:       testTime,
+			DataSource: "test-source",
+			DeviceUUID: "test-uuid",
+			SXid:       123,
+			SuggestedActionsByGPUd: &apiv1.SuggestedActions{
+				RepairActions: []apiv1.RepairActionType{apiv1.RepairActionTypeRebootSystem},
+			},
+		}
+
+		jsonBytes, err := json.Marshal(sxidErr)
+		assert.NoError(t, err)
+		assert.NotNil(t, jsonBytes)
+
+		// Verify JSON structure by unmarshaling
+		var unmarshaled sxidErrorEventDetail
+		err = json.Unmarshal(jsonBytes, &unmarshaled)
+		assert.NoError(t, err)
+		assert.Equal(t, sxidErr.Time.UTC(), unmarshaled.Time.UTC())
+		assert.Equal(t, sxidErr.DataSource, unmarshaled.DataSource)
+		assert.Equal(t, sxidErr.DeviceUUID, unmarshaled.DeviceUUID)
+		assert.Equal(t, sxidErr.SXid, unmarshaled.SXid)
+		assert.Equal(t, sxidErr.SuggestedActionsByGPUd.RepairActions, unmarshaled.SuggestedActionsByGPUd.RepairActions)
+	})
+
+	t.Run("minimal fields", func(t *testing.T) {
+		sxidErr := sxidErrorEventDetail{
+			Time:       testTime,
+			DataSource: "test-source",
+			DeviceUUID: "test-uuid",
+			SXid:       123,
+		}
+
+		jsonBytes, err := json.Marshal(sxidErr)
+		assert.NoError(t, err)
+		assert.NotNil(t, jsonBytes)
+
+		var unmarshaled sxidErrorEventDetail
+		err = json.Unmarshal(jsonBytes, &unmarshaled)
+		assert.NoError(t, err)
+		assert.Equal(t, sxidErr.Time.UTC(), unmarshaled.Time.UTC())
+		assert.Equal(t, sxidErr.DataSource, unmarshaled.DataSource)
+		assert.Equal(t, sxidErr.DeviceUUID, unmarshaled.DeviceUUID)
+		assert.Equal(t, sxidErr.SXid, unmarshaled.SXid)
+		assert.Nil(t, unmarshaled.SuggestedActionsByGPUd)
+	})
+}

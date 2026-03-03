@@ -22,9 +22,9 @@ import (
 	"testing"
 	"time"
 
-	apiv1 "github.com/leptonai/gpud/api/v1"
-	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
-	"github.com/leptonai/gpud/pkg/providers"
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/providers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

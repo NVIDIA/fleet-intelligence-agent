@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	apiv1 "github.com/leptonai/gpud/api/v1"
-	"github.com/leptonai/gpud/pkg/eventstore"
-	"github.com/leptonai/gpud/pkg/metrics"
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"

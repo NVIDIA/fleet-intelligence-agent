@@ -25,6 +25,8 @@ ENV GONOSUMDB=${GOPRIVATE}
 ENV GOWORK=off
 
 COPY go.mod go.sum ./
+# Local replace target must exist before go mod download (replace => ./third_party/fleet-intelligence-sdk).
+COPY third_party/fleet-intelligence-sdk ./third_party/fleet-intelligence-sdk
 
 # Download modules with ephemeral credentials (not persisted in image layers).
 RUN --mount=type=ssh /bin/sh -ceu 'go mod download'

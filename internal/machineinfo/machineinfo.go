@@ -23,11 +23,11 @@ import (
 	"os"
 	"strings"
 
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	pkgmachineinfo "github.com/NVIDIA/fleet-intelligence-sdk/pkg/machine-info"
+	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/providers"
 	"github.com/dustin/go-humanize"
-	apiv1 "github.com/leptonai/gpud/api/v1"
-	pkgmachineinfo "github.com/leptonai/gpud/pkg/machine-info"
-	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
-	"github.com/leptonai/gpud/pkg/providers"
 	"github.com/olekukonko/tablewriter"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 

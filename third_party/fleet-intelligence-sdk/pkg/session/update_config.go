@@ -1,0 +1,126 @@
+package session
+
+import (
+	"context"
+	"encoding/json"
+	"time"
+
+	componentsnvidiagpucounts "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/gpu-counts"
+	componentsnvidiainfiniband "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband"
+	componentsnvidiainfinibanditypes "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband/types"
+	componentsnvidianvlink "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/nvlink"
+	componentsxid "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/xid"
+	componentsnfs "github.com/NVIDIA/fleet-intelligence-sdk/components/nfs"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	pkgnfschecker "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nfs-checker"
+)
+
+func (s *Session) processUpdateConfig(configMap map[string]string, resp *Response) {
+	if len(configMap) == 0 {
+		return
+	}
+
+	setComponents := make(map[string]any)
+	for componentName, value := range configMap {
+		log.Logger.Infow("processing update config request", "component", componentName, "config", value)
+
+		switch componentName {
+		case componentsnvidiainfiniband.Name:
+			setComponents[componentName] = struct{}{}
+			var updateCfg componentsnvidiainfinibanditypes.ExpectedPortStates
+			if err := json.Unmarshal([]byte(value), &updateCfg); err != nil {
+				log.Logger.Warnw("failed to unmarshal infiniband config", "error", err)
+				resp.Error = err.Error()
+				return
+			}
+			if s.setDefaultIbExpectedPortStatesFunc != nil {
+				s.setDefaultIbExpectedPortStatesFunc(updateCfg)
+			}
+
+		case componentsnvidianvlink.Name:
+			setComponents[componentName] = struct{}{}
+			var updateCfg componentsnvidianvlink.ExpectedLinkStates
+			if err := json.Unmarshal([]byte(value), &updateCfg); err != nil {
+				log.Logger.Warnw("failed to unmarshal nvlink config", "error", err)
+				resp.Error = err.Error()
+				return
+			}
+			if s.setDefaultNVLinkExpectedLinkStatesFunc != nil {
+				s.setDefaultNVLinkExpectedLinkStatesFunc(updateCfg)
+			}
+
+		case componentsnvidiagpucounts.Name:
+			setComponents[componentName] = struct{}{}
+			var updateCfg componentsnvidiagpucounts.ExpectedGPUCounts
+			if err := json.Unmarshal([]byte(value), &updateCfg); err != nil {
+				log.Logger.Warnw("failed to unmarshal nvidia gpu counts config", "error", err)
+				resp.Error = err.Error()
+				return
+			}
+			if s.setDefaultGPUCountsFunc != nil {
+				s.setDefaultGPUCountsFunc(updateCfg)
+			}
+
+		case componentsxid.Name:
+			setComponents[componentName] = struct{}{}
+			var updateCfg componentsxid.RebootThreshold
+			if err := json.Unmarshal([]byte(value), &updateCfg); err != nil {
+				log.Logger.Warnw("failed to unmarshal xid config", "error", err)
+				resp.Error = err.Error()
+				return
+			}
+			if s.setDefaultXIDRebootThresholdFunc != nil {
+				s.setDefaultXIDRebootThresholdFunc(updateCfg)
+			}
+
+		case componentsnfs.Name:
+			setComponents[componentName] = struct{}{}
+			var updateCfgs pkgnfschecker.Configs
+			if err := json.Unmarshal([]byte(value), &updateCfgs); err != nil {
+				log.Logger.Warnw("failed to unmarshal nfs config", "error", err)
+				resp.Error = err.Error()
+				return
+			}
+
+			// if NFS validation takes too long, it can block other session requests
+			// so we set a timeout and do it async
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				err := updateCfgs.Validate(ctx)
+				cancel()
+				if err != nil {
+					log.Logger.Warnw("invalid nfs config but proceeding with update to allow the user to fix the config", "error", err)
+				}
+
+				if s.setDefaultNFSGroupConfigsFunc != nil {
+					s.setDefaultNFSGroupConfigsFunc(updateCfgs)
+				}
+			}()
+
+		default:
+			log.Logger.Warnw("unsupported component for updateConfig", "component", componentName)
+		}
+	}
+
+	// fallback to default if the component is not set
+	if _, ok := setComponents[componentsnvidiainfiniband.Name]; !ok && s.setDefaultIbExpectedPortStatesFunc != nil {
+		log.Logger.Infow("falling back to default empty infiniband config")
+		s.setDefaultIbExpectedPortStatesFunc(componentsnvidiainfinibanditypes.ExpectedPortStates{})
+	}
+	if _, ok := setComponents[componentsnvidianvlink.Name]; !ok && s.setDefaultNVLinkExpectedLinkStatesFunc != nil {
+		log.Logger.Infow("falling back to default empty nvlink config")
+		s.setDefaultNVLinkExpectedLinkStatesFunc(componentsnvidianvlink.ExpectedLinkStates{})
+	}
+	if _, ok := setComponents[componentsnvidiagpucounts.Name]; !ok && s.setDefaultGPUCountsFunc != nil {
+		log.Logger.Infow("falling back to default empty nvidia gpu counts config")
+		s.setDefaultGPUCountsFunc(componentsnvidiagpucounts.ExpectedGPUCounts{})
+	}
+	if _, ok := setComponents[componentsnfs.Name]; !ok && s.setDefaultNFSGroupConfigsFunc != nil {
+		log.Logger.Infow("falling back to default empty nfs config")
+		s.setDefaultNFSGroupConfigsFunc(pkgnfschecker.Configs{})
+	}
+	if _, ok := setComponents[componentsxid.Name]; !ok && s.setDefaultXIDRebootThresholdFunc != nil {
+		log.Logger.Infow("falling back to default xid config")
+		s.setDefaultXIDRebootThresholdFunc(componentsxid.RebootThreshold{Threshold: componentsxid.DefaultRebootThreshold})
+	}
+}

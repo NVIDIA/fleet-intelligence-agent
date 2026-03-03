@@ -25,12 +25,12 @@ import (
 	"testing"
 	"time"
 
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	"github.com/NVIDIA/fleet-intelligence-sdk/components"
+	pkgfaultinjector "github.com/NVIDIA/fleet-intelligence-sdk/pkg/fault-injector"
+	pkgkmsgwriter "github.com/NVIDIA/fleet-intelligence-sdk/pkg/kmsg/writer"
+	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
 	"github.com/gin-gonic/gin"
-	apiv1 "github.com/leptonai/gpud/api/v1"
-	"github.com/leptonai/gpud/components"
-	pkgfaultinjector "github.com/leptonai/gpud/pkg/fault-injector"
-	pkgkmsgwriter "github.com/leptonai/gpud/pkg/kmsg/writer"
-	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

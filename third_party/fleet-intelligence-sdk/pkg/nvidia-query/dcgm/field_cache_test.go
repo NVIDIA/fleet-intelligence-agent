@@ -1,0 +1,131 @@
+package dcgm
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
+	"github.com/stretchr/testify/assert"
+)
+
+// TestFieldValueCache_SetupFailureStoresError documents that setup errors
+// are stored in lastError and can be retrieved via GetResult().
+func TestFieldValueCache_SetupFailureStoresError(t *testing.T) {
+	ctx := context.Background()
+
+	// Create cache with nil instance (simulates DCGM unavailable)
+	fc := NewFieldValueCache(ctx, nil, time.Second)
+
+	// Attempt setup with no instance should return early (no error)
+	err := fc.SetupFieldWatchingWithName("test-group")
+	assert.NoError(t, err, "setup with nil instance should return nil")
+
+	// GetResult should return an error because instance is nil
+	result, err := fc.GetResult(nil)
+	assert.Error(t, err, "GetResult with nil instance should return error")
+	assert.Contains(t, err.Error(), "DCGM instance not available", "error should indicate DCGM unavailable")
+	assert.Empty(t, result, "GetResult with nil instance should return empty result")
+}
+
+// TestFieldValueCache_GetResultReturnsLastError verifies that when lastError
+// is set (e.g., from a setup failure), GetResult() returns that error.
+func TestFieldValueCache_GetResultReturnsLastError(t *testing.T) {
+	ctx := context.Background()
+	fc := NewFieldValueCache(ctx, nil, time.Second)
+
+	// Manually set lastError to simulate a setup failure
+	fc.mu.Lock()
+	fc.lastError = assert.AnError
+	fc.mu.Unlock()
+
+	// GetResult should return the stored error
+	result, err := fc.GetResult(nil)
+	assert.Error(t, err, "GetResult should return lastError")
+	assert.Equal(t, assert.AnError, err, "GetResult should return the exact error stored")
+	assert.Empty(t, result, "GetResult should return empty result when error is set")
+}
+
+// TestFieldValueCache_NoInstanceReturnsError documents behavior when
+// instance is nil - it should return an error to components.
+func TestFieldValueCache_NoInstanceReturnsError(t *testing.T) {
+	ctx := context.Background()
+	fc := NewFieldValueCache(ctx, nil, time.Second)
+
+	result, err := fc.GetResult(nil)
+	assert.Error(t, err, "GetResult with nil instance should return error")
+	assert.Contains(t, err.Error(), "DCGM instance not available", "error should indicate DCGM unavailable")
+	assert.Empty(t, result, "GetResult with nil instance should return empty result")
+}
+
+// TestFieldValueCache_SetupWithNoFields documents that setup with no
+// registered fields returns early without error.
+func TestFieldValueCache_SetupWithNoFields(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a mock instance that returns DCGMExists() = true but no watched fields
+	mockInstance := &mockDCGMInstance{dcgmExists: true}
+	fc := NewFieldValueCache(ctx, mockInstance, time.Second)
+
+	// Setup should return early because no fields are registered
+	err := fc.SetupFieldWatchingWithName("test-group")
+	assert.NoError(t, err, "setup with no fields should return nil")
+}
+
+// mockDCGMInstance is a minimal mock for testing field cache behavior
+type mockDCGMInstance struct {
+	dcgmExists bool
+}
+
+func (m *mockDCGMInstance) DCGMExists() bool {
+	return m.dcgmExists
+}
+
+func (m *mockDCGMInstance) AddEntityToGroup(entityID uint) error {
+	return nil
+}
+
+func (m *mockDCGMInstance) AddHealthWatch(system dcgm.HealthSystem) error {
+	return nil
+}
+
+func (m *mockDCGMInstance) RemoveHealthWatch(system dcgm.HealthSystem) error {
+	return nil
+}
+
+func (m *mockDCGMInstance) HealthCheck(system dcgm.HealthSystem) (dcgm.HealthResult, []dcgm.Incident, error) {
+	var result dcgm.HealthResult
+	return result, nil, nil
+}
+
+func (m *mockDCGMInstance) AddFieldsToWatch(fields []dcgm.Short) error {
+	return nil
+}
+
+func (m *mockDCGMInstance) GetWatchedFields() []dcgm.Short {
+	return nil // No fields registered
+}
+
+func (m *mockDCGMInstance) RemoveFieldsFromWatch(fields []dcgm.Short) error {
+	return nil
+}
+
+func (m *mockDCGMInstance) GetLatestValuesForFields(deviceID uint, fields []dcgm.Short) ([]dcgm.FieldValue_v1, error) {
+	return nil, nil
+}
+
+func (m *mockDCGMInstance) GetGroupHandle() dcgm.GroupHandle {
+	return dcgm.GroupHandle{}
+}
+
+func (m *mockDCGMInstance) GetDevices() []DeviceInfo {
+	return nil
+}
+
+func (m *mockDCGMInstance) GetExistingPolicies() *dcgm.PolicyStatus {
+	return nil
+}
+
+func (m *mockDCGMInstance) Shutdown() error {
+	return nil
+}

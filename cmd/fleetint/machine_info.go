@@ -6,11 +6,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/leptonai/gpud/pkg/log"
-	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
-	"github.com/leptonai/gpud/pkg/netutil"
-	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
-	"github.com/leptonai/gpud/pkg/sqlite"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/netutil"
+	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 	"github.com/urfave/cli"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/cmdutil"
