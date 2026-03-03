@@ -147,7 +147,7 @@ jobs:
 
       - name: Clean previous build artifacts
         run: |
-          rm -f gpuhealth-${{ matrix.goos }}-${{ matrix.goarch }} || true
+          rm -f fleetint-${{ matrix.goos }}-${{ matrix.goarch }} || true
 
       - name: Build all packages
         env:
@@ -165,13 +165,13 @@ jobs:
           CGO_ENABLED: 1
           CC: ${{ matrix.goarch == 'arm64' && 'aarch64-linux-gnu-gcc' || 'gcc' }}
           CXX: ${{ matrix.goarch == 'arm64' && 'aarch64-linux-gnu-g++' || 'g++' }}
-        run: go build -o gpuhealth-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/gpuhealth
+        run: go build -o fleetint-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/fleetint
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: gpuhealth-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: gpuhealth-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: fleetint-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: fleetint-${{ matrix.goos }}-${{ matrix.goarch }}
           retention-days: 7
 
   sonarqube:
