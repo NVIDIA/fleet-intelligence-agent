@@ -1,17 +1,17 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: {{ include "gpuhealth-agent.fullname" . }}
+  name: {{ include "fleet-intelligence-agent.fullname" . }}
   labels:
-    {{- include "gpuhealth-agent.labels" . | nindent 4 }}
+    {{- include "fleet-intelligence-agent.labels" . | nindent 4 }}
 spec:
   selector:
     matchLabels:
-      {{- include "gpuhealth-agent.selectorLabels" . | nindent 6 }}
+      {{- include "fleet-intelligence-agent.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "gpuhealth-agent.selectorLabels" . | nindent 8 }}
+        {{- include "fleet-intelligence-agent.selectorLabels" . | nindent 8 }}
     spec:
       hostPID: {{ .Values.hostPID }}
       {{- with .Values.runtimeClassName }}
@@ -20,7 +20,7 @@ spec:
       {{- if .Values.serviceAccount.name }}
       serviceAccountName: {{ .Values.serviceAccount.name | quote }}
       {{- else if .Values.serviceAccount.create }}
-      serviceAccountName: {{ include "gpuhealth-agent.fullname" . }}
+      serviceAccountName: {{ include "fleet-intelligence-agent.fullname" . }}
       {{- end }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automountToken }}
       {{- with .Values.imagePullSecrets }}
@@ -56,13 +56,13 @@ spec:
             - -c
           args:
             - >
-              /usr/bin/gpuhealth enroll
+              /usr/bin/fleetint enroll
               --endpoint {{ required "enroll.endpoint is required when enroll.enabled=true" .Values.enroll.endpoint | quote }}
-              --token "${GPUHEALTH_TOKEN}"
+              --token "${FLEETINT_TOKEN}"
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
-            - name: GPUHEALTH_TOKEN
+            - name: FLEETINT_TOKEN
               {{- if .Values.enroll.tokenSecretName }}
               valueFrom:
                 secretKeyRef:
@@ -75,13 +75,13 @@ spec:
             - name: dev
               mountPath: /dev
             - name: state
-              mountPath: /var/lib/gpuhealth
+              mountPath: /var/lib/fleetint
       {{- else if .Values.enroll.unenroll }}
         - name: unenroll
           image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
-            - /usr/bin/gpuhealth
+            - /usr/bin/fleetint
           args:
             - unenroll
           securityContext:
@@ -90,11 +90,11 @@ spec:
             - name: dev
               mountPath: /dev
             - name: state
-              mountPath: /var/lib/gpuhealth
+              mountPath: /var/lib/fleetint
       {{- end }}
       {{- end }}
       containers:
-        - name: gpuhealth-agent
+        - name: fleet-intelligence-agent
           image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
@@ -140,7 +140,7 @@ spec:
               mountPath: /var/log/fabricmanager.log
               readOnly: true
             - name: state
-              mountPath: /var/lib/gpuhealth
+              mountPath: /var/lib/fleetint
       volumes:
         - name: dev
           hostPath:
@@ -165,5 +165,5 @@ spec:
             type: FileOrCreate
         - name: state
           hostPath:
-            path: /var/lib/gpuhealth
+            path: /var/lib/fleetint
             type: DirectoryOrCreate

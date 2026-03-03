@@ -45,7 +45,7 @@ logs/
 .env.*
 config/local.yaml
 config/local.yml
-!deployments/packages/systemd/gpuhealth.env
+!deployments/packages/systemd/fleetint.env
 
 # Database files
 *.db

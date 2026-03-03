@@ -45,7 +45,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/NVIDIA/gpuhealth
+        - github.com/NVIDIA/fleet-intelligence-agent
   exclusions:
     generated: lax
     paths:

@@ -28,7 +28,7 @@ import (
 	"github.com/leptonai/gpud/pkg/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
 )
 
 // CSVFiles represents the collection of CSV files that can be generated
@@ -58,7 +58,7 @@ func (c *csvConverter) Convert(data *collector.HealthData, outputDir, timestamp 
 
 	// Write metrics CSV
 	if len(data.Metrics) > 0 {
-		filename := fmt.Sprintf("gpuhealth_metrics_%s.csv", timestamp)
+		filename := fmt.Sprintf("fleetint_metrics_%s.csv", timestamp)
 		files.MetricsFile = filename
 		if err := c.writeMetricsCSV(outputDir, filename, data); err != nil {
 			return nil, fmt.Errorf("failed to write metrics CSV: %w", err)
@@ -67,7 +67,7 @@ func (c *csvConverter) Convert(data *collector.HealthData, outputDir, timestamp 
 
 	// Write events CSV
 	if len(data.Events) > 0 {
-		filename := fmt.Sprintf("gpuhealth_events_%s.csv", timestamp)
+		filename := fmt.Sprintf("fleetint_events_%s.csv", timestamp)
 		files.EventsFile = filename
 		if err := c.writeEventsCSV(outputDir, filename, data); err != nil {
 			return nil, fmt.Errorf("failed to write events CSV: %w", err)
@@ -76,7 +76,7 @@ func (c *csvConverter) Convert(data *collector.HealthData, outputDir, timestamp 
 
 	// Write component health CSV
 	if len(data.ComponentData) > 0 {
-		filename := fmt.Sprintf("gpuhealth_component_health_%s.csv", timestamp)
+		filename := fmt.Sprintf("fleetint_component_health_%s.csv", timestamp)
 		files.ComponentsFile = filename
 		if err := c.writeComponentHealthCSV(outputDir, filename, data); err != nil {
 			return nil, fmt.Errorf("failed to write component health CSV: %w", err)
@@ -85,7 +85,7 @@ func (c *csvConverter) Convert(data *collector.HealthData, outputDir, timestamp 
 
 	// Write machine info CSV
 	if data.MachineInfo != nil {
-		filename := fmt.Sprintf("gpuhealth_machine_info_%s.csv", timestamp)
+		filename := fmt.Sprintf("fleetint_machine_info_%s.csv", timestamp)
 		files.MachineInfoFile = filename
 		if err := c.writeMachineInfoCSV(outputDir, filename, data); err != nil {
 			return nil, fmt.Errorf("failed to write machine info CSV: %w", err)

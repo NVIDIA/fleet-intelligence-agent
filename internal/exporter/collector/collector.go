@@ -29,9 +29,9 @@ import (
 	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
 	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
 
-	"github.com/NVIDIA/gpuhealth/internal/attestation"
-	"github.com/NVIDIA/gpuhealth/internal/config"
-	"github.com/NVIDIA/gpuhealth/internal/machineinfo"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
 // GenerateCollectionID generates a unique identifier for a data collection cycle

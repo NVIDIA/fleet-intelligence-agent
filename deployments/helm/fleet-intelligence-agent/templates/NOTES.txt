@@ -1,0 +1,20 @@
+✓ Fleet Intelligence Agent deployed successfully!
+
+NAMESPACE: {{ .Release.Namespace }}
+DEPLOY_ENV: {{ .Values.deployEnv }}
+{{- if .Values.enroll.enabled }}
+ENROLLMENT: Enabled
+{{- if eq .Values.deployEnv "prod" }}
+Open https://fleetint.ngc.nvidia.com to view your Fleet Intelligence status.
+{{- else }}
+Open {{ printf "https://fleetint.%s.ngc.nvidia.com" .Values.deployEnv }} to view your Fleet Intelligence status.
+{{- end }}
+{{- else }}
+ENROLLMENT: Disabled (standalone mode)
+{{- end }}
+
+Check status:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "fleet-intelligence-agent.name" . }}
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "fleet-intelligence-agent.name" . }} --tail=50
+
+Docs: https://github.com/NVIDIA/fleet-intelligence-agent

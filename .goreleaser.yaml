@@ -1,4 +1,4 @@
-# GoReleaser configuration for NVIDIA GPU Health Agent
+# GoReleaser configuration for NVIDIA Fleet Intelligence Agent
 # See https://goreleaser.com for documentation
 #
 # Usage:
@@ -28,9 +28,9 @@ before:
 
 # Build configuration
 builds:
-  - id: gpuhealth
-    main: ./cmd/gpuhealth
-    binary: gpuhealth
+  - id: fleetint
+    main: ./cmd/fleetint
+    binary: fleetint
     flags:
       - -trimpath
     goos:
@@ -42,10 +42,10 @@ builds:
       - CGO_ENABLED=1
     ldflags:
       - -s -w
-      - -X github.com/NVIDIA/gpuhealth/internal/version.Version={{.Version}}
-      - -X github.com/NVIDIA/gpuhealth/internal/version.Revision={{.FullCommit}}
-      - -X github.com/NVIDIA/gpuhealth/internal/version.BuildTimestamp={{.Date}}
-      - -X github.com/NVIDIA/gpuhealth/internal/version.Package=github.com/NVIDIA/gpuhealth
+      - -X github.com/NVIDIA/fleet-intelligence-agent/internal/version.Version={{.Version}}
+      - -X github.com/NVIDIA/fleet-intelligence-agent/internal/version.Revision={{.FullCommit}}
+      - -X github.com/NVIDIA/fleet-intelligence-agent/internal/version.BuildTimestamp={{.Date}}
+      - -X github.com/NVIDIA/fleet-intelligence-agent/internal/version.Package=github.com/NVIDIA/fleet-intelligence-agent
     # Cross-compilation setup for CGO
     overrides:
       - goos: linux
@@ -57,27 +57,27 @@ builds:
 
 # Archive configuration
 archives:
-  - id: gpuhealth-archive
-    name_template: "gpuhealth-{{ .Os }}-{{ if eq .Arch \"amd64\" }}x86_64{{ else if eq .Arch \"arm64\" }}sbsa{{ else }}{{ .Arch }}{{ end }}-{{ .Version }}"
-    wrap_in_directory: gpuhealth
+  - id: fleetint-archive
+    name_template: "fleetint-{{ .Os }}-{{ if eq .Arch \"amd64\" }}x86_64{{ else if eq .Arch \"arm64\" }}sbsa{{ else }}{{ .Arch }}{{ end }}-{{ .Version }}"
+    wrap_in_directory: fleetint
     files:
       - NOTICE
       - LICENSE
-      - src: deployments/packages/systemd/gpuhealthd.service
-        dst: systemd/gpuhealthd.service
-      - src: deployments/packages/systemd/gpuhealth.env
-        dst: env/gpuhealth
+      - src: deployments/packages/systemd/fleetintd.service
+        dst: systemd/fleetintd.service
+      - src: deployments/packages/systemd/fleetint.env
+        dst: env/fleetint
 
 # Linux package configuration
 nfpms:
-  - id: gpuhealth-deb
-    package_name: gpuhealth
-    file_name_template: "gpuhealth_{{ .Version }}_{{ if eq .Arch \"amd64\" }}amd64{{ else if eq .Arch \"arm64\" }}arm64{{ else }}{{ .Arch }}{{ end }}"
+  - id: fleetint-deb
+    package_name: fleetint
+    file_name_template: "fleetint_{{ .Version }}_{{ if eq .Arch \"amd64\" }}amd64{{ else if eq .Arch \"arm64\" }}arm64{{ else }}{{ .Arch }}{{ end }}"
     vendor: NVIDIA Corporation
-    homepage: https://github.com/NVIDIA/gpuhealth
+    homepage: https://github.com/NVIDIA/fleet-intelligence-agent
     maintainer: NVIDIA GPU Health Team
     description: |
-      NVIDIA GPU Health Agent - Lightweight GPU health monitoring and reporting agent
+      NVIDIA Fleet Intelligence Agent - Lightweight GPU health monitoring and reporting agent
       for NVIDIA GPU infrastructure.
     section: utils
     priority: optional
@@ -91,17 +91,17 @@ nfpms:
     contents:
       # License and notices
       - src: NOTICE
-        dst: /usr/share/doc/gpuhealth/NOTICE
+        dst: /usr/share/doc/fleetint/NOTICE
       # SystemD service file
-      - src: deployments/packages/systemd/gpuhealthd.service
-        dst: /usr/lib/systemd/system/gpuhealthd.service
+      - src: deployments/packages/systemd/fleetintd.service
+        dst: /usr/lib/systemd/system/fleetintd.service
         type: config|noreplace
       # Environment configuration
-      - src: deployments/packages/systemd/gpuhealth.env
-        dst: /etc/default/gpuhealth
+      - src: deployments/packages/systemd/fleetint.env
+        dst: /etc/default/fleetint
         type: config|noreplace
       # Data directory
-      - dst: /var/lib/gpuhealth
+      - dst: /var/lib/fleetint
         type: dir
         file_info:
           mode: 0755
@@ -111,14 +111,14 @@ nfpms:
       preremove: deployments/packages/scripts/prerm
       postremove: deployments/packages/scripts/postrm
 
-  - id: gpuhealth-rpm
-    package_name: gpuhealth
-    file_name_template: "gpuhealth-{{ .Version }}-1.{{ if eq .Arch \"amd64\" }}x86_64{{ else if eq .Arch \"arm64\" }}aarch64{{ else }}{{ .Arch }}{{ end }}"
+  - id: fleetint-rpm
+    package_name: fleetint
+    file_name_template: "fleetint-{{ .Version }}-1.{{ if eq .Arch \"amd64\" }}x86_64{{ else if eq .Arch \"arm64\" }}aarch64{{ else }}{{ .Arch }}{{ end }}"
     vendor: NVIDIA Corporation
-    homepage: https://github.com/NVIDIA/gpuhealth
+    homepage: https://github.com/NVIDIA/fleet-intelligence-agent
     maintainer: NVIDIA GPU Health Team
     description: |
-      NVIDIA GPU Health Agent - Lightweight GPU health monitoring and reporting agent
+      NVIDIA Fleet Intelligence Agent - Lightweight GPU health monitoring and reporting agent
       for NVIDIA GPU infrastructure.
     section: Applications/System
     formats:
@@ -131,17 +131,17 @@ nfpms:
     contents:
       # License and notices
       - src: NOTICE
-        dst: /usr/share/doc/gpuhealth/NOTICE
+        dst: /usr/share/doc/fleetint/NOTICE
       # SystemD service file
-      - src: deployments/packages/systemd/gpuhealthd.service
-        dst: /usr/lib/systemd/system/gpuhealthd.service
+      - src: deployments/packages/systemd/fleetintd.service
+        dst: /usr/lib/systemd/system/fleetintd.service
         type: config|noreplace
       # Environment configuration (RPM uses /etc/default like Debian)
-      - src: deployments/packages/systemd/gpuhealth.env
-        dst: /etc/default/gpuhealth
+      - src: deployments/packages/systemd/fleetint.env
+        dst: /etc/default/fleetint
         type: config|noreplace
       # Data directory
-      - dst: /var/lib/gpuhealth
+      - dst: /var/lib/fleetint
         type: dir
         file_info:
           mode: 0755
@@ -165,9 +165,9 @@ snapshot:
 release:
   github:
     owner: NVIDIA
-    name: gpuhealth
+    name: fleetint
   header: |
-    ## NVIDIA GPU Health Agent v{{.Version}}
+    ## NVIDIA Fleet Intelligence Agent v{{.Version}}
     
     This release includes GPU health monitoring and reporting capabilities for NVIDIA GPU infrastructure.
     
@@ -191,7 +191,7 @@ release:
     
     ### Support
     
-    For issues and questions, please visit: https://github.com/NVIDIA/gpuhealth/issues
+    For issues and questions, please visit: https://github.com/NVIDIA/fleet-intelligence-agent/issues
   draft: false
   prerelease: auto  # Auto-detect pre-release based on version (e.g., v1.0.0-beta)
   mode: replace  # Replace existing release if it exists

@@ -13,9 +13,9 @@ import (
 	"github.com/leptonai/gpud/pkg/sqlite"
 	"github.com/urfave/cli"
 
-	"github.com/NVIDIA/gpuhealth/internal/cmdutil"
-	"github.com/NVIDIA/gpuhealth/internal/config"
-	"github.com/NVIDIA/gpuhealth/internal/machineinfo"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/cmdutil"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
 func machineInfoCommand(cliContext *cli.Context) error {
@@ -33,7 +33,7 @@ func machineInfoCommand(cliContext *cli.Context) error {
 		return fmt.Errorf("failed to get state file: %w", err)
 	}
 
-	// only read the state file if it exists (existing gpuhealth login)
+	// only read the state file if it exists (existing fleetint login)
 	if _, err := os.Stat(stateFile); err == nil {
 		// Check if we have read permission to the state file
 		if _, err := os.Open(stateFile); err != nil {

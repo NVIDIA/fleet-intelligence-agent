@@ -1,6 +1,6 @@
-# NVIDIA GPU Health Agent
+# NVIDIA Fleet Intelligence Agent
 
-Lightweight GPU health monitoring and reporting agent for NVIDIA GPU infrastructure building on top of [leptonai/gpud](https://github.com/leptonai/gpud)
+Lightweight Fleet Intelligence monitoring and reporting agent for NVIDIA GPU infrastructure building on top of [leptonai/gpud](https://github.com/leptonai/gpud)
 
 ## Overview
 

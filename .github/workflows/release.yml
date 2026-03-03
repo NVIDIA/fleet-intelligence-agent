@@ -90,12 +90,12 @@ jobs:
           echo "source=$SOURCE" >> $GITHUB_OUTPUT
           echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
 
-      - name: Prepare gpuhealth-agent image tags
+      - name: Prepare fleet-intelligence-agent image tags
         id: agent_image
         run: |
           set -euo pipefail
           VERSION="${{ steps.version.outputs.version }}"
-          IMAGE="nvcr.io/0753215517602916/agent-artifact/gpuhealth-agent"
+          IMAGE="nvcr.io/0753215517602916/agent-artifact/fleet-intelligence-agent"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tags<<EOF" >> "$GITHUB_OUTPUT"
           echo "${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
@@ -104,13 +104,13 @@ jobs:
           fi
           echo "EOF" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare gpuhealth-agent GHCR image tags
+      - name: Prepare fleet-intelligence-agent GHCR image tags
         id: agent_image_ghcr
         run: |
           set -euo pipefail
           VERSION="${{ steps.version.outputs.version }}"
           OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
-          IMAGE="ghcr.io/${OWNER_LC}/gpuhealth-agent"
+          IMAGE="ghcr.io/${OWNER_LC}/fleet-intelligence-agent"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "owner_lc=${OWNER_LC}" >> "$GITHUB_OUTPUT"
           echo "tags<<EOF" >> "$GITHUB_OUTPUT"
@@ -140,7 +140,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push gpuhealth-agent image
+      - name: Build and push fleet-intelligence-agent image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -158,7 +158,7 @@ jobs:
 
       - name: Package Helm chart
         run: |
-          helm package deployments/helm/gpuhealth-agent \
+          helm package deployments/helm/fleet-intelligence-agent \
             --destination dist \
             --version "${{ steps.version.outputs.version }}" \
             --app-version "${{ steps.version.outputs.version }}"
@@ -186,7 +186,7 @@ jobs:
         run: |
           set -euo pipefail
           CHART_VERSION="${{ steps.version.outputs.version }}"
-          helm cm-push "dist/gpuhealth-agent-${CHART_VERSION}.tgz" ngc
+          helm cm-push "dist/fleet-intelligence-agent-${CHART_VERSION}.tgz" ngc
 
       - name: Login to GHCR Helm registry
         run: |
@@ -200,7 +200,7 @@ jobs:
           set -euo pipefail
           CHART_VERSION="${{ steps.version.outputs.version }}"
           OWNER_LC="${{ steps.agent_image_ghcr.outputs.owner_lc }}"
-          helm push "dist/gpuhealth-agent-${CHART_VERSION}.tgz" "oci://ghcr.io/${OWNER_LC}/charts"
+          helm push "dist/fleet-intelligence-agent-${CHART_VERSION}.tgz" "oci://ghcr.io/${OWNER_LC}/charts"
       
       - name: Setup JFrog CLI
         if: steps.version.outputs.is_prerelease == 'false'
@@ -223,19 +223,19 @@ jobs:
         if: steps.version.outputs.is_prerelease == 'false'
         run: |
           jf rt upload \
-            "dist/gpuhealth-linux-x86_64-${{ steps.version.outputs.version }}.tar.gz" \
-            "sw-dgxc-gpuhealth-generic-local/KITMAKER/release/gpuhealth/linux-x86_64/${{ steps.version.outputs.version }}/" \
+            "dist/fleetint-linux-x86_64-${{ steps.version.outputs.version }}.tar.gz" \
+            "sw-dgxc-fleetint-generic-local/KITMAKER/release/fleetint/linux-x86_64/${{ steps.version.outputs.version }}/" \
             --flat=true \
-            --target-props "component_name=gpuhealth;branch=${{ steps.version.outputs.branch }};os=linux;arch=x86_64;platform=linux-x86_64;version=${{ steps.version.outputs.version }};changelist=${{ steps.version.outputs.commit }};source=${{ steps.version.outputs.source }};category=toolkit"
+            --target-props "component_name=fleetint;branch=${{ steps.version.outputs.branch }};os=linux;arch=x86_64;platform=linux-x86_64;version=${{ steps.version.outputs.version }};changelist=${{ steps.version.outputs.commit }};source=${{ steps.version.outputs.source }};category=toolkit"
       
       - name: Upload sbsa tarball to Artifactory
         if: steps.version.outputs.is_prerelease == 'false'
         run: |
           jf rt upload \
-            "dist/gpuhealth-linux-sbsa-${{ steps.version.outputs.version }}.tar.gz" \
-            "sw-dgxc-gpuhealth-generic-local/KITMAKER/release/gpuhealth/linux-sbsa/${{ steps.version.outputs.version }}/" \
+            "dist/fleetint-linux-sbsa-${{ steps.version.outputs.version }}.tar.gz" \
+            "sw-dgxc-fleetint-generic-local/KITMAKER/release/fleetint/linux-sbsa/${{ steps.version.outputs.version }}/" \
             --flat=true \
-            --target-props "component_name=gpuhealth;branch=${{ steps.version.outputs.branch }};os=linux;arch=sbsa;platform=linux-sbsa;version=${{ steps.version.outputs.version }};changelist=${{ steps.version.outputs.commit }};source=${{ steps.version.outputs.source }};category=toolkit"
+            --target-props "component_name=fleetint;branch=${{ steps.version.outputs.branch }};os=linux;arch=sbsa;platform=linux-sbsa;version=${{ steps.version.outputs.version }};changelist=${{ steps.version.outputs.commit }};source=${{ steps.version.outputs.source }};category=toolkit"
       
       - name: Summary
         run: |
@@ -245,17 +245,17 @@ jobs:
           echo "**Commit:** ${{ steps.version.outputs.commit }}" >> $GITHUB_STEP_SUMMARY
           echo "**Pre-release:** ${{ steps.version.outputs.is_prerelease }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**gpuhealth-agent image tags:**" >> $GITHUB_STEP_SUMMARY
+          echo "**fleet-intelligence-agent image tags:**" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.agent_image.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.agent_image_ghcr.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Helm chart (NGC Helm repo):**" >> $GITHUB_STEP_SUMMARY
           echo "repo: https://helm.ngc.nvidia.com/0753215517602916/agent-artifact" >> $GITHUB_STEP_SUMMARY
-          echo "chart: gpuhealth-agent-${{ steps.version.outputs.version }}.tgz" >> $GITHUB_STEP_SUMMARY
+          echo "chart: fleet-intelligence-agent-${{ steps.version.outputs.version }}.tgz" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Helm chart (GHCR OCI):**" >> $GITHUB_STEP_SUMMARY
           echo "repo: oci://ghcr.io/${{ steps.agent_image_ghcr.outputs.owner_lc }}/charts" >> $GITHUB_STEP_SUMMARY
-          echo "chart: gpuhealth-agent:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "chart: fleet-intelligence-agent:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [[ "${{ steps.version.outputs.is_prerelease }}" == "true" ]]; then
@@ -264,6 +264,6 @@ jobs:
           else
             echo "GitHub release created" >> $GITHUB_STEP_SUMMARY
             echo "Artifacts uploaded to Artifactory:" >> $GITHUB_STEP_SUMMARY
-            echo "- \`sw-dgxc-gpuhealth-generic-local/KITMAKER/release/gpuhealth/linux-x86_64/${{ steps.version.outputs.version }}/\`" >> $GITHUB_STEP_SUMMARY
-            echo "- \`sw-dgxc-gpuhealth-generic-local/KITMAKER/release/gpuhealth/linux-sbsa/${{ steps.version.outputs.version }}/\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`sw-dgxc-fleetint-generic-local/KITMAKER/release/fleetint/linux-x86_64/${{ steps.version.outputs.version }}/\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`sw-dgxc-fleetint-generic-local/KITMAKER/release/fleetint/linux-sbsa/${{ steps.version.outputs.version }}/\`" >> $GITHUB_STEP_SUMMARY
           fi

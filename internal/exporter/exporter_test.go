@@ -38,9 +38,9 @@ import (
 	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
 	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
 
-	"github.com/NVIDIA/gpuhealth/internal/config"
-	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
-	"github.com/NVIDIA/gpuhealth/internal/machineinfo"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
 // Mock implementations

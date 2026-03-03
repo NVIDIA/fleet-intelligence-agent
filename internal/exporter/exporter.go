@@ -30,12 +30,12 @@ import (
 	"github.com/leptonai/gpud/pkg/log"
 	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
 
-	"github.com/NVIDIA/gpuhealth/internal/attestation"
-	"github.com/NVIDIA/gpuhealth/internal/enrollment"
-	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
-	"github.com/NVIDIA/gpuhealth/internal/exporter/converter"
-	"github.com/NVIDIA/gpuhealth/internal/exporter/writer"
-	"github.com/NVIDIA/gpuhealth/internal/registry"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/enrollment"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/converter"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/writer"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/registry"
 )
 
 // Ensure healthExporter implements the Exporter interface

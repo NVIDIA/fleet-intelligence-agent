@@ -26,8 +26,8 @@ import (
 	logsv1 "go.opentelemetry.io/proto/otlp/logs/v1"
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
 
-	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
-	"github.com/NVIDIA/gpuhealth/internal/exporter/converter"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/converter"
 )
 
 // mockOTLPConverter implements converter.OTLPConverter for testing
@@ -103,8 +103,8 @@ func TestFileWriter_WriteJSON_Success(t *testing.T) {
 
 	// Verify files were created
 	timestamp := testData.Timestamp.Format("20060102_150405")
-	metricsFile := filepath.Join(tmpDir, "gpuhealth_metrics_"+timestamp+".json")
-	logsFile := filepath.Join(tmpDir, "gpuhealth_logs_"+timestamp+".json")
+	metricsFile := filepath.Join(tmpDir, "fleetint_metrics_"+timestamp+".json")
+	logsFile := filepath.Join(tmpDir, "fleetint_logs_"+timestamp+".json")
 
 	assert.FileExists(t, metricsFile)
 	assert.FileExists(t, logsFile)
@@ -138,8 +138,8 @@ func TestFileWriter_WriteJSON_NilMetrics(t *testing.T) {
 
 	// Only logs file should be created
 	timestamp := testData.Timestamp.Format("20060102_150405")
-	metricsFile := filepath.Join(tmpDir, "gpuhealth_metrics_"+timestamp+".json")
-	logsFile := filepath.Join(tmpDir, "gpuhealth_logs_"+timestamp+".json")
+	metricsFile := filepath.Join(tmpDir, "fleetint_metrics_"+timestamp+".json")
+	logsFile := filepath.Join(tmpDir, "fleetint_logs_"+timestamp+".json")
 
 	assert.NoFileExists(t, metricsFile)
 	assert.FileExists(t, logsFile)
@@ -173,8 +173,8 @@ func TestFileWriter_WriteJSON_NilLogs(t *testing.T) {
 
 	// Only metrics file should be created
 	timestamp := testData.Timestamp.Format("20060102_150405")
-	metricsFile := filepath.Join(tmpDir, "gpuhealth_metrics_"+timestamp+".json")
-	logsFile := filepath.Join(tmpDir, "gpuhealth_logs_"+timestamp+".json")
+	metricsFile := filepath.Join(tmpDir, "fleetint_metrics_"+timestamp+".json")
+	logsFile := filepath.Join(tmpDir, "fleetint_logs_"+timestamp+".json")
 
 	assert.FileExists(t, metricsFile)
 	assert.NoFileExists(t, logsFile)
@@ -368,7 +368,7 @@ func TestFileWriter_TimestampFormatting(t *testing.T) {
 
 	// Verify file was created with correct timestamp format
 	expectedTimestamp := "20251105_143045"
-	metricsFile := filepath.Join(tmpDir, "gpuhealth_metrics_"+expectedTimestamp+".json")
+	metricsFile := filepath.Join(tmpDir, "fleetint_metrics_"+expectedTimestamp+".json")
 	assert.FileExists(t, metricsFile)
 }
 

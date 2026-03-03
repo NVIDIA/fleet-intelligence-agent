@@ -13,8 +13,8 @@ import (
 	"github.com/leptonai/gpud/pkg/systemd"
 	"github.com/urfave/cli"
 
-	"github.com/NVIDIA/gpuhealth/internal/cmdutil"
-	"github.com/NVIDIA/gpuhealth/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/cmdutil"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
 
 func statusCommand(cliContext *cli.Context) error {
@@ -56,31 +56,31 @@ func statusCommand(cliContext *cli.Context) error {
 
 	var active bool
 	if systemd.SystemctlExists() {
-		active, err = systemd.IsActive("gpuhealthd.service")
+		active, err = systemd.IsActive("fleetintd.service")
 		if err != nil {
 			return err
 		}
 		if !active {
-			fmt.Printf("%s gpuhealthd.service is not active\n", cmdutil.WarningSign)
+			fmt.Printf("%s fleetintd.service is not active\n", cmdutil.WarningSign)
 		} else {
-			fmt.Printf("%s gpuhealthd.service is active\n", cmdutil.CheckMark)
+			fmt.Printf("%s fleetintd.service is active\n", cmdutil.CheckMark)
 		}
 	}
 	if !active {
 		// fallback to process list
 		// in case it's not using systemd
-		proc, err := process.FindProcessByName(rootCtx, "gpuhealth")
+		proc, err := process.FindProcessByName(rootCtx, "fleetint")
 		if err != nil {
 			return err
 		}
 		if proc == nil {
-			fmt.Printf("%s gpuhealth process is not running\n", cmdutil.WarningSign)
+			fmt.Printf("%s fleetint process is not running\n", cmdutil.WarningSign)
 			return nil
 		}
 
-		fmt.Printf("%s gpuhealth process is running (PID %d)\n", cmdutil.CheckMark, proc.PID())
+		fmt.Printf("%s fleetint process is running (PID %d)\n", cmdutil.CheckMark, proc.PID())
 	}
-	fmt.Printf("%s successfully checked gpuhealth status\n", cmdutil.CheckMark)
+	fmt.Printf("%s successfully checked fleetint status\n", cmdutil.CheckMark)
 
 	// Check server health
 	client := &http.Client{
@@ -97,6 +97,6 @@ func statusCommand(cliContext *cli.Context) error {
 		return fmt.Errorf("server returned status %d", resp.StatusCode)
 	}
 
-	fmt.Printf("%s successfully checked gpuhealth health\n", cmdutil.CheckMark)
+	fmt.Printf("%s successfully checked fleetint health\n", cmdutil.CheckMark)
 	return nil
 }

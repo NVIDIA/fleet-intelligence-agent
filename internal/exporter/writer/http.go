@@ -28,8 +28,8 @@ import (
 	"github.com/leptonai/gpud/pkg/log"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/NVIDIA/gpuhealth/internal/exporter/collector"
-	"github.com/NVIDIA/gpuhealth/internal/exporter/converter"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/converter"
 )
 
 const (
@@ -224,7 +224,7 @@ func (w *httpWriter) sendOTLPRequest(ctx context.Context, reqData []byte, dataTy
 	}
 
 	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("User-Agent", "gpuhealth-exporter")
+	req.Header.Set("User-Agent", "fleetint-exporter")
 	req.Header.Set("X-Machine-ID", machineID)
 	req.Header.Set("X-Data-Type", dataType)
 	req.Header.Set("X-Collection-ID", collectionID)

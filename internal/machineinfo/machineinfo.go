@@ -31,7 +31,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/NVIDIA/gpuhealth/internal/version"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/version"
 )
 
 // MachineInfo is a custom struct that replaces GPUdVersion with GPUHealthVersion

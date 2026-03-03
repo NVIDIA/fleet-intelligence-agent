@@ -3,18 +3,18 @@ set -e
 
 case "$1" in
     remove|0)
-        echo "GPU Health Agent removed (configuration preserved)"
+        echo "Fleet Intelligence Agent removed (configuration preserved)"
         
         # Simple systemd cleanup
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload || echo "[WARNING] Failed to reload systemd daemon"
         fi
         
-        echo "To completely remove including data: sudo apt purge gpuhealth"
+        echo "To completely remove including data: sudo apt purge fleetint"
         ;;
         
     purge)
-        echo "Completely removing GPU Health Agent..."
+        echo "Completely removing Fleet Intelligence Agent..."
         
         # Basic systemd cleanup
         if [ -d /run/systemd/system ]; then
@@ -22,10 +22,10 @@ case "$1" in
         fi
         
         # Remove data directory and configuration
-        rm -rf /var/lib/gpuhealth 2>/dev/null || echo "[WARNING] Failed to remove data directory"
-        rm -f /etc/default/gpuhealth 2>/dev/null || echo "[WARNING] Failed to remove configuration"
+        rm -rf /var/lib/fleetint 2>/dev/null || echo "[WARNING] Failed to remove data directory"
+        rm -f /etc/default/fleetint 2>/dev/null || echo "[WARNING] Failed to remove configuration"
         
-        echo "[SUCCESS] GPU Health Agent completely removed"
+        echo "[SUCCESS] Fleet Intelligence Agent completely removed"
         ;;
         
     upgrade|1|2|failed-upgrade|abort-install|abort-upgrade|disappear)

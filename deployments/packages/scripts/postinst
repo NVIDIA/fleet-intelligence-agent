@@ -1,13 +1,13 @@
 #!/bin/bash
 set -e
 
-echo "Configuring GPU Health Agent..."
+echo "Configuring Fleet Intelligence Agent..."
 
 # Setup directories and permissions
-mkdir -p /var/lib/gpuhealth
-chmod 755 /var/lib/gpuhealth /usr/bin/gpuhealth
+mkdir -p /var/lib/fleetint
+chmod 755 /var/lib/fleetint /usr/bin/fleetint
 
-echo "Setting up GPU Health Agent service..."
+echo "Setting up Fleet Intelligence Agent service..."
 
 # Handle both Debian ("configure", with optional previous version in $2)
 # and RPM ($1 numeric: 1=install, 2=upgrade)
@@ -19,26 +19,26 @@ else
     case "$1" in
         configure|install|1)
             echo "Fresh installation - enabling and starting service..."
-            systemctl enable gpuhealthd.service || echo "[WARNING] Failed to enable service"
-            systemctl start gpuhealthd.service || echo "[WARNING] Failed to start service"
+            systemctl enable fleetintd.service || echo "[WARNING] Failed to enable service"
+            systemctl start fleetintd.service || echo "[WARNING] Failed to start service"
             ;;
         upgrade|2)
             echo "Upgrade detected - (re)starting service..."
-            if systemctl is-active --quiet gpuhealthd.service; then
-                systemctl restart gpuhealthd.service || echo "[WARNING] Failed to restart service"
+            if systemctl is-active --quiet fleetintd.service; then
+                systemctl restart fleetintd.service || echo "[WARNING] Failed to restart service"
             else
-                systemctl start gpuhealthd.service || echo "[WARNING] Failed to start service"
+                systemctl start fleetintd.service || echo "[WARNING] Failed to start service"
             fi
             ;;
         abort-upgrade|abort-remove|abort-deconfigure)
-            if systemctl is-enabled --quiet gpuhealthd.service; then
-                systemctl start gpuhealthd.service || true
+            if systemctl is-enabled --quiet fleetintd.service; then
+                systemctl start fleetintd.service || true
             fi
             ;;
         *)
             # Fallback: try to start if enabled
-            if systemctl is-enabled --quiet gpuhealthd.service; then
-                systemctl start gpuhealthd.service || true
+            if systemctl is-enabled --quiet fleetintd.service; then
+                systemctl start fleetintd.service || true
             fi
             ;;
     esac
@@ -47,17 +47,17 @@ fi
 # Final status and guidance
 echo ""
 if [ -d /run/systemd/system ]; then
-    if systemctl is-active --quiet gpuhealthd.service; then
-        echo "[SUCCESS] GPU Health Agent installed and started successfully!"
+    if systemctl is-active --quiet fleetintd.service; then
+        echo "[SUCCESS] Fleet Intelligence Agent installed and started successfully!"
         echo ""
-        echo "Configuration: sudo vi /etc/default/gpuhealth"
-        echo "Logs: sudo journalctl -u gpuhealthd -f"
+        echo "Configuration: sudo vi /etc/default/fleetint"
+        echo "Logs: sudo journalctl -u fleetintd -f"
     else
-        echo "[WARNING] GPU Health Agent installed but service is not running"
-        echo "Start manually: sudo systemctl start gpuhealthd"
+        echo "[WARNING] Fleet Intelligence Agent installed but service is not running"
+        echo "Start manually: sudo systemctl start fleetintd"
     fi
 else
-    echo "[SUCCESS] GPU Health Agent installed (systemd not available)"
-    echo "Manual start: /usr/bin/gpuhealth run --log-level=warn"
+    echo "[SUCCESS] Fleet Intelligence Agent installed (systemd not available)"
+    echo "Manual start: /usr/bin/fleetint run --log-level=warn"
 fi
 echo ""

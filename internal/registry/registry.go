@@ -14,7 +14,7 @@
 // limitations under the License.
 
 // Package registry provides component registration and management
-// for gpuhealth, allowing fine-grained control over which components are enabled.
+// for fleetint, allowing fine-grained control over which components are enabled.
 package registry
 
 import (

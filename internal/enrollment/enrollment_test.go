@@ -36,7 +36,7 @@ func TestPerformEnrollment_Success(t *testing.T) {
 		assert.Equal(t, "POST", r.Method)
 
 		// Verify headers
-		assert.Equal(t, "gpuhealth-agent", r.Header.Get("User-Agent"))
+		assert.Equal(t, "fleet-intelligence-agent", r.Header.Get("User-Agent"))
 		assert.Equal(t, "Bearer test-sak-token", r.Header.Get("Authorization"))
 
 		// Send successful response
