@@ -1,0 +1,300 @@
+package product
+
+import (
+	"reflect"
+	"testing"
+)
+
+func TestSupportedMemoryMgmtCapsByGPUProduct(t *testing.T) {
+	tests := []struct {
+		name           string
+		gpuProductName string
+		expected       MemoryErrorManagementCapabilities
+	}{
+		{
+			name:           "NVIDIA H100 80GB HBM3",
+			gpuProductName: "NVIDIA H100 80GB HBM3",
+			expected: MemoryErrorManagementCapabilities{
+				ErrorContainment:     true,
+				DynamicPageOfflining: true,
+				RowRemapping:         true,
+			},
+		},
+		{
+			name:           "NVIDIA GeForce RTX 4090",
+			gpuProductName: "NVIDIA GeForce RTX 4090",
+			expected:       MemoryErrorManagementCapabilities{},
+		},
+		{
+			name:           "NVIDIA A10",
+			gpuProductName: "NVIDIA A10",
+			expected: MemoryErrorManagementCapabilities{
+				RowRemapping: true,
+			},
+		},
+		{
+			name:           "NVIDIA A100",
+			gpuProductName: "NVIDIA A100",
+			expected: MemoryErrorManagementCapabilities{
+				ErrorContainment:     true,
+				DynamicPageOfflining: true,
+				RowRemapping:         true,
+			},
+		},
+		{
+			name:           "Lowercase input",
+			gpuProductName: "nvidia h100 80gb hbm3",
+			expected: MemoryErrorManagementCapabilities{
+				ErrorContainment:     true,
+				DynamicPageOfflining: true,
+				RowRemapping:         true,
+			},
+		},
+		{
+			name:           "NVIDIA B100",
+			gpuProductName: "NVIDIA B100",
+			expected: MemoryErrorManagementCapabilities{
+				ErrorContainment:     true,
+				DynamicPageOfflining: true,
+				RowRemapping:         true,
+			},
+		},
+		{
+			name:           "NVIDIA B200",
+			gpuProductName: "NVIDIA B200",
+			expected: MemoryErrorManagementCapabilities{
+				ErrorContainment:     true,
+				DynamicPageOfflining: true,
+				RowRemapping:         true,
+			},
+		},
+		{
+			name:           "NVIDIA GB200",
+			gpuProductName: "NVIDIA GB200",
+			expected: MemoryErrorManagementCapabilities{
+				ErrorContainment:     true,
+				DynamicPageOfflining: true,
+				RowRemapping:         true,
+			},
+		},
+		{
+			name:           "Mixed case input",
+			gpuProductName: "NvIdIa A100 PCIe",
+			expected: MemoryErrorManagementCapabilities{
+				ErrorContainment:     true,
+				DynamicPageOfflining: true,
+				RowRemapping:         true,
+			},
+		},
+		{
+			name:           "Empty string",
+			gpuProductName: "",
+			expected:       MemoryErrorManagementCapabilities{},
+		},
+		{
+			name:           "NVIDIA T4",
+			gpuProductName: "NVIDIA T4",
+			expected:       MemoryErrorManagementCapabilities{},
+		},
+		{
+			name:           "NVIDIA V100",
+			gpuProductName: "NVIDIA V100",
+			expected:       MemoryErrorManagementCapabilities{},
+		},
+		{
+			name:           "NVIDIA A10G",
+			gpuProductName: "NVIDIA A10G",
+			expected: MemoryErrorManagementCapabilities{
+				RowRemapping: true,
+			},
+		},
+		{
+			name:           "GPU with SXM suffix",
+			gpuProductName: "NVIDIA A100-SXM",
+			expected: MemoryErrorManagementCapabilities{
+				ErrorContainment:     true,
+				DynamicPageOfflining: true,
+				RowRemapping:         true,
+			},
+		},
+		{
+			name:           "GPU with PCIe suffix",
+			gpuProductName: "NVIDIA A100 PCIe",
+			expected: MemoryErrorManagementCapabilities{
+				ErrorContainment:     true,
+				DynamicPageOfflining: true,
+				RowRemapping:         true,
+			},
+		},
+		{
+			name:           "GPU with memory size suffix",
+			gpuProductName: "NVIDIA A100 80GB",
+			expected: MemoryErrorManagementCapabilities{
+				ErrorContainment:     true,
+				DynamicPageOfflining: true,
+				RowRemapping:         true,
+			},
+		},
+		{
+			name:           "Special characters in name",
+			gpuProductName: "NVIDIA-A100_80GB",
+			expected: MemoryErrorManagementCapabilities{
+				ErrorContainment:     true,
+				DynamicPageOfflining: true,
+				RowRemapping:         true,
+			},
+		},
+		{
+			name:           "Non-NVIDIA prefix",
+			gpuProductName: "Some A100 GPU",
+			expected: MemoryErrorManagementCapabilities{
+				ErrorContainment:     true,
+				DynamicPageOfflining: true,
+				RowRemapping:         true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SupportedMemoryMgmtCapsByGPUProduct(tt.gpuProductName)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("GetGPUMemoryErrorManagement(%q) = %v, want %v", tt.gpuProductName, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSupportedFMByGPUProduct(t *testing.T) {
+	tests := []struct {
+		name           string
+		gpuProductName string
+		expected       bool
+	}{
+		{
+			name:           "H100 supports",
+			gpuProductName: "NVIDIA H100 80GB HBM3",
+			expected:       true,
+		},
+		{
+			name:           "A10 does not support",
+			gpuProductName: "NVIDIA A10",
+			expected:       false,
+		},
+		{
+			name:           "GB200 does not run legacy fabric manager",
+			gpuProductName: "NVIDIA-GB200",
+			expected:       false,
+		},
+		{
+			name:           "H100 PCIe does not support",
+			gpuProductName: "NVIDIA H100 PCIe",
+			expected:       false,
+		},
+		{
+			name:           "H200 PCIe does not support",
+			gpuProductName: "NVIDIA H200 PCIe",
+			expected:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SupportedFMByGPUProduct(tt.gpuProductName); got != tt.expected {
+				t.Errorf("SupportedFMByGPUProduct(%q) = %v, want %v", tt.gpuProductName, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSupportFabricStateByGPUProduct(t *testing.T) {
+	tests := []struct {
+		name           string
+		gpuProductName string
+		expected       bool
+	}{
+		{
+			name:           "GB200 upper case",
+			gpuProductName: "NVIDIA GB200",
+			expected:       true,
+		},
+		{
+			name:           "GB200 mixed case",
+			gpuProductName: "nvidia-Gb200",
+			expected:       true,
+		},
+		{
+			name:           "H100 supports",
+			gpuProductName: "NVIDIA H100",
+			expected:       true,
+		},
+		{
+			name:           "H100 lowercase supports",
+			gpuProductName: "nvidia h100 80gb hbm3",
+			expected:       true,
+		},
+		{
+			name:           "H100 with SXM suffix",
+			gpuProductName: "NVIDIA H100-SXM",
+			expected:       true,
+		},
+		{
+			name:           "H100 PCIe variant",
+			gpuProductName: "NVIDIA H100 PCIe",
+			expected:       false,
+		},
+		{
+			name:           "H200 PCIe variant",
+			gpuProductName: "NVIDIA H200 PCIe",
+			expected:       false,
+		},
+		{
+			name:           "H100 NVL variant",
+			gpuProductName: "NVIDIA H100 NVL",
+			expected:       true,
+		},
+		{
+			name:           "H200 supports fabric state",
+			gpuProductName: "NVIDIA H200",
+			expected:       true,
+		},
+		{
+			name:           "H200 with memory size",
+			gpuProductName: "NVIDIA H200 141GB HBM3e",
+			expected:       true,
+		},
+		{
+			name:           "H200 lowercase",
+			gpuProductName: "nvidia h200",
+			expected:       true,
+		},
+		{
+			name:           "A100 does not support fabric state",
+			gpuProductName: "NVIDIA A100",
+			expected:       false,
+		},
+		{
+			name:           "A10 does not support fabric state",
+			gpuProductName: "NVIDIA A10",
+			expected:       false,
+		},
+		{
+			name:           "V100 does not support fabric state",
+			gpuProductName: "NVIDIA V100",
+			expected:       false,
+		},
+		{
+			name:           "Empty string",
+			gpuProductName: "",
+			expected:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SupportFabricStateByGPUProduct(tt.gpuProductName); got != tt.expected {
+				t.Errorf("SupportFabricStateByGPUProduct(%q) = %v, want %v", tt.gpuProductName, got, tt.expected)
+			}
+		})
+	}
+}

@@ -81,7 +81,7 @@ GOPATHS=$(shell echo ${GOPATH} | tr ":" "\n" | tr ";" "\n")
 
 BINARIES=$(addprefix bin/,$(COMMANDS))
 
-.PHONY: clean all binaries fleetint lint test fmt help package-snapshot docker-build
+.PHONY: clean all binaries fleetint lint test fmt help package-snapshot docker-build docker-test
 .DEFAULT: help
 
 help: ## show this help message
@@ -113,6 +113,17 @@ docker-build: ## build container image (IMAGE=fleet-intelligence-agent:dev)
 		-t $(IMAGE) \
 		$(DOCKER_BUILD_EXTRA_FLAGS) \
 		.
+
+# Build test image and run tests in container (requires SSH for private modules)
+TEST_IMAGE ?= fleet-intelligence-agent:test
+docker-test: ## build test image and run tests in container
+	@echo "Building test image: $(TEST_IMAGE)"
+	@DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) $(DOCKER) build -f Dockerfile.citests \
+		$(if $(DOCKER_SSH),--ssh $(DOCKER_SSH),) \
+		-t $(TEST_IMAGE) \
+		.
+	@echo "Running tests..."
+	@$(DOCKER) run --rm $(TEST_IMAGE)
 
 # Specific target for fleetint (your main binary)
 fleetint: bin/fleetint ## build fleetint binary

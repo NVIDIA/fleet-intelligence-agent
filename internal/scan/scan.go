@@ -25,16 +25,16 @@ import (
 	"runtime"
 	"time"
 
-	apiv1 "github.com/leptonai/gpud/api/v1"
-	cmdcommon "github.com/leptonai/gpud/cmd/common"
-	"github.com/leptonai/gpud/components"
-	nvidiainfiniband "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband"
-	infinibandclass "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband/class"
-	nvidiacommon "github.com/leptonai/gpud/pkg/config/common"
-	"github.com/leptonai/gpud/pkg/log"
-	nvidiadcgm "github.com/leptonai/gpud/pkg/nvidia-query/dcgm"
-	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	"github.com/NVIDIA/fleet-intelligence-sdk/components"
+	nvidiainfiniband "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband"
+	infinibandclass "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband/class"
+	nvidiacommon "github.com/NVIDIA/fleet-intelligence-sdk/pkg/config/common"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
+	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/cmdutil"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/registry"
 )
@@ -83,9 +83,9 @@ func WithDebug(b bool) Option {
 }
 
 func printSummary(result components.CheckResult) {
-	header := cmdcommon.CheckMark
+	header := cmdutil.CheckMark
 	if result.HealthStateType() != apiv1.HealthStateTypeHealthy {
-		header = cmdcommon.WarningSign
+		header = cmdutil.WarningSign
 	}
 	fmt.Printf("%s %s\n", header, result.Summary())
 	fmt.Println(result.String())
@@ -102,7 +102,7 @@ func Scan(ctx context.Context, opts ...Option) error {
 		return err
 	}
 
-	fmt.Printf("\n\n%s scanning the host (GOOS %s)\n\n", cmdcommon.InProgress, runtime.GOOS)
+	fmt.Printf("\n\n%s scanning the host (GOOS %s)\n\n", cmdutil.InProgress, runtime.GOOS)
 
 	nvmlInstance, err := nvidianvml.New()
 	if err != nil {
@@ -113,7 +113,7 @@ func Scan(ctx context.Context, opts ...Option) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("\n%s machine info\n", cmdcommon.CheckMark)
+	fmt.Printf("\n%s machine info\n", cmdutil.CheckMark)
 	mi.RenderTable(os.Stdout)
 
 	if mi.GPUInfo != nil && mi.GPUInfo.Product != "" {
@@ -205,6 +205,6 @@ func Scan(ctx context.Context, opts ...Option) error {
 		printSummary(c.Check())
 	}
 
-	fmt.Printf("\n\n%s scan complete\n\n", cmdcommon.CheckMark)
+	fmt.Printf("\n\n%s scan complete\n\n", cmdutil.CheckMark)
 	return nil
 }

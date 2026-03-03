@@ -7,10 +7,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/leptonai/gpud/pkg/log"
-	"github.com/leptonai/gpud/pkg/process"
-	"github.com/leptonai/gpud/pkg/sqlite"
-	"github.com/leptonai/gpud/pkg/systemd"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/process"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/systemd"
 	"github.com/urfave/cli"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/cmdutil"

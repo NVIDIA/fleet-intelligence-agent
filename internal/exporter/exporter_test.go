@@ -33,10 +33,10 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/leptonai/gpud/components"
-	"github.com/leptonai/gpud/pkg/eventstore"
-	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
-	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
+	"github.com/NVIDIA/fleet-intelligence-sdk/components"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
+	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
+	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"

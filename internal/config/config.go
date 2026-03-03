@@ -25,7 +25,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	pkgconfigcommon "github.com/leptonai/gpud/pkg/config/common"
+	pkgconfigcommon "github.com/NVIDIA/fleet-intelligence-sdk/pkg/config/common"
 )
 
 // ConfigEntry represents a single configuration option as a key-value pair

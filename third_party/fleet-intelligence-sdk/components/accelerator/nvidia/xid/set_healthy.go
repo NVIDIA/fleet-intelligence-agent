@@ -1,0 +1,35 @@
+package xid
+
+import (
+	"context"
+	"time"
+
+	"github.com/NVIDIA/fleet-intelligence-sdk/components"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+)
+
+var _ components.HealthSettable = &component{}
+
+func (c *component) SetHealthy() error {
+	log.Logger.Infow("set healthy event received for xid")
+
+	if c.eventBucket != nil {
+		now := c.getTimeNowFunc()
+		cctx, cancel := context.WithTimeout(c.ctx, 10*time.Second)
+		purged, err := c.eventBucket.Purge(cctx, now.Unix())
+		cancel()
+		if err != nil {
+			return err
+		}
+		log.Logger.Infow("successfully purged xid events", "count", purged)
+	}
+
+	// Immediately update current state to reflect the purge
+	// This matches the old behavior where SetHealthy event triggered immediate state update
+	if err := c.updateCurrentState(); err != nil {
+		log.Logger.Errorw("failed to update current state after purge", "error", err)
+		return err
+	}
+
+	return nil
+}

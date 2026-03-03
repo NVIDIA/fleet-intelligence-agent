@@ -66,6 +66,8 @@ profile.out
 *.tar.gz
 *.zip
 release/
+!third_party/fleet-intelligence-sdk/pkg/release/
+!third_party/fleet-intelligence-sdk/pkg/release/**
 
 # Local development
 local/

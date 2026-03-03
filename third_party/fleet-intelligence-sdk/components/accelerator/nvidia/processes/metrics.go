@@ -1,0 +1,29 @@
+package processes
+
+import (
+	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+const SubSystem = "accelerator_nvidia_processes"
+
+var (
+	componentLabel = prometheus.Labels{
+		pkgmetrics.MetricComponentLabelKey: Name,
+	}
+
+	metricRunningProcesses = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "",
+			Subsystem: SubSystem,
+			Name:      "running_total",
+			Help:      "tracks the current per-GPU process counter",
+		},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid"}, // label is GPU ID
+	).MustCurryWith(componentLabel)
+)
+
+func init() {
+	pkgmetrics.MustRegister(metricRunningProcesses)
+}

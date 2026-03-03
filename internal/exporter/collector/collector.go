@@ -23,11 +23,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/leptonai/gpud/components"
-	"github.com/leptonai/gpud/pkg/eventstore"
-	"github.com/leptonai/gpud/pkg/log"
-	pkgmetrics "github.com/leptonai/gpud/pkg/metrics"
-	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
+	"github.com/NVIDIA/fleet-intelligence-sdk/components"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
+	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"

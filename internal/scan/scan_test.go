@@ -22,9 +22,9 @@ import (
 	"strings"
 	"testing"
 
-	apiv1 "github.com/leptonai/gpud/api/v1"
-	"github.com/leptonai/gpud/components"
-	infinibandclass "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband/class"
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	"github.com/NVIDIA/fleet-intelligence-sdk/components"
+	infinibandclass "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband/class"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

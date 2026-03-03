@@ -1,0 +1,14 @@
+address: 127.0.0.1:123
+
+components:
+
+  systemd:
+    query:
+      interval: 20s
+    units:
+      - sshd
+      - docker
+
+  accelerator-nvidia-info:
+    query:
+      interval: 10s

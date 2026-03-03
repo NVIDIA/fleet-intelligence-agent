@@ -28,10 +28,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/leptonai/gpud/pkg/log"
-	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
-	nvidianvml "github.com/leptonai/gpud/pkg/nvidia-query/nvml"
-	"github.com/leptonai/gpud/pkg/sqlite"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
+	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )

@@ -16,8 +16,8 @@
 package config
 
 import (
-	infinibandclass "github.com/leptonai/gpud/components/accelerator/nvidia/infiniband/class"
-	pkgconfigcommon "github.com/leptonai/gpud/pkg/config/common"
+	infinibandclass "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband/class"
+	pkgconfigcommon "github.com/NVIDIA/fleet-intelligence-sdk/pkg/config/common"
 )
 
 // Op contains options for health configuration

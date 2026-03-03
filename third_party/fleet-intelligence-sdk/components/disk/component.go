@@ -1,0 +1,1019 @@
+// Package disk tracks the disk usage of all the mount points specified in the configuration.
+package disk
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"runtime"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	humanize "github.com/dustin/go-humanize"
+	"github.com/olekukonko/tablewriter"
+	"github.com/prometheus/client_golang/prometheus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	"github.com/NVIDIA/fleet-intelligence-sdk/components"
+	"github.com/NVIDIA/fleet-intelligence-sdk/components/nfs"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/disk"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
+	pkgfile "github.com/NVIDIA/fleet-intelligence-sdk/pkg/file"
+	pkghost "github.com/NVIDIA/fleet-intelligence-sdk/pkg/host"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/kmsg"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	pkgnfschecker "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nfs-checker"
+)
+
+// Name is the ID of the disk component.
+const Name = "disk"
+
+var _ components.Component = &component{}
+
+type component struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	retryInterval time.Duration
+
+	healthCheckInterval time.Duration
+
+	getTimeNowFunc func() time.Time
+
+	getGroupConfigsFunc func() pkgnfschecker.Configs
+
+	getBlockDevicesFunc func(ctx context.Context) (disk.BlockDevices, error)
+
+	getLocalPartitionsFunc func(ctx context.Context) (disk.Partitions, error)
+	getNFSPartitionsFunc   func(ctx context.Context) (disk.Partitions, error)
+
+	findMntFunc func(ctx context.Context, target string) (*disk.FindMntOutput, error)
+
+	// Function field for testable file operations
+	statWithTimeoutFunc func(ctx context.Context, path string) (os.FileInfo, error)
+
+	mountPointsToTrackUsage map[string]struct{}
+
+	// freeSpaceThresholdBytesDegraded is the threshold for the free space in bytes
+	// when the system is considered degraded.
+	// Default is 500MB.
+	freeSpaceThresholdBytesDegraded uint64
+
+	// freeSpaceThresholdPercent is the threshold for free space as a percentage
+	// of total space. When free space falls below this percentage on the root
+	// partition, a warning is logged. This mirrors Kubernetes' nodefs.available
+	// threshold for DiskPressure detection.
+	// Default is 10% (matches Kubernetes default).
+	freeSpaceThresholdPercent float64
+
+	rebootEventStore pkghost.RebootEventStore
+	eventBucket      eventstore.Bucket
+	kmsgSyncer       *kmsg.Syncer
+
+	// lookbackPeriod defines how far back to query historical reboot and disk failure events
+	// when evaluating suggested repair actions. Default is 14 days.
+	lookbackPeriod time.Duration
+
+	lastMu          sync.RWMutex
+	lastCheckResult *checkResult
+}
+
+const (
+	defaultRetryInterval  = 5 * time.Second
+	defaultLookbackPeriod = 14 * 24 * time.Hour // 14 days
+
+	defaultFreeSpaceThresholdBytesDegraded = 500 * 1024 * 1024 // 500 MB
+
+	// defaultFreeSpaceThresholdPercent mirrors Kubernetes' default nodefs.available
+	// hard eviction threshold. When free space on the root partition falls below
+	// this percentage, kubelet reports DiskPressure and may evict pods.
+	// ref. https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/
+	defaultFreeSpaceThresholdPercent = 10.0 // 10%
+
+	getBlockDevicesTimeout     = 10 * time.Second
+	getPartitionsTimeout       = 10 * time.Second
+	defaultHealthCheckInterval = time.Minute
+)
+
+func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
+	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
+
+	healthCheckInterval := defaultHealthCheckInterval
+	if gpudInstance.HealthCheckInterval > 0 {
+		healthCheckInterval = gpudInstance.HealthCheckInterval
+	}
+
+	c := &component{
+		ctx:    cctx,
+		cancel: ccancel,
+
+		retryInterval: defaultRetryInterval,
+
+		healthCheckInterval: healthCheckInterval,
+
+		getTimeNowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
+
+		getGroupConfigsFunc: nfs.GetDefaultConfigs,
+
+		rebootEventStore: gpudInstance.RebootEventStore,
+		lookbackPeriod:   defaultLookbackPeriod,
+
+		getLocalPartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+			timeoutCtx, cancel := context.WithTimeout(ctx, getPartitionsTimeout)
+			defer cancel()
+			return disk.GetPartitions(timeoutCtx, disk.WithFstype(disk.DefaultExt4OrXfsFsTypeFunc), disk.WithMountPoint(disk.DefaultMountPointFunc))
+		},
+		getNFSPartitionsFunc: func(ctx context.Context) (disk.Partitions, error) {
+			// statfs on nfs can incur network I/O or impact disk I/O performance
+			// do not track usage for nfs partitions
+			timeoutCtx, cancel := context.WithTimeout(ctx, getPartitionsTimeout)
+			defer cancel()
+			return disk.GetPartitions(timeoutCtx, disk.WithFstype(disk.DefaultNFSFsTypeFunc), disk.WithMountPoint(disk.DefaultMountPointFunc))
+		},
+
+		findMntFunc: disk.FindMnt,
+
+		// Initialize file operation function field with real implementation
+		statWithTimeoutFunc: pkgfile.StatWithTimeout,
+
+		freeSpaceThresholdBytesDegraded: defaultFreeSpaceThresholdBytesDegraded,
+		freeSpaceThresholdPercent:       defaultFreeSpaceThresholdPercent,
+	}
+
+	if runtime.GOOS == "linux" {
+		// relies on "lsblk" command
+		c.getBlockDevicesFunc = func(ctx context.Context) (disk.BlockDevices, error) {
+			timeoutCtx, cancel := context.WithTimeout(ctx, getBlockDevicesTimeout)
+			defer cancel()
+			return disk.GetBlockDevicesWithLsblk(
+				timeoutCtx,
+				disk.WithFstype(disk.DefaultFsTypeFunc),
+				disk.WithDeviceType(disk.DefaultDeviceTypeFunc),
+				disk.WithMountPoint(disk.DefaultMountPointFunc),
+			)
+		}
+	}
+
+	muntPointsToTrackUsage := make(map[string]struct{})
+	for _, mp := range gpudInstance.MountPoints {
+		muntPointsToTrackUsage[mp] = struct{}{}
+	}
+	for _, mt := range gpudInstance.MountTargets {
+		muntPointsToTrackUsage[mt] = struct{}{}
+	}
+	c.mountPointsToTrackUsage = muntPointsToTrackUsage
+
+	if gpudInstance.EventStore != nil {
+		var err error
+		c.eventBucket, err = gpudInstance.EventStore.Bucket(Name)
+		if err != nil {
+			ccancel()
+			return nil, err
+		}
+
+		if os.Geteuid() == 0 {
+			c.kmsgSyncer, err = kmsg.NewSyncer(cctx, Match, c.eventBucket)
+			if err != nil {
+				ccancel()
+				return nil, err
+			}
+		}
+	}
+
+	return c, nil
+}
+
+// InjectFault injects a fault into the disk component by inserting a fake disk failure event
+func (c *component) InjectFault(errMsg string) {
+	c.getLocalPartitionsFunc = func(ctx context.Context) (disk.Partitions, error) {
+		return nil, errors.New(errMsg)
+	}
+}
+
+// ClearFault restores the original disk checking functions
+func (c *component) ClearFault() {
+	c.getLocalPartitionsFunc = func(ctx context.Context) (disk.Partitions, error) {
+		return disk.GetPartitions(ctx, disk.WithFstype(disk.DefaultExt4OrXfsFsTypeFunc), disk.WithMountPoint(disk.DefaultMountPointFunc))
+	}
+}
+
+// InjectEvent injects an event into the disk component's event bucket
+func (c *component) InjectEvent(name, eventType, message string) error {
+	if c.eventBucket == nil {
+		return fmt.Errorf("disk component has no event bucket")
+	}
+
+	event := eventstore.Event{
+		Component: Name,
+		Time:      time.Now().UTC(),
+		Name:      name,
+		Type:      eventType,
+		Message:   message,
+	}
+
+	return c.eventBucket.Insert(context.Background(), event)
+}
+
+func (c *component) Name() string { return Name }
+
+func (c *component) Tags() []string {
+	return []string{
+		Name,
+	}
+}
+
+func (c *component) IsSupported() bool {
+	return true
+}
+
+func (c *component) Start() error {
+	go func() {
+		ticker := time.NewTicker(c.healthCheckInterval)
+		defer ticker.Stop()
+
+		for {
+			_ = c.Check()
+
+			select {
+			case <-c.ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	return nil
+}
+
+func (c *component) LastHealthStates() apiv1.HealthStates {
+	c.lastMu.RLock()
+	lastCheckResult := c.lastCheckResult
+	c.lastMu.RUnlock()
+	return lastCheckResult.HealthStates()
+}
+
+func (c *component) Events(ctx context.Context, since time.Time) (apiv1.Events, error) {
+	if c.eventBucket == nil {
+		return nil, nil
+	}
+	evs, err := c.eventBucket.Get(ctx, since)
+	if err != nil {
+		return nil, err
+	}
+	return evs.Events(), nil
+}
+
+func (c *component) Close() error {
+	log.Logger.Debugw("closing component")
+
+	c.cancel()
+
+	if c.kmsgSyncer != nil {
+		c.kmsgSyncer.Close()
+	}
+	if c.eventBucket != nil {
+		c.eventBucket.Close()
+	}
+
+	return nil
+}
+
+func (c *component) Check() components.CheckResult {
+	log.Logger.Infow("checking disk")
+
+	cr := &checkResult{
+		ts: c.getTimeNowFunc(),
+
+		health: apiv1.HealthStateTypeHealthy,
+		reason: "ok",
+	}
+	defer func() {
+		c.lastMu.Lock()
+		c.lastCheckResult = cr
+		c.lastMu.Unlock()
+	}()
+
+	// Check for disk failure events from kmsg (only if event store is available)
+	if c.eventBucket != nil && c.rebootEventStore != nil {
+		// Query recent events to check for disk failures
+		recentEvents, err := c.eventBucket.Get(c.ctx, cr.ts.Add(-c.lookbackPeriod))
+		if err != nil {
+			cr.err = err
+			cr.health = apiv1.HealthStateTypeUnhealthy
+			cr.reason = "failed to get recent events"
+			log.Logger.Warnw(cr.reason, "error", cr.err)
+			return cr
+		}
+
+		// Filter recent events to only include the hardware-related disk failure events
+		// Group events by type for individual evaluation
+		raidFailureEvents := make(eventstore.Events, 0)
+		fsReadOnlyEvents := make(eventstore.Events, 0)
+		nvmePathFailureEvents := make(eventstore.Events, 0)
+		nvmeTimeoutEvents := make(eventstore.Events, 0)
+		nvmeDeviceDisabledEvents := make(eventstore.Events, 0)
+		beyondEndOfDeviceEvents := make(eventstore.Events, 0)
+		bufferIOErrorEvents := make(eventstore.Events, 0)
+		superblockWriteErrorEvents := make(eventstore.Events, 0)
+		failureReasons := make(map[string]string)
+		for _, ev := range recentEvents {
+			switch ev.Name {
+			case eventRAIDArrayFailure:
+				raidFailureEvents = append(raidFailureEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventRAIDArrayFailure] = messageRAIDArrayFailure
+
+			case eventFilesystemReadOnly:
+				fsReadOnlyEvents = append(fsReadOnlyEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventFilesystemReadOnly] = messageFilesystemReadOnly
+
+			case eventNVMePathFailure:
+				nvmePathFailureEvents = append(nvmePathFailureEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventNVMePathFailure] = messageNVMePathFailure
+
+			case eventNVMeTimeout:
+				nvmeTimeoutEvents = append(nvmeTimeoutEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventNVMeTimeout] = messageNVMeTimeout
+
+			case eventNVMeDeviceDisabled:
+				nvmeDeviceDisabledEvents = append(nvmeDeviceDisabledEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventNVMeDeviceDisabled] = messageNVMeDeviceDisabled
+
+			case eventBeyondEndOfDevice:
+				beyondEndOfDeviceEvents = append(beyondEndOfDeviceEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventBeyondEndOfDevice] = messageBeyondEndOfDevice
+
+			case eventBufferIOError:
+				bufferIOErrorEvents = append(bufferIOErrorEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventBufferIOError] = messageBufferIOError
+
+			case eventSuperblockWriteError:
+				superblockWriteErrorEvents = append(superblockWriteErrorEvents, ev)
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				failureReasons[eventSuperblockWriteError] = messageSuperblockWriteError
+			}
+		}
+
+		// Evaluate suggested actions for each event type
+		// this remains null if no failures are detected
+		// especially the case where no failure after reboot is detected
+		var allSuggestedActions []*apiv1.SuggestedActions
+
+		// If we found disk failures, evaluate suggested actions for each type
+		hasFailures := len(raidFailureEvents) > 0 ||
+			len(fsReadOnlyEvents) > 0 ||
+			len(nvmePathFailureEvents) > 0 ||
+			len(nvmeTimeoutEvents) > 0 ||
+			len(nvmeDeviceDisabledEvents) > 0 ||
+			len(beyondEndOfDeviceEvents) > 0 ||
+			len(bufferIOErrorEvents) > 0 ||
+			len(superblockWriteErrorEvents) > 0
+		if hasFailures {
+			// Look up past events to derive the suggested actions
+			rebootEvents, err := c.rebootEventStore.GetRebootEvents(c.ctx, cr.ts.Add(-c.lookbackPeriod))
+			if err != nil {
+				cr.err = err
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				log.Logger.Warnw("failed to get reboot events", "error", cr.err)
+				return cr
+			}
+
+			// Process RAID failure events
+			if len(raidFailureEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, raidFailureEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventRAIDArrayFailure)
+				}
+			}
+
+			// Process filesystem read-only events
+			if len(fsReadOnlyEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, fsReadOnlyEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventFilesystemReadOnly)
+				}
+			}
+
+			// Process NVMe path failure events
+			if len(nvmePathFailureEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, nvmePathFailureEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventNVMePathFailure)
+				}
+			}
+
+			// Process NVME controller timeout events
+			if len(nvmeTimeoutEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, nvmeTimeoutEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventNVMeTimeout)
+				}
+			}
+
+			// Process NVME device disabled events
+			if len(nvmeDeviceDisabledEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, nvmeDeviceDisabledEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventNVMeDeviceDisabled)
+				}
+			}
+
+			// Process I/O beyond device boundaries events
+			if len(beyondEndOfDeviceEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, beyondEndOfDeviceEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventBeyondEndOfDevice)
+				}
+			}
+
+			// Process buffer I/O error events
+			if len(bufferIOErrorEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, bufferIOErrorEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventBufferIOError)
+				}
+			}
+
+			// Process superblock write error events
+			if len(superblockWriteErrorEvents) > 0 {
+				suggestedActions := eventstore.EvaluateSuggestedActions(rebootEvents, superblockWriteErrorEvents, 2)
+				if suggestedActions != nil {
+					allSuggestedActions = append(allSuggestedActions, suggestedActions)
+				} else {
+					// e.g., failure -> reboot -> no failure
+					delete(failureReasons, eventSuperblockWriteError)
+				}
+			}
+
+			// Aggregate suggested actions with HW_INSPECTION priority
+			cr.suggestedActions = eventstore.AggregateSuggestedActions(allSuggestedActions)
+		}
+
+		// Append failure reasons to existing reason if any failures were detected
+		if len(failureReasons) > 0 {
+			// reset since it's not healhty, not "ok" anymore
+			if cr.reason == "ok" {
+				cr.reason = ""
+			}
+
+			// Sort the keys lexicographically
+			var sortedReasons []string
+			for _, reason := range failureReasons {
+				sortedReasons = append(sortedReasons, reason)
+			}
+			sort.Strings(sortedReasons)
+
+			newReason := strings.Join(sortedReasons, ", ")
+			if cr.reason != "" {
+				cr.reason += "; " + newReason
+			} else {
+				cr.reason = newReason
+			}
+		} else if hasFailures {
+			// If we had failures initially but all were resolved after reboot,
+			// reset the health state back to healthy
+			cr.health = apiv1.HealthStateTypeHealthy
+		}
+	}
+
+	if c.getBlockDevicesFunc != nil {
+		if !c.fetchBlockDevices(cr) {
+			return cr
+		}
+	}
+	if !c.fetchLocalPartitions(cr) {
+		return cr
+	}
+
+	// Check if NFS configs are set before attempting to fetch NFS partitions
+	groupConfigs := c.getGroupConfigsFunc()
+	if len(groupConfigs) == 0 {
+		log.Logger.Infow("skipping NFS partitions check as no NFS configs are set")
+		cr.NFSPartitions = disk.Partitions{}
+	} else {
+		if !c.fetchNFSPartitions(cr) {
+			return cr
+		}
+	}
+
+	devToUsage := make(map[string]disk.Usage)
+	for _, p := range cr.LocalPartitions {
+		usage := p.Usage
+		if usage == nil {
+			log.Logger.Warnw("no usage found for mount point", "mount_point", p.MountPoint)
+			continue
+		}
+
+		devToUsage[p.Device] = *usage
+
+		if _, ok := c.mountPointsToTrackUsage[p.MountPoint]; !ok {
+			continue
+		}
+
+		metricTotalBytes.With(prometheus.Labels{"mount_point": p.MountPoint}).Set(float64(usage.TotalBytes))
+		metricFreeBytes.With(prometheus.Labels{"mount_point": p.MountPoint}).Set(float64(usage.FreeBytes))
+		metricUsedBytes.With(prometheus.Labels{"mount_point": p.MountPoint}).Set(float64(usage.UsedBytes))
+	}
+
+	for _, p := range cr.NFSPartitions {
+		usage := p.Usage
+		if usage == nil {
+			log.Logger.Warnw("no usage found for mount point", "mount_point", p.MountPoint)
+			continue
+		}
+
+		devToUsage[p.Device] = *usage
+
+		if _, ok := c.mountPointsToTrackUsage[p.MountPoint]; !ok {
+			continue
+		}
+
+		metricTotalBytes.With(prometheus.Labels{"mount_point": p.MountPoint}).Set(float64(usage.TotalBytes))
+		metricFreeBytes.With(prometheus.Labels{"mount_point": p.MountPoint}).Set(float64(usage.FreeBytes))
+		metricUsedBytes.With(prometheus.Labels{"mount_point": p.MountPoint}).Set(float64(usage.UsedBytes))
+	}
+
+	for target := range c.mountPointsToTrackUsage {
+		timeoutCtx, cancel := context.WithTimeout(c.ctx, 5*time.Second)
+		_, err := c.statWithTimeoutFunc(timeoutCtx, target)
+		cancel()
+		if err != nil {
+			if os.IsNotExist(err) {
+				log.Logger.Debugw("mount target does not exist", "target", target)
+				continue
+			}
+
+			if errors.Is(err, context.DeadlineExceeded) {
+				log.Logger.Warnw("stat operation timed out for mount target, may indicate unresponsive filesystem", "target", target, "error", err)
+			} else {
+				log.Logger.Errorw("failed to check mount target", "target", target, "error", err)
+			}
+			continue
+		}
+
+		// in case the command is flaky with unknown characters
+		// e.g.,
+		// "unexpected end of JSON input"
+		prevFailed := false
+		for i := 0; i < 5; i++ {
+			cctx, ccancel := context.WithTimeout(c.ctx, time.Minute)
+			mntOut, err := c.findMntFunc(cctx, target)
+			ccancel()
+			if err != nil {
+				log.Logger.Errorw("failed to find mnt", "error", err)
+
+				select {
+				case <-c.ctx.Done():
+					cr.health = apiv1.HealthStateTypeUnhealthy
+					cr.err = c.ctx.Err()
+					return cr
+				case <-time.After(c.retryInterval):
+				}
+
+				prevFailed = true
+				continue
+			}
+
+			if cr.MountTargetUsages == nil {
+				cr.MountTargetUsages = make(map[string]disk.FindMntOutput)
+			}
+			cr.MountTargetUsages[target] = *mntOut
+			if prevFailed {
+				log.Logger.Infow("successfully ran findmnt after retries")
+			}
+			break
+		}
+	}
+
+	if len(cr.BlockDevices) > 0 {
+		if len(cr.LocalPartitions) > 0 {
+			cr.DeviceUsages = cr.BlockDevices.GetDeviceUsages(cr.LocalPartitions)
+		}
+
+		if len(cr.NFSPartitions) > 0 {
+			for _, p := range cr.NFSPartitions {
+				usage := p.Usage
+				if usage == nil {
+					log.Logger.Warnw("no usage found for mount point", "mount_point", p.MountPoint)
+					continue
+				}
+
+				cr.DeviceUsages = append(cr.DeviceUsages, disk.DeviceUsage{
+					DeviceName: p.Device,
+					MountPoint: p.MountPoint,
+					TotalBytes: usage.TotalBytes,
+					FreeBytes:  usage.FreeBytes,
+					UsedBytes:  usage.UsedBytes,
+				})
+			}
+		}
+	}
+
+	var degradedPartitionsDueToThresholdExceeded []string
+	for _, p := range cr.LocalPartitions {
+		if p.Usage == nil || p.Usage.TotalBytes == 0 {
+			continue
+		}
+
+		// for now, we ONLY check the root partition
+		if p.MountPoint != "/" {
+			log.Logger.Debugw("skipping non-root local partition", "mount_point", p.MountPoint, "free_bytes", p.Usage.FreeBytes, "threshold", c.freeSpaceThresholdBytesDegraded)
+			continue
+		}
+
+		if p.Usage.FreeBytes < c.freeSpaceThresholdBytesDegraded {
+			reason := fmt.Sprintf("root partition %s: free space %s is below %s threshold (%s total)",
+				p.MountPoint,
+				humanize.IBytes(p.Usage.FreeBytes),
+				humanize.IBytes(c.freeSpaceThresholdBytesDegraded),
+				humanize.IBytes(p.Usage.TotalBytes))
+			log.Logger.Warnw(reason, "device", p.Device)
+			degradedPartitionsDueToThresholdExceeded = append(degradedPartitionsDueToThresholdExceeded, reason)
+		}
+
+		// Check percentage-based threshold (mirrors Kubernetes nodefs.available for DiskPressure)
+		// This is logged as a warning but does not affect health state separately
+		// ref. https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/
+		freePercent := (float64(p.Usage.FreeBytes) / float64(p.Usage.TotalBytes)) * 100.0
+		if freePercent < c.freeSpaceThresholdPercent {
+			log.Logger.Warnw("root partition free space below kubernetes DiskPressure threshold (nodefs.available)",
+				"mount_point", p.MountPoint,
+				"device", p.Device,
+				"free_percent", fmt.Sprintf("%.1f%%", freePercent),
+				"threshold_percent", fmt.Sprintf("%.0f%%", c.freeSpaceThresholdPercent),
+				"free_bytes", humanize.IBytes(p.Usage.FreeBytes),
+				"total_bytes", humanize.IBytes(p.Usage.TotalBytes),
+			)
+		}
+	}
+	for _, p := range cr.NFSPartitions {
+		if p.Usage == nil || p.Usage.TotalBytes == 0 {
+			continue
+		}
+
+		if p.Usage.FreeBytes < c.freeSpaceThresholdBytesDegraded {
+			reason := fmt.Sprintf("nfs partition %s: free space %s is below %s threshold (%s total)",
+				p.MountPoint,
+				humanize.IBytes(p.Usage.FreeBytes),
+				humanize.IBytes(c.freeSpaceThresholdBytesDegraded),
+				humanize.IBytes(p.Usage.TotalBytes))
+			log.Logger.Debugw(reason, "device", p.Device)
+
+			// NOTE: for now, we just skip
+			// degradedPartitionsDueToThresholdExceeded = append(degradedPartitionsDueToThresholdExceeded, reason)
+		}
+	}
+
+	if len(degradedPartitionsDueToThresholdExceeded) > 0 {
+		// Only set to degraded if not already unhealthy
+		if cr.health != apiv1.HealthStateTypeUnhealthy {
+			cr.health = apiv1.HealthStateTypeDegraded
+		}
+		if cr.reason == "ok" {
+			cr.reason = ""
+		}
+		if cr.reason != "" {
+			cr.reason += "; "
+		}
+		cr.reason += strings.Join(degradedPartitionsDueToThresholdExceeded, "; ")
+	}
+
+	for _, p := range cr.NFSPartitions {
+		if p.StatTimedOut {
+			if cr.reason == "ok" {
+				cr.reason = ""
+			}
+			if cr.reason != "" {
+				cr.reason += "; "
+			}
+			cr.reason += fmt.Sprintf("%s stat timed out (possible connection issue)", p.MountPoint)
+			if cr.health == apiv1.HealthStateTypeHealthy {
+				cr.health = apiv1.HealthStateTypeDegraded
+			}
+			break
+		}
+	}
+
+	log.Logger.Debugw(cr.reason, "localPartitions", len(cr.LocalPartitions), "nfsPartitions", len(cr.NFSPartitions), "blockDevices", len(cr.BlockDevices))
+
+	return cr
+}
+
+func (c *component) fetchBlockDevices(cr *checkResult) bool {
+	// in case the command is flaky with unknown characters
+	// e.g.,
+	// "unexpected end of JSON input"
+	prevFailed := false
+	for i := 0; i < 5; i++ {
+		blks, err := c.getBlockDevicesFunc(c.ctx) // "getBlockDevicesFunc" itself already sets its own timeout
+		if err != nil {
+
+			select {
+			case <-c.ctx.Done():
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				cr.err = c.ctx.Err()
+
+				if cr.reason == "ok" {
+					cr.reason = ""
+				}
+				if cr.reason != "" {
+					cr.reason += "; "
+				}
+				cr.reason += "failed to get block devices -- took too long"
+
+				log.Logger.Warnw("failed to get block devices -- took too long", "error", err)
+				return false
+
+			case <-time.After(c.retryInterval):
+				log.Logger.Warnw("failed to get block devices -- retrying", "error", err)
+			}
+
+			prevFailed = true
+			continue
+		}
+
+		cr.BlockDevices = blks.Flatten()
+		if prevFailed {
+			log.Logger.Infow("successfully got block devices after retries", "num_block_devices", len(cr.BlockDevices))
+		}
+		break
+	}
+	if len(cr.BlockDevices) == 0 {
+		log.Logger.Warnw("no block device found -- something must be wrong with lsblk command")
+
+		if cr.health == "" {
+			cr.health = apiv1.HealthStateTypeHealthy
+		}
+
+		if cr.reason == "ok" {
+			cr.reason = ""
+		}
+		if cr.reason != "" {
+			cr.reason += "; "
+		}
+		cr.reason += "no block device found"
+
+		return false
+	}
+	return true
+}
+
+func (c *component) fetchLocalPartitions(cr *checkResult) bool {
+	// in case the command is flaky with unknown characters
+	// e.g.,
+	// "unexpected end of JSON input"
+	prevFailed := false
+	for i := 0; i < 5; i++ {
+		parts, err := c.getLocalPartitionsFunc(c.ctx) // "getLocalPartitionsFunc" itself already sets its own timeout
+		if err != nil {
+			select {
+			case <-c.ctx.Done():
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				cr.err = c.ctx.Err()
+
+				if cr.reason == "ok" {
+					cr.reason = ""
+				}
+				if cr.reason != "" {
+					cr.reason += "; "
+				}
+				cr.reason += "failed to get local partitions -- took too long"
+
+				log.Logger.Warnw("failed to get local partitions -- took too long", "error", err)
+				return false
+
+			case <-time.After(c.retryInterval):
+				log.Logger.Warnw("failed to get local partitions -- retrying", "error", err)
+			}
+
+			prevFailed = true
+			continue
+		}
+
+		cr.LocalPartitions = parts
+		if prevFailed {
+			log.Logger.Infow("successfully got local partitions after retries", "num_partitions", len(parts))
+		}
+		break
+	}
+	return true
+}
+
+func (c *component) fetchNFSPartitions(cr *checkResult) bool {
+	prevFailed := false
+	for i := 0; i < 5; i++ {
+		parts, err := c.getNFSPartitionsFunc(c.ctx) // "getNFSPartitionsFunc" itself already sets its own timeout
+		if err != nil {
+			select {
+			case <-c.ctx.Done():
+				cr.health = apiv1.HealthStateTypeUnhealthy
+				cr.err = c.ctx.Err()
+
+				if cr.reason == "ok" {
+					cr.reason = ""
+				}
+				if cr.reason != "" {
+					cr.reason += "; "
+				}
+				cr.reason += "failed to get nfs partitions -- took too long"
+
+				log.Logger.Warnw("failed to get nfs partitions -- took too long", "error", err)
+				return false
+
+			case <-time.After(c.retryInterval):
+				log.Logger.Warnw("failed to get nfs partitions -- retrying", "error", err)
+			}
+
+			prevFailed = true
+			continue
+		}
+
+		cr.NFSPartitions = parts
+		if prevFailed {
+			log.Logger.Infow("successfully got nfs partitions after retries", "num_partitions", len(parts))
+		}
+		break
+	}
+	return true
+}
+
+var _ components.CheckResult = &checkResult{}
+
+type checkResult struct {
+	LocalPartitions disk.Partitions `json:"local_partitions"`
+	NFSPartitions   disk.Partitions `json:"nfs_partitions"`
+
+	BlockDevices disk.FlattenedBlockDevices `json:"block_devices"`
+
+	// DeviceUsages is derived from BlockDevices and LocalPartitions/NFSPartitions.
+	DeviceUsages disk.DeviceUsages `json:"device_usages"`
+
+	MountTargetUsages map[string]disk.FindMntOutput `json:"mount_target_usages"`
+
+	// timestamp of the last check
+	ts time.Time
+	// error from the last check
+	err error
+
+	// tracks the healthy evaluation result of the last check
+	health apiv1.HealthStateType
+	// tracks the suggested actions for the last check
+	suggestedActions *apiv1.SuggestedActions
+	// tracks the reason of the last check
+	reason string
+}
+
+func (cr *checkResult) ComponentName() string {
+	return Name
+}
+
+func (cr *checkResult) String() string {
+	if cr == nil || len(cr.LocalPartitions) == 0 {
+		return ""
+	}
+
+	buf := bytes.NewBuffer(nil)
+	cr.LocalPartitions.RenderTable(buf)
+	output := buf.String()
+
+	if len(cr.NFSPartitions) > 0 {
+		output += "\n\n"
+
+		buf.Reset()
+		cr.NFSPartitions.RenderTable(buf)
+		output += buf.String()
+	}
+
+	if len(cr.BlockDevices) > 0 {
+		output += "\n\n"
+
+		buf.Reset()
+		cr.BlockDevices.RenderTable(buf)
+		output += buf.String()
+	}
+
+	if len(cr.DeviceUsages) > 0 {
+		output += "\n\n"
+
+		buf.Reset()
+		cr.DeviceUsages.RenderTable(buf)
+		output += buf.String()
+	}
+
+	if len(cr.MountTargetUsages) > 0 {
+		output += "\n\n"
+
+		buf.Reset()
+		table := tablewriter.NewWriter(buf)
+		table.SetAlignment(tablewriter.ALIGN_CENTER)
+		table.SetHeader([]string{"Mount Point", "Sources", "Total", "Free", "Used", "Used %"})
+		for target, usage := range cr.MountTargetUsages {
+			for _, fs := range usage.Filesystems {
+				table.Append([]string{
+					target,
+					strings.Join(fs.Sources, "\n"),
+					fs.SizeHumanized,
+					fs.AvailableHumanized,
+					fs.UsedHumanized,
+					fs.UsedPercentHumanized,
+				})
+			}
+		}
+		table.Render()
+		output += buf.String()
+	}
+
+	return output
+}
+
+func (cr *checkResult) Summary() string {
+	if cr == nil {
+		return ""
+	}
+	return cr.reason
+}
+
+func (cr *checkResult) HealthStateType() apiv1.HealthStateType {
+	if cr == nil {
+		return ""
+	}
+	return cr.health
+}
+
+func (cr *checkResult) getError() string {
+	if cr == nil || cr.err == nil {
+		return ""
+	}
+	return cr.err.Error()
+}
+
+func (cr *checkResult) getSuggestedActions() *apiv1.SuggestedActions {
+	if cr == nil {
+		return nil
+	}
+	return cr.suggestedActions
+}
+
+func (cr *checkResult) HealthStates() apiv1.HealthStates {
+	if cr == nil {
+		return apiv1.HealthStates{
+			{
+				Time:      metav1.NewTime(time.Now().UTC()),
+				Component: Name,
+				Name:      Name,
+				Health:    apiv1.HealthStateTypeHealthy,
+				Reason:    "no data yet",
+			},
+		}
+	}
+
+	state := apiv1.HealthState{
+		Time:             metav1.NewTime(cr.ts),
+		Component:        Name,
+		Name:             Name,
+		Reason:           cr.reason,
+		Error:            cr.getError(),
+		Health:           cr.health,
+		SuggestedActions: cr.getSuggestedActions(),
+	}
+
+	if len(cr.LocalPartitions) > 0 && len(cr.BlockDevices) > 0 {
+		b, _ := json.Marshal(cr)
+		state.ExtraInfo = map[string]string{"data": string(b)}
+	}
+	return apiv1.HealthStates{state}
+}

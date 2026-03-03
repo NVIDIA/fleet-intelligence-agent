@@ -1,0 +1,45 @@
+# Dockerfile for running CI tests in a container.
+#
+# Build (requires SSH agent for private modules, same as main Dockerfile):
+#   eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_ed25519
+#   docker build -f Dockerfile.citests --ssh default -t fleet-intelligence-agent:test .
+#
+# Default: run lint, tests, then vulnerability check (all must pass).
+#   docker run --rm fleet-intelligence-agent:test
+#
+# Copy coverage out:
+#   docker run --rm -v "$(pwd)/coverage:/src/coverage" fleet-intelligence-agent:test
+#
+# Run only one check:
+#   docker run --rm fleet-intelligence-agent:test make test
+#   docker run --rm fleet-intelligence-agent:test make lint
+#   docker run --rm fleet-intelligence-agent:test make vuln
+#
+# Run specific package tests:
+#   docker run --rm fleet-intelligence-agent:test go test -v ./internal/...
+#
+FROM golang:1.24.13
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    openssh-client \
+    build-essential \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install golangci-lint (matches CI / make lint)
+RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin
+# Install govulncheck up front (avoids runtime installs as non-root user)
+RUN go install golang.org/x/vuln/cmd/govulncheck@latest && mv /go/bin/govulncheck /usr/local/bin/govulncheck
+
+WORKDIR /src
+
+ENV GOWORK=off
+ENV CGO_ENABLED=1
+ENV GOFLAGS=-trimpath
+
+COPY . .
+
+# Default: run lint, tests, then vulnerability check (exit on first failure).
+CMD ["sh", "-c", "make lint && make test && make vuln"]

@@ -27,8 +27,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/leptonai/gpud/pkg/log"
-	pkgmetadata "github.com/leptonai/gpud/pkg/metadata"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/enrollment"

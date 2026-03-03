@@ -1,0 +1,249 @@
+// Package latency tracks the global network connectivity statistics.
+package latency
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/olekukonko/tablewriter"
+	"github.com/prometheus/client_golang/prometheus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	"github.com/NVIDIA/fleet-intelligence-sdk/components"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/netutil/latency"
+	latencyedge "github.com/NVIDIA/fleet-intelligence-sdk/pkg/netutil/latency/edge"
+)
+
+// Name is the ID of the network latency component.
+const Name = "network-latency"
+
+const (
+	// 1 second
+	MinGlobalMillisecondThreshold = 1000
+	// 7 seconds by default to reach any of the DERP servers.
+	DefaultGlobalMillisecondThreshold = 7000
+)
+
+var _ components.Component = &component{}
+
+type component struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	getEgressLatenciesFunc func(context.Context, ...latencyedge.OpOption) (latency.Latencies, error)
+
+	// GlobalMillisecondThreshold is the global threshold in milliseconds for the DERP latency.
+	// If all DERP latencies are greater than this threshold, the component will be marked as failed.
+	// If at least one DERP latency is less than this threshold, the component will be marked as healthy.
+	globalMillisecondThreshold int64
+
+	lastMu          sync.RWMutex
+	lastCheckResult *checkResult
+}
+
+func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
+	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
+	return &component{
+		ctx:                        cctx,
+		cancel:                     ccancel,
+		getEgressLatenciesFunc:     latencyedge.Measure,
+		globalMillisecondThreshold: DefaultGlobalMillisecondThreshold,
+	}, nil
+}
+
+// InjectFault injects a fault into the network latency component by making getEgressLatenciesFunc return an error
+func (c *component) InjectFault(errMsg string) {
+	c.getEgressLatenciesFunc = func(ctx context.Context, opts ...latencyedge.OpOption) (latency.Latencies, error) {
+		return nil, errors.New(errMsg)
+	}
+}
+
+// ClearFault clears any injected faults and restores the original network latency checking function
+func (c *component) ClearFault() {
+	c.getEgressLatenciesFunc = latencyedge.Measure
+}
+
+func (c *component) Name() string { return Name }
+
+func (c *component) Tags() []string {
+	return []string{
+		"network",
+		Name,
+	}
+}
+
+func (c *component) IsSupported() bool {
+	return true
+}
+
+func (c *component) Start() error {
+	// do not check periodically
+	return nil
+}
+
+func (c *component) LastHealthStates() apiv1.HealthStates {
+	c.lastMu.RLock()
+	lastCheckResult := c.lastCheckResult
+	c.lastMu.RUnlock()
+	return lastCheckResult.HealthStates()
+}
+
+func (c *component) Events(ctx context.Context, since time.Time) (apiv1.Events, error) {
+	return nil, nil
+}
+
+func (c *component) Close() error {
+	log.Logger.Debugw("closing component")
+
+	c.cancel()
+
+	return nil
+}
+
+func (c *component) Check() components.CheckResult {
+	log.Logger.Infow("checking network egress latency")
+
+	cr := &checkResult{
+		ts: time.Now().UTC(),
+	}
+
+	defer func() {
+		c.lastMu.Lock()
+		c.lastCheckResult = cr
+		c.lastMu.Unlock()
+	}()
+
+	cctx, ccancel := context.WithTimeout(c.ctx, 15*time.Second)
+	cr.EgressLatencies, cr.err = c.getEgressLatenciesFunc(cctx)
+	ccancel()
+	if cr.err != nil {
+		cr.health = apiv1.HealthStateTypeUnhealthy
+		cr.reason = "error measuring egress latencies"
+		log.Logger.Warnw(cr.reason, "error", cr.err)
+		return cr
+	}
+
+	exceededMsgs := []string{}
+	for _, lat := range cr.EgressLatencies {
+		region := fmt.Sprintf("%s (%s)", lat.RegionName, lat.Provider)
+		metricEdgeInMilliseconds.With(prometheus.Labels{
+			"region": region,
+		}).Set(float64(lat.LatencyMilliseconds))
+
+		if c.globalMillisecondThreshold > 0 && lat.LatencyMilliseconds > c.globalMillisecondThreshold {
+			exceededMsgs = append(exceededMsgs, fmt.Sprintf("latency to %s edge server is %s (exceeded threshold %dms)", lat.RegionName, lat.Latency, c.globalMillisecondThreshold))
+		}
+	}
+
+	if len(exceededMsgs) == 0 {
+		cr.health = apiv1.HealthStateTypeHealthy
+		cr.reason = "checked egress latencies and no issue found"
+		log.Logger.Debugw(cr.reason, "servers", len(cr.EgressLatencies))
+	} else {
+		cr.health = apiv1.HealthStateTypeDegraded
+		cr.reason = strings.Join(exceededMsgs, "; ")
+	}
+
+	return cr
+}
+
+var _ components.CheckResult = &checkResult{}
+
+type checkResult struct {
+	// EgressLatencies is the list of egress latencies to global edge servers.
+	EgressLatencies latency.Latencies `json:"egress_latencies"`
+
+	// timestamp of the last check
+	ts time.Time
+	// error from the last check
+	err error
+
+	// tracks the healthy evaluation result of the last check
+	health apiv1.HealthStateType
+	// tracks the reason of the last check
+	reason string
+}
+
+func (cr *checkResult) ComponentName() string {
+	return Name
+}
+
+func (cr *checkResult) String() string {
+	if cr == nil {
+		return ""
+	}
+
+	buf := bytes.NewBuffer(nil)
+	table := tablewriter.NewWriter(buf)
+	table.SetAlignment(tablewriter.ALIGN_CENTER)
+
+	table.SetHeader([]string{"Region", "Latency"})
+	for _, lat := range cr.EgressLatencies {
+		table.Append([]string{
+			fmt.Sprintf("%s (%s)", lat.RegionName, lat.Provider),
+			lat.Latency.Duration.String(),
+		})
+	}
+
+	table.Render()
+
+	return buf.String()
+}
+
+func (cr *checkResult) Summary() string {
+	if cr == nil {
+		return ""
+	}
+	return cr.reason
+}
+
+func (cr *checkResult) HealthStateType() apiv1.HealthStateType {
+	if cr == nil {
+		return ""
+	}
+	return cr.health
+}
+
+func (cr *checkResult) getError() string {
+	if cr == nil || cr.err == nil {
+		return ""
+	}
+	return cr.err.Error()
+}
+
+func (cr *checkResult) HealthStates() apiv1.HealthStates {
+	if cr == nil {
+		return apiv1.HealthStates{
+			{
+				Time:      metav1.NewTime(time.Now().UTC()),
+				Component: Name,
+				Name:      Name,
+				Health:    apiv1.HealthStateTypeHealthy,
+				Reason:    "no data yet",
+			},
+		}
+	}
+
+	state := apiv1.HealthState{
+		Time:      metav1.NewTime(cr.ts),
+		Component: Name,
+		Name:      Name,
+		Reason:    cr.reason,
+		Error:     cr.getError(),
+		Health:    cr.health,
+	}
+
+	if len(cr.EgressLatencies) > 0 {
+		b, _ := json.Marshal(cr)
+		state.ExtraInfo = map[string]string{"data": string(b)}
+	}
+	return apiv1.HealthStates{state}
+}

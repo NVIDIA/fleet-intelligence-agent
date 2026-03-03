@@ -1,0 +1,888 @@
+package server
+
+import (
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"database/sql"
+	"encoding/pem"
+	"errors"
+	"fmt"
+	"io"
+	"math/big"
+	"net/http"
+	"net/http/pprof"
+	"net/url"
+	stdos "os"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/gin-contrib/gzip"
+	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	swaggerfiles "github.com/swaggo/files"
+	ginswagger "github.com/swaggo/gin-swagger"
+
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	"github.com/NVIDIA/fleet-intelligence-sdk/components"
+	"github.com/NVIDIA/fleet-intelligence-sdk/components/all"
+	_ "github.com/NVIDIA/fleet-intelligence-sdk/docs/apis"
+	lepconfig "github.com/NVIDIA/fleet-intelligence-sdk/pkg/config"
+	pkgcustomplugins "github.com/NVIDIA/fleet-intelligence-sdk/pkg/custom-plugins"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
+	pkgfaultinjector "github.com/NVIDIA/fleet-intelligence-sdk/pkg/fault-injector"
+	gpudmanager "github.com/NVIDIA/fleet-intelligence-sdk/pkg/gpud-manager"
+	pkghost "github.com/NVIDIA/fleet-intelligence-sdk/pkg/host"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/httputil"
+	pkgkmsgwriter "github.com/NVIDIA/fleet-intelligence-sdk/pkg/kmsg/writer"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
+	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
+	pkgmetricsrecorder "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics/recorder"
+	pkgmetricsscraper "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics/scraper"
+	pkgmetricsstore "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics/store"
+	pkgmetricssyncer "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics/syncer"
+	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
+	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/session"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
+	pkgupdate "github.com/NVIDIA/fleet-intelligence-sdk/pkg/update"
+)
+
+// Server is the gpud main daemon
+type Server struct {
+	auditLogger log.AuditLogger
+
+	dbRW *sql.DB
+	dbRO *sql.DB
+
+	// initRegistry is the registry for init plugins
+	// that runs before the regular components
+	// e.g., install python, ...
+	// in most cases, this runs only once
+	// to avoid conflicting with other periodic checks
+	initRegistry components.Registry
+
+	// componentsRegistry is the registry for the regular components
+	componentsRegistry components.Registry
+
+	machineIDMu sync.RWMutex
+	machineID   string
+
+	// epLocalGPUdServer is the endpoint of the local GPUd server
+	epLocalGPUdServer string
+	// epControlPlane is the endpoint of the control plane
+	epControlPlane string
+
+	fifoPath string
+	fifo     *stdos.File
+
+	dataDir    string
+	dbInMemory bool
+
+	gpudInstance *components.GPUdInstance
+	session      *session.Session
+
+	enableAutoUpdate        bool
+	autoUpdateExitCode      int
+	skipSessionUpdateConfig bool
+
+	pluginSpecsFile string
+	faultInjector   pkgfaultinjector.Injector
+}
+
+type UserToken struct {
+	userToken string
+	mu        sync.RWMutex
+}
+
+func createURL(endpoint string) string {
+	host := endpoint
+	url, err := url.Parse(endpoint)
+	if err == nil && url != nil && url.Host != "" {
+		host = url.Host
+	}
+	return fmt.Sprintf("https://%s", host)
+}
+
+func New(ctx context.Context, auditLogger log.AuditLogger, config *lepconfig.Config, packageManager *gpudmanager.Manager) (_ *Server, retErr error) {
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("failed to validate config: %w", err)
+	}
+
+	dataDir, err := lepconfig.ResolveDataDir(config.DataDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve data dir: %w", err)
+	}
+	config.DataDir = dataDir
+	if config.State == "" {
+		config.State = lepconfig.StateFilePath(config.DataDir)
+	}
+
+	var dbRW, dbRO *sql.DB
+	if config.DBInMemory {
+		// Use shared in-memory database for both read-write and read-only connections
+		// ref. https://github.com/mattn/go-sqlite3?tab=readme-ov-file#faq
+		dbRW, err = sqlite.Open(":memory:", sqlite.WithCache("shared"))
+		if err != nil {
+			return nil, fmt.Errorf("failed to open in-memory database (for read-write): %w", err)
+		}
+		dbRO, err = sqlite.Open(":memory:", sqlite.WithCache("shared"), sqlite.WithReadOnly(true))
+		if err != nil {
+			return nil, fmt.Errorf("failed to open in-memory database (for read-only): %w", err)
+		}
+		log.Logger.Infow("using in-memory SQLite database", "connection", "file::memory:?cache=shared")
+	} else {
+		// File-based database (config.State is guaranteed to be set earlier)
+		dbRW, err = sqlite.Open(config.State)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open state file (for read-write): %w", err)
+		}
+		dbRO, err = sqlite.Open(config.State, sqlite.WithReadOnly(true))
+		if err != nil {
+			return nil, fmt.Errorf("failed to open state file (for read-only): %w", err)
+		}
+	}
+
+	if err := pkgmetadata.CreateTableMetadata(ctx, dbRW); err != nil {
+		return nil, fmt.Errorf("failed to create metadata table: %w", err)
+	}
+
+	// When using in-memory database with session credentials from CLI (passed from gpud up),
+	// seed the metadata so the session can authenticate with the control plane.
+	//
+	// This is necessary because:
+	// 1. login.Login() ALWAYS writes credentials to the persistent state file, not in-memory DB.
+	//    The login package doesn't know about --db-in-memory mode.
+	// 2. Only server.New() respects --db-in-memory and creates an in-memory database.
+	// 3. gpud up reads credentials from persistent file after login and passes them via CLI flags.
+	// 4. gpud run receives them and passes them here via config.SessionToken/SessionMachineID/SessionEndpoint.
+	// 5. We seed them into the in-memory DB so the session keepalive can read them.
+	//
+	// IMPORTANT: This block ONLY executes when ALL FOUR conditions are true:
+	//   - config.DBInMemory == true
+	//   - config.SessionToken != ""
+	//   - config.SessionMachineID != ""
+	//   - config.SessionEndpoint != ""
+	// When --db-in-memory=false (the default), this block is SKIPPED entirely.
+	// The default behavior (file-based DB) is NEVER affected by this change.
+	//
+	// NOTE: The endpoint MUST be seeded because the server reads it from the metadata DB
+	// (via pkgmetadata.ReadMetadata) for session keepalive, not from config.
+	if config.DBInMemory && config.SessionToken != "" && config.SessionMachineID != "" && config.SessionEndpoint != "" {
+		log.Logger.Infow("seeding session credentials into in-memory database",
+			"machineID", config.SessionMachineID,
+			"endpoint", config.SessionEndpoint,
+		)
+
+		if err := pkgmetadata.SetMetadata(ctx, dbRW, pkgmetadata.MetadataKeyToken, config.SessionToken); err != nil {
+			return nil, fmt.Errorf("failed to seed session token: %w", err)
+		}
+		if err := pkgmetadata.SetMetadata(ctx, dbRW, pkgmetadata.MetadataKeyMachineID, config.SessionMachineID); err != nil {
+			return nil, fmt.Errorf("failed to seed machine ID: %w", err)
+		}
+		if err := pkgmetadata.SetMetadata(ctx, dbRW, pkgmetadata.MetadataKeyEndpoint, config.SessionEndpoint); err != nil {
+			return nil, fmt.Errorf("failed to seed endpoint: %w", err)
+		}
+	}
+
+	// by default, we only retain past 24 hours of events
+	eventStore, err := eventstore.New(dbRW, dbRO, 14*24*time.Hour)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open events database: %w", err)
+	}
+
+	rebootEventStore := pkghost.NewRebootEventStore(eventStore)
+
+	// only record once when we create the server instance
+	cctx, ccancel := context.WithTimeout(ctx, time.Minute)
+	err = rebootEventStore.RecordReboot(cctx)
+	ccancel()
+	if err != nil {
+		log.Logger.Errorw("failed to record reboot", "error", err)
+	}
+
+	promScraper, err := pkgmetricsscraper.NewPrometheusScraper(pkgmetrics.DefaultGatherer())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create scraper: %w", err)
+	}
+	metricsSQLiteStore, err := pkgmetricsstore.NewSQLiteStore(ctx, dbRW, dbRO, pkgmetricsstore.DefaultTableName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create metrics store: %w", err)
+	}
+	syncer := pkgmetricssyncer.NewSyncer(ctx, promScraper, metricsSQLiteStore, time.Minute, time.Minute, 24*time.Hour)
+	syncer.Start()
+
+	promRecorder := pkgmetricsrecorder.NewPrometheusRecorder(ctx, 15*time.Minute, dbRO)
+	promRecorder.Start()
+
+	fifoPath := lepconfig.FifoFilePath(config.DataDir)
+	s := &Server{
+		auditLogger: auditLogger,
+
+		dbRW: dbRW,
+		dbRO: dbRO,
+
+		fifoPath:   fifoPath,
+		dataDir:    config.DataDir,
+		dbInMemory: config.DBInMemory,
+
+		enableAutoUpdate:        config.EnableAutoUpdate,
+		autoUpdateExitCode:      config.AutoUpdateExitCode,
+		skipSessionUpdateConfig: config.SkipSessionUpdateConfig,
+
+		pluginSpecsFile: config.PluginSpecsFile,
+	}
+	defer func() {
+		if retErr != nil {
+			s.Stop()
+		}
+	}()
+
+	s.machineID, err = pkgmetadata.ReadMachineID(ctx, dbRO)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read machine uid: %w", err)
+	}
+
+	kmsgWriter := pkgkmsgwriter.NewWriter(pkgkmsgwriter.DefaultDevKmsg)
+	s.faultInjector = pkgfaultinjector.NewInjector(kmsgWriter)
+
+	var nvmlInstance nvidianvml.Instance
+	if config.FailureInjector != nil && (len(config.FailureInjector.GPUUUIDsWithGPULost) > 0 ||
+		len(config.FailureInjector.GPUUUIDsWithGPURequiresReset) > 0 ||
+		len(config.FailureInjector.GPUUUIDsWithFabricStateHealthSummaryUnhealthy) > 0 ||
+		config.FailureInjector.GPUProductNameOverride != "") {
+		// If failure injector is configured for NVML-level errors or product name override, use it
+		nvmlInstance, err = nvidianvml.NewWithFailureInjector(&nvidianvml.FailureInjectorConfig{
+			GPUUUIDsWithGPULost:                           config.FailureInjector.GPUUUIDsWithGPULost,
+			GPUUUIDsWithGPURequiresReset:                  config.FailureInjector.GPUUUIDsWithGPURequiresReset,
+			GPUUUIDsWithFabricStateHealthSummaryUnhealthy: config.FailureInjector.GPUUUIDsWithFabricStateHealthSummaryUnhealthy,
+			GPUProductNameOverride:                        config.FailureInjector.GPUProductNameOverride,
+		})
+	} else {
+		nvmlInstance, err = nvidianvml.NewWithExitOnSuccessfulLoad(ctx)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to create NVML instance: %w", err)
+	}
+
+	// Get health check interval from environment variable or use default
+	const (
+		defaultHealthCheckInterval = time.Minute
+		minHealthCheckInterval     = 1 * time.Second
+		maxHealthCheckInterval     = 24 * time.Hour
+	)
+
+	healthCheckInterval := defaultHealthCheckInterval
+	if envInterval := stdos.Getenv("GPUD_HEALTH_CHECK_INTERVAL"); envInterval != "" {
+		parsedInterval, err := time.ParseDuration(envInterval)
+		if err != nil {
+			log.Logger.Warnw("failed to parse GPUD_HEALTH_CHECK_INTERVAL, using default",
+				"env_value", envInterval, "error", err, "default", defaultHealthCheckInterval)
+		} else if parsedInterval < minHealthCheckInterval || parsedInterval > maxHealthCheckInterval {
+			log.Logger.Warnw("GPUD_HEALTH_CHECK_INTERVAL out of valid range, using default",
+				"env_value", parsedInterval, "min", minHealthCheckInterval, "max", maxHealthCheckInterval,
+				"default", defaultHealthCheckInterval)
+		} else {
+			healthCheckInterval = parsedInterval
+			log.Logger.Infow("using custom health check interval from environment",
+				"interval", healthCheckInterval)
+		}
+	}
+
+	// Initialize DCGM instance
+	// DCGM does not auto-restart - users must manually restart gpud after installing DCGM
+	dcgmInstance, err := nvidiadcgm.New()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create DCGM instance: %w", err)
+	}
+
+	// Create shared DCGM health cache that polls at the same interval as components
+	// This provides efficient caching for all DCGM health checks
+	dcgmHealthCache := nvidiadcgm.NewHealthCache(ctx, dcgmInstance, healthCheckInterval)
+	log.Logger.Infow("DCGM health check cache configured", "healthCheckInterval", healthCheckInterval)
+
+	// Create shared DCGM field value cache for GPU device fields (placeholder)
+	// Field watching will be set up after components register their fields
+	// Note: CPU component manages its own field watching separately with cpuGroupHandle
+	dcgmFieldValueCache := nvidiadcgm.NewFieldValueCache(ctx, dcgmInstance, healthCheckInterval)
+	log.Logger.Infow("DCGM field value cache created", "healthCheckInterval", healthCheckInterval)
+
+	// Create centralized DCGM policy violation cache
+	// This creates a single listener for all policy types and distributes violations to components
+	dcgmPolicyViolationCache := nvidiadcgm.NewPolicyViolationCache(ctx, dcgmInstance)
+	log.Logger.Infow("DCGM policy violation cache created")
+
+	s.gpudInstance = &components.GPUdInstance{
+		RootCtx: ctx,
+
+		MachineID: s.machineID,
+
+		NVMLInstance:             nvmlInstance,
+		DCGMInstance:             dcgmInstance,
+		DCGMHealthCache:          dcgmHealthCache,
+		DCGMFieldValueCache:      dcgmFieldValueCache,
+		DCGMPolicyViolationCache: dcgmPolicyViolationCache,
+		NVIDIAToolOverwrites:     config.NvidiaToolOverwrites,
+
+		DBRW: dbRW,
+		DBRO: dbRO,
+
+		EventStore:       eventStore,
+		RebootEventStore: rebootEventStore,
+
+		MountPoints:  []string{"/"},
+		MountTargets: []string{"/var/lib/kubelet"},
+
+		HealthCheckInterval: healthCheckInterval,
+		EnableDCGMPolicy:    config.EnableDCGMPolicy,
+		FailureInjector:     config.FailureInjector,
+	}
+	if s.gpudInstance.MachineID == "" {
+		s.gpudInstance.MachineID = pkghost.MachineID()
+		log.Logger.Infow("assigned machine id not found, using host level machine ID", "machineID", s.gpudInstance.MachineID)
+	}
+
+	s.componentsRegistry = components.NewRegistry(s.gpudInstance)
+	for _, c := range all.All() {
+		name := c.Name
+
+		shouldEnable := config.ShouldEnable(name)
+		if config.ShouldDisable(name) {
+			shouldEnable = false
+		}
+
+		if shouldEnable {
+			s.componentsRegistry.MustRegister(c.InitFunc)
+		}
+	}
+
+	// must be registered before starting the components
+	s.initRegistry = components.NewRegistry(s.gpudInstance)
+	if config.PluginSpecsFile != "" {
+		_, err := stdos.Stat(config.PluginSpecsFile)
+		exists := err == nil
+
+		if exists {
+			specs, err := pkgcustomplugins.LoadSpecs(config.PluginSpecsFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load plugin specs: %w", err)
+			}
+
+			for _, spec := range specs {
+				initFunc := spec.NewInitFunc()
+				if initFunc == nil {
+					log.Logger.Errorw("failed to load plugin", "name", spec.ComponentName())
+					continue
+				}
+
+				if spec.PluginType == pkgcustomplugins.SpecTypeInit {
+					s.initRegistry.MustRegister(initFunc)
+					log.Logger.Infow("loaded init plugin", "name", spec.ComponentName())
+				} else {
+					s.componentsRegistry.MustRegister(initFunc)
+					log.Logger.Infow("loaded component plugin", "name", spec.ComponentName())
+				}
+			}
+		} else {
+			log.Logger.Warnw("plugin specs file does not exist, skipping", "path", config.PluginSpecsFile)
+		}
+	}
+
+	// init plugin run only "once", and "before" regular components
+	// thus no need to start
+	for _, c := range s.initRegistry.All() {
+		rs := c.Check()
+		if rs.HealthStateType() != apiv1.HealthStateTypeHealthy {
+			return nil, fmt.Errorf("failed to start init plugin %s: %s", c.Name(), rs.Summary())
+		}
+		log.Logger.Infow("successfully executed init plugin", "name", c.Name(), "summary", rs.Summary())
+
+		debugger, ok := rs.(components.CheckResultDebugger)
+		if ok {
+			fmt.Printf("init plugin debug output %q:\n\n%s\n\n", c.Name(), debugger.Debug())
+		}
+	}
+
+	// Start DCGM health cache before starting components
+	// This ensures all health watches are registered and polling begins
+	if dcgmHealthCache != nil {
+		if err := dcgmHealthCache.Start(); err != nil {
+			log.Logger.Errorw("failed to start DCGM health cache, DCGM health monitoring disabled", "error", err)
+		}
+	}
+
+	// Set up DCGM field watching after all components have registered their fields
+	// This creates the field group and starts watching for all GPU device fields
+	// Note: CPU component manages its own field watching separately
+	if dcgmFieldValueCache != nil {
+		if err := dcgmFieldValueCache.SetupFieldWatching(); err != nil {
+			log.Logger.Errorw("failed to set up DCGM field watching, DCGM metrics collection unavailable", "error", err)
+		}
+	}
+
+	// Set up centralized DCGM policy violation watching
+	// This creates a single listener for all registered policies
+	if dcgmPolicyViolationCache != nil {
+		if err := dcgmPolicyViolationCache.SetupPolicyWatching(); err != nil {
+			log.Logger.Errorw("failed to set up DCGM policy watching, DCGM policy violations undetected", "error", err)
+		}
+	}
+
+	// Start DCGM field value cache polling
+	if dcgmFieldValueCache != nil {
+		if err := dcgmFieldValueCache.Start(); err != nil {
+			log.Logger.Errorw("failed to start DCGM field value cache, DCGM metrics polling disabled", "error", err)
+		}
+	}
+
+	// Start DCGM policy violation cache distribution
+	if dcgmPolicyViolationCache != nil {
+		if err := dcgmPolicyViolationCache.Start(); err != nil {
+			log.Logger.Errorw("failed to start DCGM policy violation cache, DCGM policy violation monitoring disabled", "error", err)
+		}
+	}
+
+	// component must be started after initialization
+	for _, c := range s.componentsRegistry.All() {
+		if err = c.Start(); err != nil {
+			return nil, fmt.Errorf("failed to start component %s: %w", c.Name(), err)
+		}
+	}
+	go doCompact(ctx, dbRW, config.CompactPeriod.Duration)
+
+	cert, err := s.generateSelfSignedCert()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate tls cert: %w", err)
+	}
+
+	router := gin.Default()
+	installRootGinMiddlewares(router)
+	installCommonGinMiddlewares(router, log.Logger.Desugar())
+
+	globalHandler := newGlobalHandler(config, s.componentsRegistry, metricsSQLiteStore, s.gpudInstance, s.faultInjector)
+
+	// if the request header is set "Accept-Encoding: gzip",
+	// the middleware automatically gzip-compresses the response with the response header "Content-Encoding: gzip"
+	v1Group := router.Group("/v1")
+	v1Group.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPaths([]string{"/update/"})))
+	globalHandler.registerComponentRoutes(v1Group)
+	globalHandler.registerPluginRoutes(v1Group)
+
+	promHandler := promhttp.HandlerFor(pkgmetrics.DefaultGatherer(), promhttp.HandlerOpts{})
+	router.GET("/metrics", func(ctx *gin.Context) {
+		promHandler.ServeHTTP(ctx.Writer, ctx.Request)
+	})
+
+	router.GET(URLPathSwagger, ginswagger.WrapHandler(swaggerfiles.Handler))
+	router.GET(URLPathHealthz, healthz())
+	router.GET(URLPathMachineInfo, globalHandler.machineInfo)
+	router.POST(URLPathInjectFault, globalHandler.injectFault)
+
+	adminGroup := router.Group(urlPathAdmin)
+	adminGroup.GET(urlPathConfig, handleAdminConfig(config))
+	adminGroup.GET(urlPathPackages, handleAdminPackagesStatus(packageManager))
+
+	if config.Pprof {
+		log.Logger.Debugw("registering pprof handlers")
+		adminGroup.GET("/pprof/profile", gin.WrapH(http.HandlerFunc(pprof.Profile)))
+		adminGroup.GET("/pprof/heap", gin.WrapH(pprof.Handler("heap")))
+		adminGroup.GET("/pprof/trace", gin.WrapH(http.HandlerFunc(pprof.Trace)))
+	}
+
+	epControlPlane, err := pkgmetadata.ReadMetadata(ctx, dbRO, pkgmetadata.MetadataKeyEndpoint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read endpoint: %w", err)
+	}
+	s.epControlPlane = createURL(epControlPlane)
+
+	s.epLocalGPUdServer, err = httputil.CreateURL("https", config.Address, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create local GPUd server endpoint: %w", err)
+	}
+
+	userToken := &UserToken{}
+	go s.updateToken(ctx, metricsSQLiteStore, userToken)
+	go s.startListener(nvmlInstance, syncer, config, router, cert)
+	go updateFromVersionFile(ctx, config.AutoUpdateExitCode, config.VersionFile)
+
+	return s, nil
+}
+
+func (s *Server) Stop() {
+	if s.session != nil {
+		s.session.Stop()
+	}
+
+	// Stop DCGM health cache polling to prevent goroutine leak
+	if s.gpudInstance != nil && s.gpudInstance.DCGMHealthCache != nil {
+		s.gpudInstance.DCGMHealthCache.Stop()
+		log.Logger.Debugw("stopped DCGM health cache")
+	}
+
+	// Stop DCGM field value cache polling to prevent goroutine leak
+	if s.gpudInstance != nil && s.gpudInstance.DCGMFieldValueCache != nil {
+		s.gpudInstance.DCGMFieldValueCache.Stop()
+		log.Logger.Debugw("stopped DCGM field value cache")
+	}
+
+	// Close DCGM policy violation cache to stop distributor and clear policies
+	if s.gpudInstance != nil && s.gpudInstance.DCGMPolicyViolationCache != nil {
+		if err := s.gpudInstance.DCGMPolicyViolationCache.Close(); err != nil {
+			log.Logger.Warnw("failed to close DCGM policy violation cache", "error", err)
+		} else {
+			log.Logger.Debugw("closed DCGM policy violation cache")
+		}
+	}
+
+	if s.componentsRegistry != nil {
+		for _, component := range s.componentsRegistry.All() {
+			closer, ok := component.(io.Closer)
+			if !ok {
+				continue
+			}
+			if err := closer.Close(); err != nil {
+				log.Logger.Errorf("failed to close plugin %v: %v", component.Name(), err)
+			}
+		}
+	}
+
+	if s.gpudInstance != nil && s.gpudInstance.RebootEventStore != nil {
+		if closer, ok := s.gpudInstance.RebootEventStore.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				log.Logger.Warnw("failed to close reboot event store", "error", err)
+			}
+		}
+	}
+
+	if s.dbRW != nil {
+		if cerr := s.dbRW.Close(); cerr != nil {
+			log.Logger.Warnw("failed to close read-write db", "error", cerr)
+		} else {
+			log.Logger.Debugw("successfully closed read-write db")
+		}
+	}
+	if s.dbRO != nil {
+		if cerr := s.dbRO.Close(); cerr != nil {
+			log.Logger.Warnw("failed to close read-only db", "error", cerr)
+		} else {
+			log.Logger.Debugw("successfully closed read-only db")
+		}
+	}
+
+	if s.fifo != nil {
+		if err := s.fifo.Close(); err != nil {
+			log.Logger.Warnw("failed to close fifo", "error", err)
+		}
+	}
+	if s.fifoPath != "" {
+		if err := stdos.Remove(s.fifoPath); err != nil {
+			log.Logger.Warnw("failed to remove fifo", "error", err)
+		}
+	}
+}
+
+func (s *Server) generateSelfSignedCert() (tls.Certificate, error) {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	// Create a certificate template
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			Organization: []string{"Lepton AI"},
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	// Create the certificate
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	// Encode the certificate and private key to PEM format
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	privDER, err := x509.MarshalECPrivateKey(priv)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	privPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: privDER})
+
+	// Load the certificate
+	cert, err := tls.X509KeyPair(certPEM, privPEM)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	return cert, nil
+}
+
+func (s *Server) WaitUntilMachineID(ctx context.Context) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	log.Logger.Infow("waiting for machine id")
+	for {
+		s.machineIDMu.RLock()
+		machineID := s.machineID
+		s.machineIDMu.RUnlock()
+
+		log.Logger.Infow("current server machine id", "id", machineID)
+
+		if machineID != "" {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		machineID, err := pkgmetadata.ReadMachineID(ctx, s.dbRO)
+		if err != nil {
+			log.Logger.Errorw("failed to read machine uid", "error", err)
+			continue
+		}
+		if machineID == "" {
+			log.Logger.Debugw("machine id is not set, waiting for it to be set")
+			continue
+		}
+
+		s.machineIDMu.Lock()
+		s.machineID = machineID
+		s.machineIDMu.Unlock()
+
+		log.Logger.Infow("loaded server machine id", "id", machineID)
+		break
+	}
+}
+
+func (s *Server) updateToken(ctx context.Context, metricsStore pkgmetrics.Store, token *UserToken) {
+	s.machineIDMu.RLock()
+	machineID := s.machineID
+	s.machineIDMu.RUnlock()
+
+	var userToken string
+	pipePath := s.fifoPath
+	if dbToken, err := pkgmetadata.ReadToken(ctx, s.dbRO); err == nil {
+		userToken = dbToken
+
+		token.mu.Lock()
+		token.userToken = userToken
+		token.mu.Unlock()
+	}
+
+	if userToken != "" {
+		var err error
+		s.session, err = session.NewSession(
+			ctx,
+			s.epLocalGPUdServer,
+			s.epControlPlane,
+			userToken,
+			session.WithAuditLogger(s.auditLogger),
+			session.WithMachineID(machineID),
+			session.WithPipeInterval(3*time.Second),
+			session.WithEnableAutoUpdate(s.enableAutoUpdate),
+			session.WithAutoUpdateExitCode(s.autoUpdateExitCode),
+			session.WithSkipUpdateConfig(s.skipSessionUpdateConfig),
+			session.WithComponentsRegistry(s.componentsRegistry),
+			session.WithDataDir(s.dataDir),
+			session.WithDBInMemory(s.dbInMemory),
+			session.WithNvidiaInstance(s.gpudInstance.NVMLInstance),
+			session.WithMetricsStore(metricsStore),
+			session.WithSavePluginSpecsFunc(func(ctx context.Context, specs pkgcustomplugins.Specs) (bool, error) {
+				return pkgcustomplugins.SaveSpecs(s.pluginSpecsFile, specs)
+			}),
+			session.WithFaultInjector(s.faultInjector),
+		)
+		if err != nil {
+			log.Logger.Errorw("error creating session", "error", err)
+		}
+	}
+
+	if _, err := stdos.Stat(pipePath); err == nil {
+		if err = stdos.Remove(pipePath); err != nil {
+			log.Logger.Errorf("error creating pipe: %v", err)
+			return
+		}
+	} else if !stdos.IsNotExist(err) {
+		log.Logger.Errorf("error stat pipe: %v", err)
+		return
+	}
+
+	if err := syscall.Mkfifo(pipePath, 0666); err != nil {
+		log.Logger.Errorf("error creating pipe: %v", err)
+		return
+	}
+	for {
+		pipe, err := stdos.OpenFile(pipePath, stdos.O_RDONLY, stdos.ModeNamedPipe)
+		if err != nil {
+			log.Logger.Errorf("error opening named pipe: %v", err)
+			return
+		}
+		buffer := make([]byte, 1024)
+		if n, err := pipe.Read(buffer); err != nil {
+			log.Logger.Errorf("error reading pipe: %v", err)
+		} else {
+			userToken = string(buffer[:n])
+		}
+
+		if err := pipe.Close(); err != nil {
+			log.Logger.Errorf("error closing pipe: %v", err)
+		}
+		if userToken != "" {
+			token.mu.Lock()
+			token.userToken = userToken
+			token.mu.Unlock()
+			if s.session != nil {
+				s.session.Stop()
+			}
+			s.session, err = session.NewSession(
+				ctx,
+				s.epLocalGPUdServer,
+				s.epControlPlane,
+				userToken,
+				session.WithAuditLogger(s.auditLogger),
+				session.WithMachineID(machineID),
+				session.WithPipeInterval(3*time.Second),
+				session.WithEnableAutoUpdate(s.enableAutoUpdate),
+				session.WithAutoUpdateExitCode(s.autoUpdateExitCode),
+				session.WithSkipUpdateConfig(s.skipSessionUpdateConfig),
+				session.WithComponentsRegistry(s.componentsRegistry),
+				session.WithDataDir(s.dataDir),
+				session.WithDBInMemory(s.dbInMemory),
+				session.WithNvidiaInstance(s.gpudInstance.NVMLInstance),
+				session.WithMetricsStore(metricsStore),
+				session.WithSavePluginSpecsFunc(func(ctx context.Context, specs pkgcustomplugins.Specs) (bool, error) {
+					return pkgcustomplugins.SaveSpecs(s.pluginSpecsFile, specs)
+				}),
+				session.WithFaultInjector(s.faultInjector),
+			)
+			if err != nil {
+				log.Logger.Errorw("error creating session", "error", err)
+			}
+		}
+
+		time.Sleep(time.Second)
+	}
+}
+
+func WriteToken(token string, fifoFile string) error {
+	var err error
+	for i := 0; i < 10; i++ {
+		if _, err = stdos.Stat(fifoFile); stdos.IsNotExist(err) {
+			time.Sleep(1 * time.Second)
+			continue
+		} else if err != nil {
+			return fmt.Errorf("failed to stat fifo file: %w", err)
+		}
+	}
+	if err != nil {
+		return errors.New("server not ready")
+	}
+
+	var f *stdos.File
+	if f, err = stdos.OpenFile(fifoFile, stdos.O_WRONLY, 0600); err != nil {
+		return fmt.Errorf("failed to open fifo file: %w", err)
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Logger.Errorf("failed to close token fifo: %v", err)
+		}
+	}()
+
+	_, err = f.Write([]byte(token))
+	if err != nil {
+		return fmt.Errorf("failed to write token: %w", err)
+	}
+	return nil
+}
+
+func doCompact(ctx context.Context, db *sql.DB, compactPeriod time.Duration) {
+	if compactPeriod <= 0 {
+		log.Logger.Debugw("compact period is not set, skipping compacting")
+		return
+	}
+
+	ticker := time.NewTicker(compactPeriod)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ticker.Reset(compactPeriod)
+		}
+
+		start := time.Now()
+		err := sqlite.Compact(ctx, db)
+		pkgmetricsrecorder.RecordSQLiteVacuum(time.Since(start).Seconds())
+
+		if err != nil {
+			log.Logger.Errorw("failed to compact state database", "error", err)
+		}
+	}
+}
+
+func (s *Server) startListener(nvmlInstance nvidianvml.Instance, metricsSyncer *pkgmetricssyncer.Syncer, config *lepconfig.Config, router *gin.Engine, cert tls.Certificate) {
+	defer func() {
+		if nvmlInstance != nil {
+			if err := nvmlInstance.Shutdown(); err != nil {
+				log.Logger.Warnw("failed to shutdown NVML instance", "error", err)
+			}
+		}
+
+		if metricsSyncer != nil {
+			metricsSyncer.Stop()
+		}
+
+		s.Stop()
+	}()
+
+	log.Logger.Infow("gpud started serving", "address", config.Address, "pluginSpecFile", config.PluginSpecsFile)
+
+	srv := &http.Server{
+		Addr:    config.Address,
+		Handler: router,
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		},
+	}
+	if err := srv.ListenAndServeTLS("", ""); err != nil {
+		log.Logger.Warnw("gpud serve failed", "address", config.Address, "error", err)
+		stdos.Exit(1)
+	}
+}
+
+func updateFromVersionFile(ctx context.Context, autoExitCode int, versionFile string) {
+	if autoExitCode == -1 || versionFile == "" {
+		log.Logger.Infow("auto update is disabled, skipping version file check", "autoExitCode", autoExitCode, "versionFile", versionFile)
+		return
+	}
+
+	log.Logger.Infow("auto update is enabled, checking version file", "autoExitCode", autoExitCode, "versionFile", versionFile)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(30 * time.Second):
+		}
+
+		if err := pkgupdate.UpdateTargetVersion(versionFile, autoExitCode); err != nil {
+			log.Logger.Errorw("failed to update from version file", "error", err)
+		}
+	}
+}

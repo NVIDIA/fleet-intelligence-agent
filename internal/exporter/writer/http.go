@@ -25,7 +25,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/leptonai/gpud/pkg/log"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
