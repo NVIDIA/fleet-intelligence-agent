@@ -278,8 +278,8 @@ func TestOTLPConverter_Convert_WithMachineInfo(t *testing.T) {
 		MachineID: "test-machine",
 		MachineInfo: &machineinfo.MachineInfo{
 			FleetintVersion: "0.1.5",
-			OSImage:          "Ubuntu 22.04",
-			KernelVersion:    "5.15.0",
+			OSImage:         "Ubuntu 22.04",
+			KernelVersion:   "5.15.0",
 			CPUInfo: &apiv1.MachineCPUInfo{
 				Type:         "Intel",
 				Manufacturer: "Intel",
