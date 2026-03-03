@@ -195,6 +195,7 @@ release:
   draft: false
   prerelease: auto  # Auto-detect pre-release based on version (e.g., v1.0.0-beta)
   mode: replace  # Replace existing release if it exists
+  replace_existing_artifacts: true  # Handle reruns where GitHub assets with same name already exist
   skip_upload: false
 
 # Changelog configuration
