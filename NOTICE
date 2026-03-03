@@ -2,7 +2,7 @@ THIRD PARTY LICENSES AND NOTICES
 =================================
 
 This file contains the licenses and notices for third-party software that is 
-distributed with NVIDIA fleetint distributions.
+distributed with NVIDIA Fleet Intelligence Agent distributions.
 
 ================================================================================
 SECTION 1: THIRD-PARTY SOFTWARE - APACHE LICENSE 2.0
@@ -381,7 +381,7 @@ Attribution Statements: This product includes Protocol Buffers
 COMPLETE LIST OF DIRECT DEPENDENCIES
 ================================================================================
 
-This NOTICE file covers all direct dependencies of the fleetint project:
+This NOTICE file covers all direct dependencies of the Fleet Intelligence Agent project:
 
 Apache License 2.0:
   - gitlab-master.nvidia.com/gpu-health/gpud (NVIDIA modified fork of leptonai/gpud)
@@ -415,7 +415,7 @@ and are subject to NVIDIA's proprietary license terms.
 
 These proprietary components include:
 
-1. Original code developed by NVIDIA for the fleetint project
+1. Original code developed by NVIDIA for the Fleet Intelligence Agent project
 2. Modifications to the gpud open source software that have not been 
    contributed back to the upstream project
 3. NVIDIA-specific Fleet Intelligence monitoring and diagnostic features
@@ -430,4 +430,3 @@ components, please contact NVIDIA Legal.
 ================================================================================
 
 For questions or concerns about this notice file, please contact NVIDIA Legal.
-

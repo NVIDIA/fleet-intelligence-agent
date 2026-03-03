@@ -10,7 +10,7 @@ Set shared variables once for the examples below:
 
 ```bash
 # Namespace (override if needed)
-NS=fleetint
+NS=fleet-intelligence
 
 CHART_VERSION='<version>'  # e.g. 0.3.2 or 0.3.2-rc.1
 
@@ -22,7 +22,7 @@ DCGM_URL='nvidia-dcgm.gpu-operator.svc:5555'
 #   2. Get the enrollment endpoint URL (ENROLL_ENDPOINT)
 ENROLL_ENDPOINT='<enroll-endpoint>'
 ENROLL_TOKEN='<enroll-token>'
-ENROLL_TOKEN_SECRET_NAME='fleetint-enroll-token'  # Recommended secret name
+ENROLL_TOKEN_SECRET_NAME='fleet-intelligence-enroll-token'  # Recommended secret name
 ```
 
 ## Create namespace
