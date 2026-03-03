@@ -2,7 +2,7 @@ module github.com/NVIDIA/fleet-intelligence-agent
 
 go 1.24.13
 
-replace github.com/leptonai/gpud => gitlab-master.nvidia.com/gpu-health/gpud v0.9.2-0.20260303003844-3bce642cf157
+replace github.com/leptonai/gpud => gitlab-master.nvidia.com/gpu-health/gpud v0.9.2-0.20260303232439-9147cfb04f87
 
 require (
 	github.com/dustin/go-humanize v1.0.1
