@@ -277,7 +277,7 @@ func TestOTLPConverter_Convert_WithMachineInfo(t *testing.T) {
 		Timestamp: time.Now(),
 		MachineID: "test-machine",
 		MachineInfo: &machineinfo.MachineInfo{
-			GPUHealthVersion: "0.1.5",
+			FleetintVersion: "0.1.5",
 			OSImage:          "Ubuntu 22.04",
 			KernelVersion:    "5.15.0",
 			CPUInfo: &apiv1.MachineCPUInfo{
@@ -710,7 +710,7 @@ func TestOTLPConverter_Convert_AllData(t *testing.T) {
 			},
 		},
 		MachineInfo: &machineinfo.MachineInfo{
-			GPUHealthVersion: "0.1.5",
+			FleetintVersion: "0.1.5",
 		},
 		AttestationData: &attestation.AttestationData{
 			Success: true,

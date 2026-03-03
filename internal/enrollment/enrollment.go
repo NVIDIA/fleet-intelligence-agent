@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package enrollment provides shared enrollment functionality for the GPU Health agent
+// Package enrollment provides shared enrollment functionality for the Fleet Intelligence agent
 package enrollment
 
 import (

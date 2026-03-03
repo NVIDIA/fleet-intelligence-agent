@@ -110,7 +110,7 @@ For more information about the DCO, see: https://developercertificate.org/
 
 ## Pull Request Process
 
-1. **Fork the Repository**: Create a personal fork of the GPUHealth repository on GitHub.
+1. **Fork the Repository**: Create a personal fork of the Fleet Intelligence Agent repository on GitHub.
 
 2. **Create a Feature Branch**: Create a new branch for your changes from the main branch:
    ```bash
@@ -153,7 +153,7 @@ For more information about the DCO, see: https://developercertificate.org/
    ```
    
    Format: `[ISSUE-NUMBER] type: Brief description`
-   - **Issue/Ticket**: Reference GitHub issue or internal ticket (e.g., `[#456]`, `[GPUHEALTH-123]`)
+   - **Issue/Ticket**: Reference GitHub issue or internal ticket (e.g., `[#456]`, `[PROJ-123]`)
    - **Type**: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `chore`
    - **Description**: Clear, imperative mood summary (e.g., "Add feature" not "Added feature")
 
