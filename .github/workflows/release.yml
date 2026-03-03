@@ -224,7 +224,7 @@ jobs:
         run: |
           jf rt upload \
             "dist/fleetint-linux-x86_64-${{ steps.version.outputs.version }}.tar.gz" \
-            "sw-dgxc-fleetint-generic-local/KITMAKER/release/fleetint/linux-x86_64/${{ steps.version.outputs.version }}/" \
+            "sw-dgxc-gpuhealth-generic-local/KITMAKER/release/fleetint/linux-x86_64/${{ steps.version.outputs.version }}/" \
             --flat=true \
             --target-props "component_name=fleetint;branch=${{ steps.version.outputs.branch }};os=linux;arch=x86_64;platform=linux-x86_64;version=${{ steps.version.outputs.version }};changelist=${{ steps.version.outputs.commit }};source=${{ steps.version.outputs.source }};category=toolkit"
       
@@ -233,7 +233,7 @@ jobs:
         run: |
           jf rt upload \
             "dist/fleetint-linux-sbsa-${{ steps.version.outputs.version }}.tar.gz" \
-            "sw-dgxc-fleetint-generic-local/KITMAKER/release/fleetint/linux-sbsa/${{ steps.version.outputs.version }}/" \
+            "sw-dgxc-gpuhealth-generic-local/KITMAKER/release/fleetint/linux-sbsa/${{ steps.version.outputs.version }}/" \
             --flat=true \
             --target-props "component_name=fleetint;branch=${{ steps.version.outputs.branch }};os=linux;arch=sbsa;platform=linux-sbsa;version=${{ steps.version.outputs.version }};changelist=${{ steps.version.outputs.commit }};source=${{ steps.version.outputs.source }};category=toolkit"
       
@@ -264,6 +264,6 @@ jobs:
           else
             echo "GitHub release created" >> $GITHUB_STEP_SUMMARY
             echo "Artifacts uploaded to Artifactory:" >> $GITHUB_STEP_SUMMARY
-            echo "- \`sw-dgxc-fleetint-generic-local/KITMAKER/release/fleetint/linux-x86_64/${{ steps.version.outputs.version }}/\`" >> $GITHUB_STEP_SUMMARY
-            echo "- \`sw-dgxc-fleetint-generic-local/KITMAKER/release/fleetint/linux-sbsa/${{ steps.version.outputs.version }}/\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`sw-dgxc-gpuhealth-generic-local/KITMAKER/release/fleetint/linux-x86_64/${{ steps.version.outputs.version }}/\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`sw-dgxc-gpuhealth-generic-local/KITMAKER/release/fleetint/linux-sbsa/${{ steps.version.outputs.version }}/\`" >> $GITHUB_STEP_SUMMARY
           fi
