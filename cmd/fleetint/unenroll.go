@@ -54,7 +54,7 @@ func unenrollCommand(c *cli.Context) error {
 		return fmt.Errorf("failed to remove enrollment metadata: %w", err)
 	}
 
-	log.Logger.Infow("Successfully un-enrolled from GPU Health backend")
+	log.Logger.Infow("Successfully un-enrolled from Fleet Intelligence backend")
 	return nil
 }
 

@@ -56,7 +56,7 @@ func machineInfoCommand(cliContext *cli.Context) error {
 			return err
 		}
 
-		fmt.Printf("GPUhealth machine ID: %q\n\n", machineID)
+		fmt.Printf("Fleetint machine ID: %q\n\n", machineID)
 	}
 
 	nvmlInstance, err := nvidianvml.New()

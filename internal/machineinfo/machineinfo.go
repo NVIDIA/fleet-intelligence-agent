@@ -14,7 +14,7 @@
 // limitations under the License.
 
 // Package machineinfo provides a shim layer over gpud's machine-info package
-// to customize version information for GPU Health.
+// to customize version information for Fleet Intelligence.
 package machineinfo
 
 import (
@@ -34,10 +34,10 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/version"
 )
 
-// MachineInfo is a custom struct that replaces GPUdVersion with GPUHealthVersion
+// MachineInfo is a custom struct that replaces GPUdVersion with FleetintVersion
 type MachineInfo struct {
-	// GPUHealthVersion represents the current version of GPU Health agent
-	GPUHealthVersion string `json:"gpuHealthVersion,omitempty"`
+	// FleetintVersion represents the current version of Fleet Intelligence agent
+	FleetintVersion string `json:"fleetintVersion,omitempty"`
 	// GPUDriverVersion represents the current version of GPU driver installed
 	GPUDriverVersion string `json:"gpuDriverVersion,omitempty"`
 	// CUDAVersion represents the current version of cuda library.
@@ -73,7 +73,7 @@ type MachineInfo struct {
 	NICInfo *apiv1.MachineNICInfo `json:"nicInfo,omitempty"`
 }
 
-// GetMachineInfo retrieves machine info and customizes it for GPU Health
+// GetMachineInfo retrieves machine info and customizes it for Fleet Intelligence
 func GetMachineInfo(nvmlInstance nvidianvml.Instance) (*MachineInfo, error) {
 	// Get the original machine info from gpud
 	gpudInfo, err := pkgmachineinfo.GetMachineInfo(nvmlInstance)
@@ -86,9 +86,9 @@ func GetMachineInfo(nvmlInstance nvidianvml.Instance) (*MachineInfo, error) {
 		gpudInfo.Hostname = hostname
 	}
 
-	// Convert to our custom MachineInfo struct with GPU Health version
+	// Convert to our custom MachineInfo struct with Fleet Intelligence version
 	return &MachineInfo{
-		GPUHealthVersion:        version.Version,
+		FleetintVersion:        version.Version,
 		GPUDriverVersion:        gpudInfo.GPUDriverVersion,
 		CUDAVersion:             gpudInfo.CUDAVersion,
 		ContainerRuntimeVersion: gpudInfo.ContainerRuntimeVersion,
@@ -108,7 +108,7 @@ func GetMachineInfo(nvmlInstance nvidianvml.Instance) (*MachineInfo, error) {
 	}, nil
 }
 
-// RenderTable renders the machine info table with GPU Health branding
+// RenderTable renders the machine info table with Fleet Intelligence branding
 func (i *MachineInfo) RenderTable(wr io.Writer) {
 	if i == nil {
 		return
@@ -117,8 +117,8 @@ func (i *MachineInfo) RenderTable(wr io.Writer) {
 	table := tablewriter.NewWriter(wr)
 	table.SetAlignment(tablewriter.ALIGN_CENTER)
 
-	// Show GPU Health Version instead of GPUd Version
-	table.Append([]string{"Fleetint Version", i.GPUHealthVersion})
+	// Show Fleetint Version instead of GPUd Version
+	table.Append([]string{"Fleetint Version", i.FleetintVersion})
 	table.Append([]string{"Container Runtime Version", i.ContainerRuntimeVersion})
 	table.Append([]string{"OS Image", i.OSImage})
 	table.Append([]string{"Kernel Version", i.KernelVersion})

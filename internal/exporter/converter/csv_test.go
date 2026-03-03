@@ -177,7 +177,7 @@ func TestCSVConverter_Convert_MachineInfo(t *testing.T) {
 	timestamp := "20251105_120000"
 
 	machineInfo := &machineinfo.MachineInfo{
-		GPUHealthVersion: "0.1.5",
+		FleetintVersion: "0.1.5",
 		OSImage:          "Ubuntu 22.04",
 		KernelVersion:    "5.15.0",
 		CPUInfo: &apiv1.MachineCPUInfo{
@@ -277,7 +277,7 @@ func TestCSVConverter_Convert_AllData(t *testing.T) {
 			},
 		},
 		MachineInfo: &machineinfo.MachineInfo{
-			GPUHealthVersion: "0.1.5",
+			FleetintVersion: "0.1.5",
 		},
 	}
 

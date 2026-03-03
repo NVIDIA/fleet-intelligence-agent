@@ -116,7 +116,7 @@ Use this command when:
 For environments without network access or when you need to collect data to files:
 
 ```bash
-sudo fleetint run --offline-mode --path=/tmp/gpu-health --duration=00:05:00 --format=csv
+sudo fleetint run --offline-mode --path=/tmp/fleetint --duration=00:05:00 --format=csv
 ```
 
 **Options:**

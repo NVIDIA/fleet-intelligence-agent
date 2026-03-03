@@ -179,7 +179,7 @@ func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metr
 	// Add a summary metric with collection info
 	summaryMetric := &metricsv1.Metric{
 		Name:        "fleetint_agent_collection_summary",
-		Description: "Summary of GPU health data collection including counts of metrics, events, and components",
+		Description: "Summary of Fleet Intelligence data collection including counts of metrics, events, and components",
 		Unit:        "1",
 		Data: &metricsv1.Metric_Gauge{
 			Gauge: &metricsv1.Gauge{
