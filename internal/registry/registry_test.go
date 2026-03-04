@@ -61,7 +61,7 @@ func TestGetComponent(t *testing.T) {
 	}{
 		{
 			name:      "existing_component",
-			compName:  "accelerator-nvidia-fabric-manager",
+			compName:  "cpu",
 			expectNil: false,
 		},
 		{
@@ -95,8 +95,6 @@ func TestComponentNames(t *testing.T) {
 
 	// Check for some expected component names
 	expectedNames := []string{
-		"accelerator-nvidia-fabric-manager",
-		"accelerator-nvidia-gpu-counts",
 		"accelerator-nvidia-infiniband",
 		"accelerator-nvidia-nccl",
 		"cpu",
@@ -134,5 +132,22 @@ func TestAllComponentsHaveUniqueNames(t *testing.T) {
 	for _, c := range components {
 		assert.False(t, names[c.Name], "Component name %s should be unique", c.Name)
 		names[c.Name] = true
+	}
+}
+
+func TestRemovedComponentsAbsent(t *testing.T) {
+	removed := []string{
+		"accelerator-nvidia-fabric-manager",
+		"accelerator-nvidia-gpu-counts",
+		"accelerator-nvidia-dcgm-xid",
+		"kernel-module",
+		"network-latency",
+		"pci",
+	}
+
+	for _, name := range removed {
+		t.Run(name, func(t *testing.T) {
+			assert.Nil(t, GetComponent(name))
+		})
 	}
 }
