@@ -119,7 +119,7 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		maxKeepSamples := int32(3)
 
 		err = dcgm.WatchFieldsWithGroupEx(fieldGroupID,
-			c.dcgmInstance.GetGroupHandle(),
+			dcgm.GroupAllGPUs(),
 			updateFreqMicroseconds, maxKeepAge, maxKeepSamples)
 		if err != nil {
 			log.Logger.Warnw("failed to set up DCGM field watching", "error", err)
