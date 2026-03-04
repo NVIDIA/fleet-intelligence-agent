@@ -30,9 +30,6 @@ import (
 	componentsdcgmprof "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/dcgm/prof"
 	componentsdcgmthermal "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/dcgm/thermal"
 	componentsdcgmutilization "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/dcgm/utilization"
-	componentsdcgmxid "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/dcgm/xid"
-	componentsfabricmanager "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/fabric-manager"
-	componentsnvidiagpucounts "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/gpu-counts"
 	componentsinfiniband "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband"
 	componentsnccl "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/nccl"
 	componentsnvlink "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/nvlink"
@@ -43,13 +40,10 @@ import (
 	componentsxid "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/xid"
 	componentscpu "github.com/NVIDIA/fleet-intelligence-sdk/components/cpu"
 	componentsdisk "github.com/NVIDIA/fleet-intelligence-sdk/components/disk"
-	componentskernelmodule "github.com/NVIDIA/fleet-intelligence-sdk/components/kernel-module"
 	componentslibrary "github.com/NVIDIA/fleet-intelligence-sdk/components/library"
 	componentsmemory "github.com/NVIDIA/fleet-intelligence-sdk/components/memory"
 	componentsnetworkethernet "github.com/NVIDIA/fleet-intelligence-sdk/components/network/ethernet"
-	componentsnetworklatency "github.com/NVIDIA/fleet-intelligence-sdk/components/network/latency"
 	componentsos "github.com/NVIDIA/fleet-intelligence-sdk/components/os"
-	componentspci "github.com/NVIDIA/fleet-intelligence-sdk/components/pci"
 )
 
 // Component represents a health monitoring component with its name and initialization function
@@ -64,16 +58,6 @@ type Component struct {
 func All() []Component {
 	return []Component{
 		// NVIDIA GPU Components - all enabled by default
-		{
-			Name:             componentsfabricmanager.Name,
-			InitFunc:         componentsfabricmanager.New,
-			EnabledByDefault: true,
-		},
-		{
-			Name:             componentsnvidiagpucounts.Name,
-			InitFunc:         componentsnvidiagpucounts.New,
-			EnabledByDefault: true,
-		},
 		{
 			Name:             componentsinfiniband.Name,
 			InitFunc:         componentsinfiniband.New,
@@ -170,11 +154,6 @@ func All() []Component {
 			InitFunc:         componentsdcgmutilization.New,
 			EnabledByDefault: true,
 		},
-		{
-			Name:             componentsdcgmxid.Name,
-			InitFunc:         componentsdcgmxid.New,
-			EnabledByDefault: true,
-		},
 
 		// System Components - all enabled by default
 		{
@@ -198,28 +177,13 @@ func All() []Component {
 			EnabledByDefault: true,
 		},
 		{
-			Name:             componentsnetworklatency.Name,
-			InitFunc:         componentsnetworklatency.New,
-			EnabledByDefault: true,
-		},
-		{
 			Name:             componentsos.Name,
 			InitFunc:         componentsos.New,
 			EnabledByDefault: true,
 		},
 		{
-			Name:             componentskernelmodule.Name,
-			InitFunc:         componentskernelmodule.New,
-			EnabledByDefault: true,
-		},
-		{
 			Name:             componentslibrary.Name,
 			InitFunc:         componentslibrary.New,
-			EnabledByDefault: true,
-		},
-		{
-			Name:             componentspci.Name,
-			InitFunc:         componentspci.New,
 			EnabledByDefault: true,
 		},
 	}
