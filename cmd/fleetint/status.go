@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/process"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/systemd"
@@ -53,6 +56,27 @@ func statusCommand(cliContext *cli.Context) error {
 	}
 	defer dbRO.Close()
 	log.Logger.Debugw("successfully opened state file for reading")
+
+	metricsEndpoint, err := pkgmetadata.ReadMetadata(rootCtx, dbRO, "metrics_endpoint")
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("failed to read metrics endpoint: %w", err)
+	}
+	logsEndpoint, err := pkgmetadata.ReadMetadata(rootCtx, dbRO, "logs_endpoint")
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("failed to read logs endpoint: %w", err)
+	}
+
+	if metricsEndpoint != "" || logsEndpoint != "" {
+		fmt.Printf("%s enrolled\n", cmdutil.CheckMark)
+		if metricsEndpoint != "" {
+			fmt.Printf("  metrics endpoint: %s\n", metricsEndpoint)
+		}
+		if logsEndpoint != "" {
+			fmt.Printf("  logs endpoint:    %s\n", logsEndpoint)
+		}
+	} else {
+		fmt.Printf("%s not enrolled (no endpoint configured)\n", cmdutil.WarningSign)
+	}
 
 	var active bool
 	if systemd.SystemctlExists() {
