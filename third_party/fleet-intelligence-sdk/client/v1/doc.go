@@ -1,2 +1,2 @@
-// Package v1 is a stub for the pruned vendored SDK (client not used by fleet-intelligence-agent).
+// Package v1 provides the fleet-intelligence-sdk v1 client for the server.
 package v1

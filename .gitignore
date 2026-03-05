@@ -39,6 +39,18 @@ Thumbs.db
 # Log files
 *.log
 logs/
+!third_party/fleet-intelligence-sdk/components/accelerator/nvidia/fabric-manager/testdata/
+!third_party/fleet-intelligence-sdk/components/accelerator/nvidia/fabric-manager/testdata/**
+!third_party/fleet-intelligence-sdk/components/accelerator/nvidia/nccl/testdata/
+!third_party/fleet-intelligence-sdk/components/accelerator/nvidia/nccl/testdata/**
+!third_party/fleet-intelligence-sdk/components/accelerator/nvidia/xid/testdata/
+!third_party/fleet-intelligence-sdk/components/accelerator/nvidia/xid/testdata/**
+!third_party/fleet-intelligence-sdk/components/memory/testdata/
+!third_party/fleet-intelligence-sdk/components/memory/testdata/**
+!third_party/fleet-intelligence-sdk/components/os/testdata/
+!third_party/fleet-intelligence-sdk/components/os/testdata/**
+!third_party/fleet-intelligence-sdk/pkg/kmsg/testdata/
+!third_party/fleet-intelligence-sdk/pkg/kmsg/testdata/**
 
 # Configuration files with secrets
 *.env
@@ -68,10 +80,14 @@ profile.out
 release/
 !third_party/fleet-intelligence-sdk/pkg/release/
 !third_party/fleet-intelligence-sdk/pkg/release/**
+!third_party/fleet-intelligence-sdk/cmd/gpud/release/
+!third_party/fleet-intelligence-sdk/cmd/gpud/release/**
 
 # Local development
 local/
 dev/
+!third_party/fleet-intelligence-sdk/pkg/nvidia/dev/
+!third_party/fleet-intelligence-sdk/pkg/nvidia/dev/**
 
 CLAUDE.md
 AGENTS.md

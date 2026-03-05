@@ -1,8 +1,5 @@
 # Dockerfile for running CI tests in a container.
 #
-# Build (requires SSH agent for private modules, same as main Dockerfile):
-#   eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_ed25519
-#   docker build -f Dockerfile.citests --ssh default -t fleet-intelligence-agent:test .
 #
 # Default: run lint, tests, then vulnerability check (all must pass).
 #   docker run --rm fleet-intelligence-agent:test
@@ -11,6 +8,7 @@
 #   docker run --rm -v "$(pwd)/coverage:/src/coverage" fleet-intelligence-agent:test
 #
 # Run only one check:
+#   docker run --rm fleet-intelligence-agent:test sh -c "cd third_party/fleet-intelligence-sdk && go test ./..."
 #   docker run --rm fleet-intelligence-agent:test make test
 #   docker run --rm fleet-intelligence-agent:test make lint
 #   docker run --rm fleet-intelligence-agent:test make vuln
@@ -20,6 +18,8 @@
 #
 FROM golang:1.24.13
 
+ARG TARGETARCH
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -27,6 +27,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client \
     build-essential \
   && rm -rf /var/lib/apt/lists/*
+
+# Install DCGM runtime from NVIDIA repo.
+# - amd64: package is datacenter-gpu-manager in debian12/x86_64.
+# - arm64: package is datacenter-gpu-manager-4-core in debian12/sbsa.
+RUN if [ "${TARGETARCH}" = "amd64" ]; then \
+      echo "deb [trusted=yes] https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64 /" > /etc/apt/sources.list.d/nvidia-cuda.list && \
+      apt-get update && \
+      apt-get install -y --no-install-recommends datacenter-gpu-manager && \
+      rm -rf /var/lib/apt/lists/*; \
+    elif [ "${TARGETARCH}" = "arm64" ]; then \
+      echo "deb [trusted=yes] https://developer.download.nvidia.com/compute/cuda/repos/debian12/sbsa /" > /etc/apt/sources.list.d/nvidia-cuda.list && \
+      apt-get update && \
+      apt-get install -y --no-install-recommends datacenter-gpu-manager-4-core && \
+      rm -rf /var/lib/apt/lists/*; \
+    else \
+      echo "Skipping DCGM install: unsupported TARGETARCH=${TARGETARCH}"; \
+    fi
 
 # Install golangci-lint (matches CI / make lint)
 RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin
@@ -42,4 +59,4 @@ ENV GOFLAGS=-trimpath
 COPY . .
 
 # Default: run lint, tests, then vulnerability check (exit on first failure).
-CMD ["sh", "-c", "make lint && make test && make vuln"]
+CMD ["sh", "-c", "make lint && make test && make vuln && cd third_party/fleet-intelligence-sdk && go test ./..."]
