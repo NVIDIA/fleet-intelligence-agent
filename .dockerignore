@@ -7,6 +7,7 @@ build
 **/*.test
 **/*.out
 **/*.log
+!third_party/fleet-intelligence-sdk/**/testdata/**/*.log
 **/node_modules
 deployments/packages
 

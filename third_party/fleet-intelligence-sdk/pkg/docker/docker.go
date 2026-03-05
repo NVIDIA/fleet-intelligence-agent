@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	dockerapitypes "github.com/moby/moby/api/types"
-	dockerapitypescontainer "github.com/moby/moby/api/types/container"
-	dockerclient "github.com/moby/moby/client"
+	dockerapitypes "github.com/docker/docker/api/types"
+	dockerapitypescontainer "github.com/docker/docker/api/types/container"
+	dockerclient "github.com/docker/docker/client"
 
 	pkgfile "github.com/NVIDIA/fleet-intelligence-sdk/pkg/file"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"

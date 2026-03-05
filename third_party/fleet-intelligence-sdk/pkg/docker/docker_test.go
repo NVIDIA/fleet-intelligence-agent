@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	docker_types "github.com/moby/moby/api/types"
+	docker_types "github.com/docker/docker/api/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
