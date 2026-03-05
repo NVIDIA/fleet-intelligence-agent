@@ -7,7 +7,6 @@ on:
 
 env:
   GO_VERSION: '1.24.13'
-  GOWORK: off
 
 permissions:
   contents: write  # Needed for creating GitHub releases
@@ -139,7 +138,6 @@ jobs:
           tags: |
             ${{ steps.agent_image.outputs.tags }}
             ${{ steps.agent_image_ghcr.outputs.tags }}
-          ssh: default
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
             REVISION=${{ steps.version.outputs.commit }}

@@ -1,7 +1,3 @@
-# This repo depends on a private module on gitlab-master.nvidia.com (see go.mod replace),
-# so you must provide credentials at build time via SSH agent forwarding:
-#     eval "$(ssh-agent -s)"; ssh-add ~/.ssh/id_ed25519
-#     DOCKER_BUILDKIT=1 docker build --ssh default -t fleet-intelligence-agent:dev .
 ARG DCGM_VERSION="4.4.2-1-ubuntu22.04"
 
 FROM golang:1.24.13 AS build
@@ -9,27 +5,16 @@ FROM golang:1.24.13 AS build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     git \
-    openssh-client \
     build-essential \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 
-RUN git config --global url."ssh://git@gitlab-master.nvidia.com:12051/".insteadOf "https://gitlab-master.nvidia.com/"
-RUN mkdir -p /root/.ssh && ssh-keyscan -p 12051 gitlab-master.nvidia.com >> /root/.ssh/known_hosts
-
-ARG GOPRIVATE=gitlab-master.nvidia.com
-ENV GOPRIVATE=${GOPRIVATE}
-ENV GONOSUMDB=${GOPRIVATE}
-# Ignore local go.work during container builds (no ../gpud in context)
-ENV GOWORK=off
-
 COPY go.mod go.sum ./
 # Local replace target must exist before go mod download (replace => ./third_party/fleet-intelligence-sdk).
 COPY third_party/fleet-intelligence-sdk ./third_party/fleet-intelligence-sdk
 
-# Download modules with ephemeral credentials (not persisted in image layers).
-RUN --mount=type=ssh /bin/sh -ceu 'go mod download'
+RUN go mod download
 
 COPY . .
 

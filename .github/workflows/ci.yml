@@ -9,10 +9,6 @@ on:
 env:
   GO_VERSION: '1.24.13'
   GOFLAGS: '-trimpath'
-  GOPRIVATE: gitlab-master.nvidia.com/*
-  GONOPROXY: gitlab-master.nvidia.com/*
-  GONOSUMDB: gitlab-master.nvidia.com/*
-  GOWORK: off
 
 jobs:
   secret-detection:
@@ -67,10 +63,6 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Configure Git for private repositories
-        run: |
-          git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
-
       - name: Download dependencies
         run: go mod download
 
@@ -81,8 +73,6 @@ jobs:
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v8
-        env:
-          GOWORK: off
         with:
           version: latest
           args: --timeout=5m
@@ -101,10 +91,6 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-
-      - name: Configure Git for private repositories
-        run: |
-          git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
 
       - name: Download dependencies
         run: go mod download
@@ -140,10 +126,6 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-
-      - name: Configure Git for private repositories
-        run: |
-          git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
 
       - name: Download dependencies
         run: go mod download
@@ -192,10 +174,6 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Configure Git for private repositories
-        run: |
-          git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
-
       - name: Download dependencies
         run: go mod download
 
@@ -230,10 +208,6 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-
-      - name: Configure Git for private repositories
-        run: |
-          git config --global url."https://git:${{ secrets.GITLAB_TOKEN }}@gitlab-master.nvidia.com/".insteadOf "https://gitlab-master.nvidia.com/"
 
       - name: Download dependencies
         run: go mod download

@@ -15,14 +15,6 @@ cd fleetint
 - **GoReleaser**: For building packages (install from [goreleaser.com](https://goreleaser.com/install/))
 - **For ARM64 cross-compilation** (optional): `gcc-aarch64-linux-gnu` and `g++-aarch64-linux-gnu`
 
-### Configure Go Environment
-
-For NVIDIA internal development, configure Go for private repository access:
-
-```bash
-go env -w GOPRIVATE=gitlab-master.nvidia.com/*
-```
-
 ### Build
 
 ```bash
@@ -200,4 +192,3 @@ make package-snapshot  # Build packages (no git tag required)
 ## Contributing
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for detailed contribution guidelines.
-
