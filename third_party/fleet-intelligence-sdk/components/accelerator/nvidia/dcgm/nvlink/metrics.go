@@ -10,7 +10,13 @@ import (
 
 // nvlinkFields defines the DCGM fields to monitor for NVLink metrics
 var nvlinkFields = []dcgm.Short{
-	dcgm.DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL, // Total NVLink bandwidth
+	dcgm.DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL,                       // Total NVLink bandwidth
+	dcgm.DCGM_FI_DEV_NVLINK_ERROR_DL_CRC,                          // NVLink DL CRC errors
+	dcgm.DCGM_FI_DEV_NVLINK_ERROR_DL_RECOVERY,                     // NVLink DL recovery errors
+	dcgm.DCGM_FI_DEV_NVLINK_ERROR_DL_REPLAY,                       // NVLink DL replay errors
+	dcgm.DCGM_FI_DEV_NVLINK_COUNT_LINK_RECOVERY_SUCCESSFUL_EVENTS, // Successful link recovery events
+	dcgm.DCGM_FI_DEV_NVLINK_COUNT_LINK_RECOVERY_FAILED_EVENTS,     // Failed link recovery events
+	dcgm.DCGM_FI_DEV_NVLINK_COUNT_LINK_RECOVERY_EVENTS,            // Total link recovery events
 }
 
 var (
@@ -27,10 +33,76 @@ var (
 		},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevNvlinkErrorDLCrc = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "",
+			Subsystem: "",
+			Name:      "dcgm_fi_dev_nvlink_error_dl_crc",
+			Help:      "NVLink CRC Error Counter",
+		},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevNvlinkErrorDLRecovery = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "",
+			Subsystem: "",
+			Name:      "dcgm_fi_dev_nvlink_error_dl_recovery",
+			Help:      "NVLink Recovery Error Counter",
+		},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevNvlinkErrorDLReplay = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "",
+			Subsystem: "",
+			Name:      "dcgm_fi_dev_nvlink_error_dl_replay",
+			Help:      "NVLink Replay Error Counter",
+		},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevNvlinkCountLinkRecoverySuccessfulEvents = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "",
+			Subsystem: "",
+			Name:      "dcgm_fi_dev_nvlink_count_link_recovery_successful_events",
+			Help:      "Number of times link went from Up to recovery, succeeded and link came back up.",
+		},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevNvlinkCountLinkRecoveryFailedEvents = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "",
+			Subsystem: "",
+			Name:      "dcgm_fi_dev_nvlink_count_link_recovery_failed_events",
+			Help:      "Number of times link went from Up to recovery, failed and link was declared down.",
+		},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevNvlinkCountLinkRecoveryEvents = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "",
+			Subsystem: "",
+			Name:      "dcgm_fi_dev_nvlink_count_link_recovery_events",
+			Help:      "Number of times link went from Up to recovery, irrespective of the result.",
+		},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
 )
 
 func init() {
 	pkgmetrics.MustRegister(
 		metricDCGMFIDevNvlinkBandwidthTotal,
+		metricDCGMFIDevNvlinkErrorDLCrc,
+		metricDCGMFIDevNvlinkErrorDLRecovery,
+		metricDCGMFIDevNvlinkErrorDLReplay,
+		metricDCGMFIDevNvlinkCountLinkRecoverySuccessfulEvents,
+		metricDCGMFIDevNvlinkCountLinkRecoveryFailedEvents,
+		metricDCGMFIDevNvlinkCountLinkRecoveryEvents,
 	)
 }

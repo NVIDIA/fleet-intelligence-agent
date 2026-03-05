@@ -97,6 +97,7 @@ func TestComponentNames(t *testing.T) {
 	expectedNames := []string{
 		"accelerator-nvidia-infiniband",
 		"accelerator-nvidia-nccl",
+		"accelerator-nvidia-dcgm-nvlink",
 		"cpu",
 		"disk",
 		"memory",
@@ -139,6 +140,7 @@ func TestRemovedComponentsAbsent(t *testing.T) {
 	removed := []string{
 		"accelerator-nvidia-fabric-manager",
 		"accelerator-nvidia-gpu-counts",
+		"accelerator-nvidia-nvlink",
 		"accelerator-nvidia-dcgm-xid",
 		"kernel-module",
 		"network-latency",
