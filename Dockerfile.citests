@@ -52,7 +52,6 @@ RUN go install golang.org/x/vuln/cmd/govulncheck@latest && mv /go/bin/govulnchec
 
 WORKDIR /src
 
-ENV GOWORK=off
 ENV CGO_ENABLED=1
 ENV GOFLAGS=-trimpath
 

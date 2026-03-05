@@ -10,9 +10,6 @@ DOCKER ?= docker
 IMAGE ?= fleet-intelligence-agent:dev
 DOCKER_BUILDKIT ?= 1
 DOCKER_BUILD_PROGRESS ?= auto
-# By default, use ssh-agent forwarding for private module access during `docker build`.
-# Set DOCKER_SSH= to disable (e.g. when using --secret/netrc in CI).
-DOCKER_SSH ?= default
 DOCKER_BUILD_EXTRA_FLAGS ?=
 
 # Root directory of the project (absolute path).
@@ -104,22 +101,20 @@ bin/%: cmd/% FORCE
 binaries: $(BINARIES) ## build binaries
 	@echo "Built binaries: $(BINARIES)"
 
-# Build container image (requires BuildKit for --ssh/--secret mounts used in Dockerfile)
+# Build container image (BuildKit enabled by default)
 docker-build: ## build container image (IMAGE=fleet-intelligence-agent:dev)
 	@echo "Building container image: $(IMAGE)"
 	@DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) $(DOCKER) build \
-		$(if $(DOCKER_SSH),--ssh $(DOCKER_SSH),) \
 		--progress=$(DOCKER_BUILD_PROGRESS) \
 		-t $(IMAGE) \
 		$(DOCKER_BUILD_EXTRA_FLAGS) \
 		.
 
-# Build test image and run tests in container (requires SSH for private modules)
+# Build test image and run tests in container
 TEST_IMAGE ?= fleet-intelligence-agent:test
 docker-test: ## build test image and run tests in container
 	@echo "Building test image: $(TEST_IMAGE)"
 	@DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) $(DOCKER) build -f Dockerfile.citests \
-		$(if $(DOCKER_SSH),--ssh $(DOCKER_SSH),) \
 		-t $(TEST_IMAGE) \
 		.
 	@echo "Running tests..."
@@ -132,7 +127,7 @@ fleetint: bin/fleetint ## build fleetint binary
 lint: ## run linting tools
 	@echo "Running linting..."
 	@if command -v $(GOLANGCI_LINT) >/dev/null 2>&1; then \
-		GOWORK=off $(GOLANGCI_LINT) run ./...; \
+		$(GOLANGCI_LINT) run ./...; \
 	else \
 		echo "golangci-lint not found, running basic checks..."; \
 		$(GOFMT) -l -s . | tee /tmp/gofmt.out; \
@@ -140,7 +135,7 @@ lint: ## run linting tools
 			echo "Code formatting issues found. Run 'make fmt' to fix."; \
 			exit 1; \
 		fi; \
-		GOWORK=off go vet ./...; \
+		go vet ./...; \
 	fi
 
 fmt: ## format Go code
