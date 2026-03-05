@@ -129,7 +129,13 @@ func TestCheck(t *testing.T) {
 
 	// Look for our NVLink metrics
 	nvlinkMetricsFound := map[string]int{
-		"dcgm_fi_dev_nvlink_bandwidth_total": 0,
+		"dcgm_fi_dev_nvlink_bandwidth_total":                       0,
+		"dcgm_fi_dev_nvlink_error_dl_crc":                          0,
+		"dcgm_fi_dev_nvlink_error_dl_recovery":                     0,
+		"dcgm_fi_dev_nvlink_error_dl_replay":                       0,
+		"dcgm_fi_dev_nvlink_count_link_recovery_successful_events": 0,
+		"dcgm_fi_dev_nvlink_count_link_recovery_failed_events":     0,
+		"dcgm_fi_dev_nvlink_count_link_recovery_events":            0,
 	}
 
 	for _, metric := range metrics {
@@ -147,7 +153,7 @@ func TestCheck(t *testing.T) {
 	// Verify we found metrics for all expected fields
 	for metricName, count := range nvlinkMetricsFound {
 		if count == 0 {
-			t.Logf("  [WARN] Metric %s was not found in Prometheus registry", metricName)
+			t.Logf("  [WARN] Metric %s was not found in Prometheus registry (possibly unsupported on this platform)", metricName)
 		} else {
 			t.Logf("Found %d instance(s) of metric %s", count, metricName)
 		}
