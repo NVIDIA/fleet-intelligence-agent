@@ -1,6 +1,6 @@
 apiVersion: v2
 name: fleet-intelligence-agent
-description: GPU health agent daemonset
+description: Fleet Intelligence Agent daemonset
 type: application
 version: 0.0.1
 appVersion: "0.0.1"

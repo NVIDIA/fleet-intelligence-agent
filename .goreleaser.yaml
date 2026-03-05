@@ -6,25 +6,10 @@
 #   goreleaser release --snapshot --clean    # Create packages without releasing
 #   goreleaser release --clean               # Full release (requires git tag)
 #
-# Prerequisites for private GitLab dependencies:
-#   - SSH key configured for gitlab-master.nvidia.com:12051
-#   - Access to gpu-health/gpud repository
-#
 # Prerequisites for ARM64 cross-compilation:
 #   - sudo apt-get install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
 version: 2
-
-# Global environment variables for private GitLab access
-env:
-  - GOPRIVATE=gitlab-master.nvidia.com/*
-  - GONOPROXY=gitlab-master.nvidia.com/*
-  - GONOSUMDB=gitlab-master.nvidia.com/*
-
-# Git configuration for private repository access
-before:
-  hooks:
-    - git config --global url."ssh://git@gitlab-master.nvidia.com:12051/".insteadOf "https://gitlab-master.nvidia.com/"
 
 # Build configuration
 builds:
@@ -75,10 +60,9 @@ nfpms:
     file_name_template: "fleetint_{{ .Version }}_{{ if eq .Arch \"amd64\" }}amd64{{ else if eq .Arch \"arm64\" }}arm64{{ else }}{{ .Arch }}{{ end }}"
     vendor: NVIDIA Corporation
     homepage: https://github.com/NVIDIA/fleet-intelligence-agent
-    maintainer: NVIDIA GPU Health Team
+    maintainer: NVIDIA Fleet Intelligence Team
     description: |
-      NVIDIA Fleet Intelligence Agent - Lightweight GPU health monitoring and reporting agent
-      for NVIDIA GPU infrastructure.
+      NVIDIA Fleet Intelligence Agent - Host agent for GPU telemetry collection and attestation.
     section: utils
     priority: optional
     formats:
@@ -116,10 +100,9 @@ nfpms:
     file_name_template: "fleetint-{{ .Version }}-1.{{ if eq .Arch \"amd64\" }}x86_64{{ else if eq .Arch \"arm64\" }}aarch64{{ else }}{{ .Arch }}{{ end }}"
     vendor: NVIDIA Corporation
     homepage: https://github.com/NVIDIA/fleet-intelligence-agent
-    maintainer: NVIDIA GPU Health Team
+    maintainer: NVIDIA Fleet Intelligence Team
     description: |
-      NVIDIA Fleet Intelligence Agent - Lightweight GPU health monitoring and reporting agent
-      for NVIDIA GPU infrastructure.
+      NVIDIA Fleet Intelligence Agent - Host agent for GPU telemetry collection and attestation.
     section: Applications/System
     formats:
       - rpm
@@ -169,7 +152,7 @@ release:
   header: |
     ## NVIDIA Fleet Intelligence Agent v{{.Version}}
     
-    This release includes GPU health monitoring and reporting capabilities for NVIDIA GPU infrastructure.
+    This release includes a host agent for GPU telemetry collection and attestation.
     
     ### Available Packages
     
