@@ -1,6 +1,8 @@
 # NVIDIA Fleet Intelligence Agent
 
-Lightweight Fleet Intelligence monitoring and reporting agent for NVIDIA GPU infrastructure building on top of [leptonai/gpud](https://github.com/leptonai/gpud)
+NVIDIA Fleet Intelligence Agent - Host agent for GPU telemetry collection and attestation.
+
+Built on top of [leptonai/gpud](https://github.com/leptonai/gpud)
 
 ## Overview
 
