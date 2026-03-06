@@ -6,7 +6,7 @@
 
 ```bash
 git clone https://github.com/NVIDIA/fleet-intelligence-agent.git
-cd fleetint
+cd fleet-intelligence-agent
 ```
 
 ### Prerequisites
@@ -144,7 +144,7 @@ make fleetint
 ./bin/fleetint scan
 
 # Test with different configurations
-./bin/fleetint run --log-level=debug --port=8080
+./bin/fleetint run --log-level=debug --listen-address=127.0.0.1:8080
 
 # Test offline mode
 ./bin/fleetint run --offline-mode --path=/tmp/test --duration=00:01:00 --format=csv

@@ -6,9 +6,8 @@ Built on top of [leptonai/gpud](https://github.com/leptonai/gpud)
 
 ## Overview
 
-**Prerequisites:**
-- NVIDIA DCGM (Data Center GPU Manager) - automatically installed from NVIDIA CUDA repositories
-- See [DEB Installation](docs/install-deb.md) or [RPM Installation](docs/install-rpm.md) for CUDA repository setup instructions
+For installation prerequisites and setup details, see:
+[Helm Installation](docs/install-helm.md), [DEB Installation](docs/install-deb.md), and [RPM Installation](docs/install-rpm.md).
 
 **What It Monitors:**
 - GPU Metrics: Power, temperature, clocks, utilization, memory, Xid events
@@ -27,13 +26,13 @@ Built on top of [leptonai/gpud](https://github.com/leptonai/gpud)
 
 ## Supported Platforms
 
-| OS Family | Supported Versions | Architecture |
-|-----------|--------------------|--------------|
-| Ubuntu | 22.04, 24.04 | x86_64, ARM64 |
-| RHEL | 8, 9, 10 | x86_64, ARM64 |
-| Rocky Linux | 8, 9, 10 | x86_64, ARM64 |
-| AlmaLinux | 8, 9, 10 | x86_64, ARM64 |
-| Amazon Linux | 2023 | x86_64, ARM64 |
+| OS Family | Supported Versions | Architecture | GPU |
+|-----------|--------------------|--------------|-----|
+| Ubuntu | 22.04, 24.04 | x86_64, ARM64 | Hopper, Blackwell, Rubin |
+| RHEL | 8, 9, 10 | x86_64, ARM64 | Hopper, Blackwell, Rubin |
+| Rocky Linux | 8, 9, 10 | x86_64, ARM64 | Hopper, Blackwell, Rubin |
+| AlmaLinux | 8, 9, 10 | x86_64, ARM64 | Hopper, Blackwell, Rubin |
+| Amazon Linux | 2023 | x86_64, ARM64 | Hopper, Blackwell, Rubin |
 
 ## Documentation
 
