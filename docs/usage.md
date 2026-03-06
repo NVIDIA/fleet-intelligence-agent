@@ -23,7 +23,6 @@ Starts the HTTP API server on port 15133. The server provides REST endpoints and
 **Options:**
 - `--log-level`: Set logging level (debug, info, warn, error)
 - `--listen-address`: Change listen address (default: `127.0.0.1:15133` for localhost only; see [Exposing the Agent for External Monitoring](#exposing-the-agent-for-external-monitoring) for details on exposing to Prometheus and other tools)
-- `--pprof`: Enable pprof profiling endpoint (note: pprof routes are not yet exposed)
 - `--components`: Enable/disable specific components
 
 ### Check Status
@@ -258,7 +257,7 @@ scrape_configs:
     metrics_path: /metrics
 ```
 
-**For production deployments** with persistent configuration and security considerations, see the [Configuration Guide](configuration.md#change-api-server-listen-address).
+**For production deployments** with persistent configuration and security considerations, see the [Configuration Guide](configuration.md#where-to-configure).
 
 ## Troubleshooting
 
@@ -308,4 +307,3 @@ The agent should use <100MB RAM and <1% CPU. Higher usage might indicate:
 - Large lookback windows (check `FLEETINT_METRICS_LOOKBACK` and `FLEETINT_EVENTS_LOOKBACK`)
 - Many GPUs in the system (resource usage scales with GPU count)
 - Debug logging enabled (use `--log-level=warn` or `error`)
-
