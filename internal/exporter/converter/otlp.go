@@ -276,15 +276,10 @@ func (c *otlpConverter) convertToOTLPLogs(data *collector.HealthData) []*logsv1.
 			if extraInfo == nil {
 				extraInfo = map[string]string{}
 			}
-			extraInfoJSON, err := json.Marshal(extraInfo)
-			if err == nil {
-				attributes = append(attributes, &commonv1.KeyValue{
-					Key: "extra_info",
-					Value: &commonv1.AnyValue{
-						Value: &commonv1.AnyValue_StringValue{StringValue: string(extraInfoJSON)},
-					},
-				})
-			}
+			attributes = append(attributes, &commonv1.KeyValue{
+				Key:   "extra_info",
+				Value: extraInfoToAnyValue(extraInfo),
+			})
 
 			logRecord := &logsv1.LogRecord{
 				TimeUnixNano:   uint64(event.Time.UnixNano()),
@@ -379,6 +374,81 @@ func (c *otlpConverter) convertToOTLPLogs(data *collector.HealthData) []*logsv1.
 	}
 
 	return logRecords
+}
+
+func extraInfoToAnyValue(extraInfo map[string]string) *commonv1.AnyValue {
+	values := make([]*commonv1.KeyValue, 0, len(extraInfo))
+	for key, raw := range extraInfo {
+		values = append(values, &commonv1.KeyValue{
+			Key:   key,
+			Value: stringToStructuredAnyValue(raw),
+		})
+	}
+
+	return &commonv1.AnyValue{
+		Value: &commonv1.AnyValue_KvlistValue{
+			KvlistValue: &commonv1.KeyValueList{Values: values},
+		},
+	}
+}
+
+func stringToStructuredAnyValue(raw string) *commonv1.AnyValue {
+	var decoded any
+	if err := json.Unmarshal([]byte(raw), &decoded); err != nil || decoded == nil {
+		return &commonv1.AnyValue{
+			Value: &commonv1.AnyValue_StringValue{StringValue: raw},
+		}
+	}
+
+	return jsonValueToAnyValue(decoded)
+}
+
+func jsonValueToAnyValue(v any) *commonv1.AnyValue {
+	switch value := v.(type) {
+	case map[string]any:
+		values := make([]*commonv1.KeyValue, 0, len(value))
+		for key, nested := range value {
+			values = append(values, &commonv1.KeyValue{
+				Key:   key,
+				Value: jsonValueToAnyValue(nested),
+			})
+		}
+		return &commonv1.AnyValue{
+			Value: &commonv1.AnyValue_KvlistValue{
+				KvlistValue: &commonv1.KeyValueList{Values: values},
+			},
+		}
+	case []any:
+		values := make([]*commonv1.AnyValue, 0, len(value))
+		for _, nested := range value {
+			values = append(values, jsonValueToAnyValue(nested))
+		}
+		return &commonv1.AnyValue{
+			Value: &commonv1.AnyValue_ArrayValue{
+				ArrayValue: &commonv1.ArrayValue{Values: values},
+			},
+		}
+	case bool:
+		return &commonv1.AnyValue{
+			Value: &commonv1.AnyValue_BoolValue{BoolValue: value},
+		}
+	case float64:
+		return &commonv1.AnyValue{
+			Value: &commonv1.AnyValue_DoubleValue{DoubleValue: value},
+		}
+	case string:
+		return &commonv1.AnyValue{
+			Value: &commonv1.AnyValue_StringValue{StringValue: value},
+		}
+	case nil:
+		return &commonv1.AnyValue{
+			Value: &commonv1.AnyValue_StringValue{StringValue: "null"},
+		}
+	default:
+		return &commonv1.AnyValue{
+			Value: &commonv1.AnyValue_StringValue{StringValue: fmt.Sprintf("%v", value)},
+		}
+	}
 }
 
 // convertStructToOTLPAttributes converts a struct to OTLP attributes using reflection

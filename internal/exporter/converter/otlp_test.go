@@ -16,7 +16,6 @@
 package converter
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -138,20 +138,9 @@ func TestOTLPConverter_Convert_WithEvents(t *testing.T) {
 	assert.True(t, contains(body, "temperature_warning") || contains(body, "GPU temperature high"),
 		"Log should contain event name or message")
 
-	attributes := logs[0].Attributes
-	var extraInfoRaw string
-	for _, attr := range attributes {
-		if attr.Key == "extra_info" {
-			extraInfoRaw = attr.Value.GetStringValue()
-			break
-		}
-	}
-	require.NotEmpty(t, extraInfoRaw, "event log should include extra_info attribute")
-
-	var extraInfo map[string]string
-	err := json.Unmarshal([]byte(extraInfoRaw), &extraInfo)
-	require.NoError(t, err)
-	assert.Equal(t, "79", extraInfo["xid"])
+	extraInfo := findAttribute(t, logs[0].Attributes, "extra_info").GetKvlistValue()
+	require.NotNil(t, extraInfo, "event log should include structured extra_info attribute")
+	assert.Equal(t, float64(79), findMapValue(t, extraInfo.Values, "xid").GetDoubleValue())
 }
 
 func TestOTLPConverter_Convert_WithEvents_EmptyExtraInfo(t *testing.T) {
@@ -179,17 +168,12 @@ func TestOTLPConverter_Convert_WithEvents_EmptyExtraInfo(t *testing.T) {
 	logs := otlpData.Logs.ResourceLogs[0].ScopeLogs[0].LogRecords
 	require.GreaterOrEqual(t, len(logs), 1)
 
-	var extraInfoRaw string
-	for _, attr := range logs[0].Attributes {
-		if attr.Key == "extra_info" {
-			extraInfoRaw = attr.Value.GetStringValue()
-			break
-		}
-	}
-	require.Equal(t, "{}", extraInfoRaw, "event log should always include extra_info as empty JSON object")
+	extraInfo := findAttribute(t, logs[0].Attributes, "extra_info").GetKvlistValue()
+	require.NotNil(t, extraInfo, "event log should always include extra_info")
+	assert.Empty(t, extraInfo.Values, "event log should export empty extra_info as an empty OTLP map")
 }
 
-func TestOTLPConverter_Convert_WithEvents_ExtraInfoDataPayload(t *testing.T) {
+func TestOTLPConverter_Convert_WithEvents_StructuredExtraInfo(t *testing.T) {
 	rawData := `{"time":"2026-02-20T23:22:44Z","data_source":"kmsg","xid":149}`
 	data := &collector.HealthData{
 		Timestamp: time.Now(),
@@ -219,22 +203,48 @@ func TestOTLPConverter_Convert_WithEvents_ExtraInfoDataPayload(t *testing.T) {
 	logs := otlpData.Logs.ResourceLogs[0].ScopeLogs[0].LogRecords
 	require.GreaterOrEqual(t, len(logs), 1)
 
-	var extraInfoRaw string
-	for _, attr := range logs[0].Attributes {
-		if attr.Key == "extra_info" {
-			extraInfoRaw = attr.Value.GetStringValue()
-			break
-		}
-	}
-	require.NotEmpty(t, extraInfoRaw)
+	extraInfo := findAttribute(t, logs[0].Attributes, "extra_info").GetKvlistValue()
+	require.NotNil(t, extraInfo)
+	assert.Equal(t, "PCI:0000:04:00", findMapValue(t, extraInfo.Values, "device_uuid").GetStringValue())
 
-	var extraInfo map[string]string
-	require.NoError(t, json.Unmarshal([]byte(extraInfoRaw), &extraInfo))
-	assert.Equal(t, rawData, extraInfo["data"])
-	assert.Equal(t, "PCI:0000:04:00", extraInfo["device_uuid"])
+	dataValue := findMapValue(t, extraInfo.Values, "data").GetKvlistValue()
+	require.NotNil(t, dataValue)
+	assert.Equal(t, "2026-02-20T23:22:44Z", findMapValue(t, dataValue.Values, "time").GetStringValue())
+	assert.Equal(t, "kmsg", findMapValue(t, dataValue.Values, "data_source").GetStringValue())
+	assert.Equal(t, float64(149), findMapValue(t, dataValue.Values, "xid").GetDoubleValue())
+}
+
+func TestOTLPConverter_Convert_WithEvents_InvalidExtraInfoRemainsString(t *testing.T) {
+	data := &collector.HealthData{
+		Timestamp: time.Now(),
+		MachineID: "test-machine",
+		Events: eventstore.Events{
+			{
+				Time:      time.Date(2025, 11, 5, 12, 0, 0, 0, time.UTC),
+				Component: "gpu",
+				Name:      "temperature_warning",
+				Type:      "warning",
+				Message:   "GPU temperature high",
+				ExtraInfo: map[string]string{
+					"data": "{invalid",
+				},
+			},
+		},
+	}
+
+	converter := NewOTLPConverter()
+	otlpData := converter.Convert(data)
+
+	logs := otlpData.Logs.ResourceLogs[0].ScopeLogs[0].LogRecords
+	require.GreaterOrEqual(t, len(logs), 1)
+
+	extraInfo := findAttribute(t, logs[0].Attributes, "extra_info").GetKvlistValue()
+	require.NotNil(t, extraInfo)
+	assert.Equal(t, "{invalid", findMapValue(t, extraInfo.Values, "data").GetStringValue())
 }
 
 func TestOTLPConverter_Convert_WithComponentData(t *testing.T) {
+	rawData := `{"time":"2026-02-20T23:22:44Z","data_source":"kmsg","xid":149}`
 	data := &collector.HealthData{
 		Timestamp: time.Now(),
 		MachineID: "test-machine",
@@ -244,7 +254,10 @@ func TestOTLPConverter_Convert_WithComponentData(t *testing.T) {
 				"component_name": "gpu",
 				"health":         "healthy",
 				"reason":         "All checks passed",
-				"extra_info":     "Additional details",
+				"extra_info": map[string]any{
+					"device_uuid": "PCI:0000:04:00",
+					"data":        rawData,
+				},
 			},
 		},
 	}
@@ -265,6 +278,10 @@ func TestOTLPConverter_Convert_WithComponentData(t *testing.T) {
 	found := false
 	for _, log := range logs {
 		if contains(log.Body.GetStringValue(), "gpu") && contains(log.Body.GetStringValue(), "healthy") {
+			extraInfo := findAttribute(t, log.Attributes, "extra_info").GetStringValue()
+			require.NotEmpty(t, extraInfo)
+			assert.Contains(t, extraInfo, `"device_uuid":"PCI:0000:04:00"`)
+			assert.Contains(t, extraInfo, `"data":"{\"time\":\"2026-02-20T23:22:44Z\",\"data_source\":\"kmsg\",\"xid\":149}"`)
 			found = true
 			break
 		}
@@ -786,4 +803,23 @@ func findSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func findAttribute(t *testing.T, attrs []*commonv1.KeyValue, key string) *commonv1.AnyValue {
+	t.Helper()
+
+	for _, attr := range attrs {
+		if attr.Key == key {
+			return attr.Value
+		}
+	}
+
+	t.Fatalf("attribute %q not found", key)
+	return nil
+}
+
+func findMapValue(t *testing.T, attrs []*commonv1.KeyValue, key string) *commonv1.AnyValue {
+	t.Helper()
+
+	return findAttribute(t, attrs, key)
 }
