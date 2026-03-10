@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package imds provides functions for interacting with the Azure Instance Metadata Service.
 package imds
 

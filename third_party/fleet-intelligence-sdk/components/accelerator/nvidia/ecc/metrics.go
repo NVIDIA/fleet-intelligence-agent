@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package ecc provides the NVIDIA ECC metrics collection and reporting.
 package ecc
 

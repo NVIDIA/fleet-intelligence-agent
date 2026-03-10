@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package latency contains logic for egress traffic from each device.
 package latency
 

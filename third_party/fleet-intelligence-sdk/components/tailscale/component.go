@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package tailscale tracks the current tailscale status.
 package tailscale
 

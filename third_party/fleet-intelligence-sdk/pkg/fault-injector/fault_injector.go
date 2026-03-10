@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package faultinjector provides a way to inject failures into the system.
 package faultinjector
 

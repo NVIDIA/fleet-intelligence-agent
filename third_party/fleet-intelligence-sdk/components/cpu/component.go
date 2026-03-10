@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package cpu tracks the combined usage of all CPUs (not per-CPU).
 package cpu
 

@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package metadata provides the persistent storage layer for GPUd metadata.
 package metadata
 

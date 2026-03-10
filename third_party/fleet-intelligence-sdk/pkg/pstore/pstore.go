@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package pstore provides operations for Linux pstore,
 // mainly to read the pstore log on reboot.
 // ref. https://www.freedesktop.org/software/systemd/man/latest/systemd-pstore.service.html

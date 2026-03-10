@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package pkg contains a set of generic Go packages
 // that are useful to gpud and possibly to other projects.
 package pkg

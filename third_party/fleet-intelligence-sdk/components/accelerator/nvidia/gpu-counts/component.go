@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package gpucounts monitors the GPU count of the system.
 // Optional, enabled if the host has NVIDIA GPUs.
 package gpucounts

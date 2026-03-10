@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package disk tracks the disk usage of all the mount points specified in the configuration.
 package disk
 

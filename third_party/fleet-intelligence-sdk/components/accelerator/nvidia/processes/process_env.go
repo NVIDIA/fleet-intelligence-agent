@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 package processes
 
 // ports "DCGM_FR_BAD_CUDA_ENV"; The environment has variables that hurt CUDA

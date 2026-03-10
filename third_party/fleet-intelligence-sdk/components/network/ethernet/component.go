@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package ethernet tracks per-interface ethernet statistics and current link state.
 //
 // Scope (initial): physical NIC ports only (exclude virtual/container/tunnel interfaces).

@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package recorder records internal GPUd metrics to Prometheus.
 package recorder
 

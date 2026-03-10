@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package edge provides a client for the Tailscale DERP (Designated Edge Router Protocol) service.
 package edge
 
