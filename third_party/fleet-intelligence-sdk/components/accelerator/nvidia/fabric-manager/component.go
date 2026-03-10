@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package fabricmanager tracks NVIDIA fabric manager and fabric health monitoring services.
 //
 // # Fabric Management Architecture

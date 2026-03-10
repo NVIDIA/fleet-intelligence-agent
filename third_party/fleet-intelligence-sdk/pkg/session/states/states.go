@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package states provides tracking of login success and failure events as well as
 // the state of ongoing session loops (token expiration, etc.).
 package states

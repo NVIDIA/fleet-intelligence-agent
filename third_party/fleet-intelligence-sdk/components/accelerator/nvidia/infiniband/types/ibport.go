@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package types contains shared types for the infiniband package to avoid import cycles.
 package types
 

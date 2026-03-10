@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package fuse provides a client for the FUSE (Filesystem in Userspace) protocol.
 package fuse
 

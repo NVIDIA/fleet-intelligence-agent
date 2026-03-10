@@ -428,5 +428,82 @@ For questions about licensing or to obtain permission to use NVIDIA proprietary
 components, please contact NVIDIA Legal.
 
 ================================================================================
+SECTION 4: EMBEDDED THIRD-PARTY SOURCE CODE
+================================================================================
+
+The following source files are embedded directly in the
+third_party/fleet-intelligence-sdk directory and originate from third-party
+projects. Their original copyright notices are retained in each file.
+
+--------------------------------------------------------------------------------
+
+Copyright (c) Tailscale Inc & AUTHORS - BSD 3-Clause License
+
+Files:
+  third_party/fleet-intelligence-sdk/cmd/gpud/update/command.go
+  third_party/fleet-intelligence-sdk/cmd/gpud/release/command_gen_key.go
+  third_party/fleet-intelligence-sdk/cmd/gpud/release/command_sign_key.go
+  third_party/fleet-intelligence-sdk/cmd/gpud/release/command_sign_package.go
+  third_party/fleet-intelligence-sdk/cmd/gpud/release/command_verify_key_signature.go
+  third_party/fleet-intelligence-sdk/cmd/gpud/release/command_verify_package_signature.go
+  third_party/fleet-intelligence-sdk/pkg/release/distsign/distsign.go
+  third_party/fleet-intelligence-sdk/pkg/release/distsign/distsign_test.go
+  third_party/fleet-intelligence-sdk/pkg/release/distsign/roots.go
+  third_party/fleet-intelligence-sdk/pkg/release/distsign/roots_test.go
+  third_party/fleet-intelligence-sdk/pkg/netutil/latency/edge/derp.go
+  third_party/fleet-intelligence-sdk/pkg/netutil/latency/edge/derp_test.go
+  third_party/fleet-intelligence-sdk/pkg/netutil/latency/edge/derpmap/derpmap.go
+
+// Copyright (c) Tailscale Inc & AUTHORS
+// SPDX-License-Identifier: BSD-3-Clause
+
+--------------------------------------------------------------------------------
+
+Copyright 2019 The Prometheus Authors - Apache License 2.0
+
+Files:
+  third_party/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband/class/class.go
+  third_party/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband/class/types.go
+  third_party/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband/class/value_parser.go
+  third_party/fleet-intelligence-sdk/pkg/memory/memory_linux.go
+  third_party/fleet-intelligence-sdk/pkg/file/descriptors_linux.go
+  third_party/fleet-intelligence-sdk/pkg/uptime/uptime_linux.go
+
+// Copyright 2019 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0
+
+--------------------------------------------------------------------------------
+
+Copyright 2014 Google Inc. All Rights Reserved. - Apache License 2.0
+
+Files:
+  third_party/fleet-intelligence-sdk/components/memory/kmsg_matcher.go
+  third_party/fleet-intelligence-sdk/components/memory/kmsg_matcher_test.go
+
+// Copyright 2014 Google Inc. All Rights Reserved.
+// Licensed under the Apache License, Version 2.0
+
+--------------------------------------------------------------------------------
+
+Copyright © 2020-2024 Dell Inc. or its subsidiaries. All Rights Reserved. - Apache License 2.0
+
+Files:
+  third_party/fleet-intelligence-sdk/pkg/disk/lsblk.go
+  third_party/fleet-intelligence-sdk/pkg/disk/lsblk_test.go
+
+// Copyright © 2020-2024 Dell Inc. or its subsidiaries. All Rights Reserved.
+// Licensed under the Apache License, Version 2.0
+
+--------------------------------------------------------------------------------
+
+Copyright 2016 Euan Kemp - Apache License 2.0
+
+Files:
+  third_party/fleet-intelligence-sdk/pkg/kmsg/watcher.go
+
+// Copyright 2016 Euan Kemp
+// Licensed under the Apache License, Version 2.0
+
+================================================================================
 
 For questions or concerns about this notice file, please contact NVIDIA Legal.

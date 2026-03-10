@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package power tracks the NVIDIA per-GPU power usage.
 package power
 

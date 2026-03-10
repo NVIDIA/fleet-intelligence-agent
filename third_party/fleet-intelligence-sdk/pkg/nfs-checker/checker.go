@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package nfschecker checks the health of the NFS mount points.
 package nfschecker
 

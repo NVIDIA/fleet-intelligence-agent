@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package library provides a component that returns healthy if and only if all the specified libraries exist.
 package library
 

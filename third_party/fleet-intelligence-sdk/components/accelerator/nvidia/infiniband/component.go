@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package infiniband monitors the infiniband status of the system.
 // Optional, enabled if the host has NVIDIA GPUs.
 package infiniband

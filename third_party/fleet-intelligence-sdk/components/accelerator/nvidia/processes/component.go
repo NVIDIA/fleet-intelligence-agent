@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package processes tracks the NVIDIA per-GPU processes.
 package processes
 

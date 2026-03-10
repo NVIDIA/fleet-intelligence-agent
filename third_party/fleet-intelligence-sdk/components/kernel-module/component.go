@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package kernelmodule provides a component that checks the kernel modules in Linux.
 package kernelmodule
 

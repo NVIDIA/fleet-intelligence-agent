@@ -1,3 +1,6 @@
+// Copyright 2024 Lepton AI Inc
+// Source: https://github.com/leptonai/gpud
+
 // Package ecc tracks the NVIDIA per-GPU ECC errors and other ECC related information.
 package ecc
 
