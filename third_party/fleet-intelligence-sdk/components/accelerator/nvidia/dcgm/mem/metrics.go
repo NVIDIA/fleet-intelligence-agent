@@ -37,6 +37,10 @@ var memFields = []dcgm.Short{
 	dcgm.DCGM_FI_DEV_ECC_DBE_VOL_TOTAL,              // Total double bit volatile ECC errors
 	dcgm.DCGM_FI_DEV_ECC_SBE_AGG_TOTAL,              // Total single bit aggregate (persistent) ECC errors
 	dcgm.DCGM_FI_DEV_ECC_DBE_AGG_TOTAL,              // Total double bit aggregate (persistent) ECC errors
+	dcgm.DCGM_FI_DEV_ECC_SBE_VOL_DEV,                // Single bit volatile ECC errors detected in device memory
+	dcgm.DCGM_FI_DEV_ECC_DBE_VOL_DEV,                // Double bit volatile ECC errors detected in device memory
+	dcgm.DCGM_FI_DEV_ECC_SBE_AGG_DEV,                // Aggregate single bit ECC errors detected in device memory
+	dcgm.DCGM_FI_DEV_ECC_DBE_AGG_DEV,                // Aggregate double bit ECC errors detected in device memory
 	dcgm.DCGM_FI_DEV_RETIRED_PENDING,                // Whether pages are pending retirement
 	dcgm.DCGM_FI_DEV_RETIRED_DBE,                    // Retired DBE pages
 	dcgm.DCGM_FI_DEV_RETIRED_SBE,                    // Retired SBE pages
@@ -172,6 +176,38 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
+	metricDCGMFIDevECCSBEVolDev = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "dcgm_fi_dev_ecc_sbe_vol_dev",
+			Help: "Device memory single bit volatile ECC errors.",
+		},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevECCDBEVolDev = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "dcgm_fi_dev_ecc_dbe_vol_dev",
+			Help: "Device memory double bit volatile ECC errors.",
+		},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevECCSBEAggDev = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "dcgm_fi_dev_ecc_sbe_agg_dev",
+			Help: "Device memory single bit aggregate (persistent) ECC errors. Note: monotonically increasing.",
+		},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevECCDBEAggDev = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "dcgm_fi_dev_ecc_dbe_agg_dev",
+			Help: "Device memory double bit aggregate (persistent) ECC errors. Note: monotonically increasing.",
+		},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
+
 	metricDCGMFIDevRetiredPending = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{Name: "dcgm_fi_dev_retired_pending", Help: "Number of pages pending retirement"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
@@ -227,6 +263,10 @@ func init() {
 		metricDCGMFIDevECCDBEVolTotal,
 		metricDCGMFIDevECCSBEAggTotal,
 		metricDCGMFIDevECCDBAggTotal,
+		metricDCGMFIDevECCSBEVolDev,
+		metricDCGMFIDevECCDBEVolDev,
+		metricDCGMFIDevECCSBEAggDev,
+		metricDCGMFIDevECCDBEAggDev,
 		metricDCGMFIDevRetiredPending,
 		metricDCGMFIDevRetiredDBE,
 		metricDCGMFIDevRetiredSBE,

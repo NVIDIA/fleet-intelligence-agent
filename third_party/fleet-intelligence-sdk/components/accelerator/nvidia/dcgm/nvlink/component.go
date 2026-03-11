@@ -375,6 +375,8 @@ func (c *component) Check() components.CheckResult {
 					metricDCGMFIDevC2CLinkErrorReplay.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
 				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_GENERAL_ERRORS:
 					metricDCGMFIDevNvlinkCountRxGeneralErrors.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_ERRORS:
+					metricDCGMFIDevNvlinkCountRxErrors.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
 				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_MALFORMED_PACKET_ERRORS:
 					metricDCGMFIDevNvlinkCountRxMalformedPacketErrors.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
 				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_REMOTE_ERRORS:

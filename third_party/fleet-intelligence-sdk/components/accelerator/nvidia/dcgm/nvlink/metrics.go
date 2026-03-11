@@ -34,6 +34,7 @@ var nvlinkFields = []dcgm.Short{
 	dcgm.DCGM_FI_DEV_FABRIC_MANAGER_STATUS,
 	dcgm.DCGM_FI_DEV_C2C_LINK_ERROR_REPLAY,
 	dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_GENERAL_ERRORS,
+	dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_ERRORS,
 	dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_MALFORMED_PACKET_ERRORS,
 	dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_REMOTE_ERRORS,
 	dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_SYMBOL_ERRORS,
@@ -122,6 +123,10 @@ var (
 		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_rx_general_errors", Help: "Total number of packets Rx with header mismatch"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
+	metricDCGMFIDevNvlinkCountRxErrors = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_rx_errors", Help: "Total number of packets with errors Rx on a link"},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
 	metricDCGMFIDevNvlinkCountRxMalformedPacketErrors = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_rx_malformed_packet_errors", Help: "Number of packets Rx on a link where packets are malformed"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
@@ -171,6 +176,7 @@ func init() {
 		metricDCGMFIDevFabricManagerStatus,
 		metricDCGMFIDevC2CLinkErrorReplay,
 		metricDCGMFIDevNvlinkCountRxGeneralErrors,
+		metricDCGMFIDevNvlinkCountRxErrors,
 		metricDCGMFIDevNvlinkCountRxMalformedPacketErrors,
 		metricDCGMFIDevNvlinkCountRxRemoteErrors,
 		metricDCGMFIDevNvlinkCountRxSymbolErrors,
