@@ -10,7 +10,22 @@ import (
 	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics/scraper"
 	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
+	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 )
+
+func TestUtilizationFieldsIncludeMemCopyUtil(t *testing.T) {
+	found := false
+	for _, field := range utilizationFields {
+		if field == dcgm.DCGM_FI_DEV_MEM_COPY_UTIL {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Fatal("expected DCGM_FI_DEV_MEM_COPY_UTIL in utilizationFields")
+	}
+}
 
 func TestNew(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -126,8 +141,6 @@ func TestCheck(t *testing.T) {
 	utilizationMetricsFound := map[string]int{
 		"dcgm_fi_dev_gpu_util":      0,
 		"dcgm_fi_dev_mem_copy_util": 0,
-		"dcgm_fi_dev_enc_util":      0,
-		"dcgm_fi_dev_dec_util":      0,
 	}
 
 	for _, metric := range metrics {

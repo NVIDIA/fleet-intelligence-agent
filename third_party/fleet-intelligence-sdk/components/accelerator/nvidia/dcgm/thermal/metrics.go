@@ -13,6 +13,8 @@ var temperatureFields = []dcgm.Short{
 	dcgm.DCGM_FI_DEV_GPU_TEMP,      // GPU core temperature
 	dcgm.DCGM_FI_DEV_MEMORY_TEMP,   // GPU memory temperature
 	dcgm.DCGM_FI_DEV_SLOWDOWN_TEMP, // Slowdown temperature for the device
+	dcgm.DCGM_FI_DEV_THERMAL_VIOLATION,
+	dcgm.DCGM_FI_DEV_GPU_TEMP_LIMIT,
 }
 
 var (
@@ -49,6 +51,17 @@ var (
 		},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevThermalViolation = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "dcgm_fi_dev_thermal_violation", Help: "Thermal Violation time in ns"},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevGPUTempLimit = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "dcgm_fi_dev_gpu_temp_limit", Help: "Thermal margin temperature (distance to nearest slowdown threshold) for this GPU"},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
+
 )
 
 func init() {
@@ -56,5 +69,7 @@ func init() {
 		metricDCGMFIDevGPUTemp,
 		metricDCGMFIDevMemoryTemp,
 		metricDCGMFIDevSlowdownTemp,
+		metricDCGMFIDevThermalViolation,
+		metricDCGMFIDevGPUTempLimit,
 	)
 }

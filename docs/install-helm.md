@@ -3,6 +3,7 @@
 ## Prerequisites
 
 - NVIDIA GPU Operator installed with DCGM HostEngine enabled.
+- DCGM HostEngine `4.2.3` or newer.
 - A DCGM service endpoint reachable from the cluster (defaults to `nvidia-dcgm.gpu-operator.svc:5555`).
 - Access to GitHub Container Registry (`ghcr.io`) from your cluster/network.
 

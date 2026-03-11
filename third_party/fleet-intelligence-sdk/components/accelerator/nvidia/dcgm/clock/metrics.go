@@ -10,10 +10,9 @@ import (
 
 // clockFields defines the DCGM fields to monitor for clock metrics
 var clockFields = []dcgm.Short{
-	dcgm.DCGM_FI_DEV_SM_CLOCK,                                       // SM clock for the device
-	dcgm.DCGM_FI_DEV_MEM_CLOCK,                                      // Memory clock for the device
-	dcgm.DCGM_FI_DEV_CLOCKS_EVENT_REASON_HW_THERM_SLOWDOWN_NS,       // Throttling due to temperature being too high (reducing core clocks by a factor of 2 or more) in ns
-	dcgm.DCGM_FI_DEV_CLOCKS_EVENT_REASON_HW_POWER_BRAKE_SLOWDOWN_NS, // Throttling due to external power brake assertion trigger (reducing core clocks by a factor of 2 or more) in ns
+	dcgm.DCGM_FI_DEV_SM_CLOCK,              // SM clock for the device
+	dcgm.DCGM_FI_DEV_MEM_CLOCK,             // Memory clock for the device
+	dcgm.DCGM_FI_DEV_CLOCKS_EVENT_REASONS,  // Clock event reasons bitmask
 }
 
 var (
@@ -41,22 +40,12 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevClocksEventReasonHWThermSlowdownNS = prometheus.NewGaugeVec(
+	metricDCGMFIDevClocksEventReasons = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "",
 			Subsystem: "",
-			Name:      "dcgm_fi_dev_clocks_event_reason_hw_therm_slowdown_ns",
-			Help:      "Throttling due to temperature being too high (reducing core clocks by a factor of 2 or more) in ns.",
-		},
-		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
-	).MustCurryWith(componentLabel)
-
-	metricDCGMFIDevClocksEventReasonHWPowerBrakeSlowdownNS = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "",
-			Subsystem: "",
-			Name:      "dcgm_fi_dev_clocks_event_reason_hw_power_brake_slowdown_ns",
-			Help:      "Throttling due to external power brake assertion trigger (reducing core clocks by a factor of 2 or more) in ns.",
+			Name:      "dcgm_fi_dev_clocks_event_reasons",
+			Help:      "Current clock event reasons (bitmask of DCGM_CLOCKS_EVENT_REASON_*)",
 		},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
@@ -66,7 +55,6 @@ func init() {
 	pkgmetrics.MustRegister(
 		metricDCGMFIDevSMClock,
 		metricDCGMFIDevMemClock,
-		metricDCGMFIDevClocksEventReasonHWThermSlowdownNS,
-		metricDCGMFIDevClocksEventReasonHWPowerBrakeSlowdownNS,
+		metricDCGMFIDevClocksEventReasons,
 	)
 }

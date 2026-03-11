@@ -1,8 +1,8 @@
 package cpu
 
 import (
-	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
+	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 )
 
 // mockDCGMInstance is a minimal mock for testing cpu component behavior

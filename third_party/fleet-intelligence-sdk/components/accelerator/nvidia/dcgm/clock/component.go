@@ -176,26 +176,21 @@ func (c *component) Check() components.CheckResult {
 			for _, fieldValue := range deviceData.Values {
 				// Use valid value
 				switch fieldValue.FieldID {
-			case dcgm.DCGM_FI_DEV_SM_CLOCK:
-				metricDCGMFIDevSMClock.With(prometheus.Labels{
-					"uuid":      deviceData.UUID,
-					"gpu": fmt.Sprintf("%d", deviceData.DeviceID),
-				}).Set(float64(fieldValue.Int64()))
-			case dcgm.DCGM_FI_DEV_MEM_CLOCK:
-				metricDCGMFIDevMemClock.With(prometheus.Labels{
-					"uuid":      deviceData.UUID,
-					"gpu": fmt.Sprintf("%d", deviceData.DeviceID),
-				}).Set(float64(fieldValue.Int64()))
-			case dcgm.DCGM_FI_DEV_CLOCKS_EVENT_REASON_HW_THERM_SLOWDOWN_NS:
-				metricDCGMFIDevClocksEventReasonHWThermSlowdownNS.With(prometheus.Labels{
-					"uuid":      deviceData.UUID,
-					"gpu": fmt.Sprintf("%d", deviceData.DeviceID),
-				}).Set(float64(fieldValue.Int64()))
-			case dcgm.DCGM_FI_DEV_CLOCKS_EVENT_REASON_HW_POWER_BRAKE_SLOWDOWN_NS:
-				metricDCGMFIDevClocksEventReasonHWPowerBrakeSlowdownNS.With(prometheus.Labels{
-					"uuid":      deviceData.UUID,
-					"gpu": fmt.Sprintf("%d", deviceData.DeviceID),
-				}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_SM_CLOCK:
+					metricDCGMFIDevSMClock.With(prometheus.Labels{
+						"uuid": deviceData.UUID,
+						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
+					}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_MEM_CLOCK:
+					metricDCGMFIDevMemClock.With(prometheus.Labels{
+						"uuid": deviceData.UUID,
+						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
+					}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_CLOCKS_EVENT_REASONS:
+					metricDCGMFIDevClocksEventReasons.With(prometheus.Labels{
+						"uuid": deviceData.UUID,
+						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
+					}).Set(float64(fieldValue.Int64()))
 				}
 			}
 		}

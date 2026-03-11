@@ -10,9 +10,11 @@ import (
 
 // powerFields defines the DCGM fields to monitor for power metrics
 var powerFields = []dcgm.Short{
-	dcgm.DCGM_FI_DEV_POWER_USAGE,              // Power usage for the device in Watts
-	dcgm.DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION, // Total energy consumption for the GPU in mJ since the driver was last reloaded
-	dcgm.DCGM_FI_DEV_ENFORCED_POWER_LIMIT,     // Effective power limit that the driver enforces after taking into account all limiters
+	dcgm.DCGM_FI_DEV_POWER_USAGE,          // Power usage for the device in Watts
+	dcgm.DCGM_FI_DEV_ENFORCED_POWER_LIMIT, // Effective power limit that the driver enforces after taking into account all limiters
+	dcgm.DCGM_FI_DEV_POWER_VIOLATION,
+	dcgm.DCGM_FI_DEV_RELIABILITY_VIOLATION,
+	dcgm.DCGM_FI_DEV_BOARD_LIMIT_VIOLATION,
 }
 
 var (
@@ -30,16 +32,6 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevTotalEnergyConsumption = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "",
-			Subsystem: "",
-			Name:      "dcgm_fi_dev_total_energy_consumption",
-			Help:      "Total energy consumption for the GPU in mJ since the driver was last reloaded.",
-		},
-		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
-	).MustCurryWith(componentLabel)
-
 	metricDCGMFIDevEnforcedPowerLimit = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "",
@@ -49,12 +41,29 @@ var (
 		},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevPowerViolation = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "dcgm_fi_dev_power_violation", Help: "Power Violation time in ns"},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevReliabilityViolation = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "dcgm_fi_dev_reliability_violation", Help: "Reliability violation limit"},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevBoardLimitViolation = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "dcgm_fi_dev_board_limit_violation", Help: "Board violation limit"},
+		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
+	).MustCurryWith(componentLabel)
 )
 
 func init() {
 	pkgmetrics.MustRegister(
 		metricDCGMFIDevPowerUsage,
-		metricDCGMFIDevTotalEnergyConsumption,
 		metricDCGMFIDevEnforcedPowerLimit,
+		metricDCGMFIDevPowerViolation,
+		metricDCGMFIDevReliabilityViolation,
+		metricDCGMFIDevBoardLimitViolation,
 	)
 }

@@ -176,26 +176,16 @@ func (c *component) Check() components.CheckResult {
 			for _, fieldValue := range deviceData.Values {
 				// Use valid value
 				switch fieldValue.FieldID {
-			case dcgm.DCGM_FI_DEV_GPU_UTIL:
-				metricDCGMFIDevGPUUtil.With(prometheus.Labels{
-					"uuid":      deviceData.UUID,
-					"gpu": fmt.Sprintf("%d", deviceData.DeviceID),
-				}).Set(float64(fieldValue.Int64()))
-			case dcgm.DCGM_FI_DEV_MEM_COPY_UTIL:
-				metricDCGMFIDevMemCopyUtil.With(prometheus.Labels{
-					"uuid":      deviceData.UUID,
-					"gpu": fmt.Sprintf("%d", deviceData.DeviceID),
-				}).Set(float64(fieldValue.Int64()))
-			case dcgm.DCGM_FI_DEV_ENC_UTIL:
-				metricDCGMFIDevEncUtil.With(prometheus.Labels{
-					"uuid":      deviceData.UUID,
-					"gpu": fmt.Sprintf("%d", deviceData.DeviceID),
-				}).Set(float64(fieldValue.Int64()))
-			case dcgm.DCGM_FI_DEV_DEC_UTIL:
-				metricDCGMFIDevDecUtil.With(prometheus.Labels{
-					"uuid":      deviceData.UUID,
-					"gpu": fmt.Sprintf("%d", deviceData.DeviceID),
-				}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_GPU_UTIL:
+					metricDCGMFIDevGPUUtil.With(prometheus.Labels{
+						"uuid": deviceData.UUID,
+						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
+					}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_MEM_COPY_UTIL:
+					metricDCGMFIDevMemCopyUtil.With(prometheus.Labels{
+						"uuid": deviceData.UUID,
+						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
+					}).Set(float64(fieldValue.Int64()))
 				}
 			}
 		}

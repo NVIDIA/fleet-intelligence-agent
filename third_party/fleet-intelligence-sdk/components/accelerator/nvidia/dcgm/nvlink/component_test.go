@@ -135,7 +135,18 @@ func TestCheck(t *testing.T) {
 		"dcgm_fi_dev_nvlink_error_dl_replay":                       0,
 		"dcgm_fi_dev_nvlink_count_link_recovery_successful_events": 0,
 		"dcgm_fi_dev_nvlink_count_link_recovery_failed_events":     0,
-		"dcgm_fi_dev_nvlink_count_link_recovery_events":            0,
+		"dcgm_fi_dev_fabric_manager_status":                        0,
+		"dcgm_fi_dev_c2c_link_error_replay":                        0,
+		"dcgm_fi_dev_nvlink_count_rx_general_errors":               0,
+		"dcgm_fi_dev_nvlink_count_rx_malformed_packet_errors":      0,
+		"dcgm_fi_dev_nvlink_count_rx_remote_errors":                0,
+		"dcgm_fi_dev_nvlink_count_rx_symbol_errors":                0,
+		"dcgm_fi_dev_nvlink_count_rx_buffer_overrun_errors":        0,
+		"dcgm_fi_dev_nvlink_count_local_link_integrity_errors":     0,
+		"dcgm_fi_dev_nvlink_count_effective_errors":                0,
+		"dcgm_fi_dev_nvlink_count_effective_ber":                   0,
+		"dcgm_fi_dev_nvlink_count_symbol_ber":                      0,
+		"dcgm_fi_dev_nvlink_count_tx_discards":                     0,
 	}
 
 	for _, metric := range metrics {
