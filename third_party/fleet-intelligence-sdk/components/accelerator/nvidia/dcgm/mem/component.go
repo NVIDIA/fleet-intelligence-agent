@@ -418,6 +418,26 @@ func (c *component) Check() components.CheckResult {
 						"uuid": deviceData.UUID,
 						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
 					}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_ECC_SBE_VOL_DEV:
+					metricDCGMFIDevECCSBEVolDev.With(prometheus.Labels{
+						"uuid": deviceData.UUID,
+						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
+					}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_ECC_DBE_VOL_DEV:
+					metricDCGMFIDevECCDBEVolDev.With(prometheus.Labels{
+						"uuid": deviceData.UUID,
+						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
+					}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_ECC_SBE_AGG_DEV:
+					metricDCGMFIDevECCSBEAggDev.With(prometheus.Labels{
+						"uuid": deviceData.UUID,
+						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
+					}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_ECC_DBE_AGG_DEV:
+					metricDCGMFIDevECCDBEAggDev.With(prometheus.Labels{
+						"uuid": deviceData.UUID,
+						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
+					}).Set(float64(fieldValue.Int64()))
 				case dcgm.DCGM_FI_DEV_RETIRED_PENDING:
 					metricDCGMFIDevRetiredPending.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
 				case dcgm.DCGM_FI_DEV_RETIRED_DBE:
