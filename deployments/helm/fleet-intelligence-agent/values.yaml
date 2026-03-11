@@ -48,7 +48,6 @@ env:
 logLevel: warn
 listenAddress: 0.0.0.0:15133
 components: all
-deployEnv: prod
 
 enroll:
   enabled: false

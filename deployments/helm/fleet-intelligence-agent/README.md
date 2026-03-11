@@ -40,7 +40,6 @@ Common values (defaults from `values.yaml`):
 | `logLevel` | `warn` | Log level. |
 | `listenAddress` | `0.0.0.0:15133` | Listen address. |
 | `components` | `all` | Enabled components. |
-| `deployEnv` | `prod` | Deployment environment (`prod`, `canary`, `stg`, `dev`) shown in Helm install notes. |
 | `enroll.enabled` | `false` | Enable enrollment init container. |
 | `enroll.unenroll` | `false` | Run explicit unenroll init container (cleanup persisted enrollment metadata). |
 | `enroll.endpoint` | `""` | Enrollment endpoint. |
