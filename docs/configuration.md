@@ -43,9 +43,67 @@ These are `fleetint run` flags.
 |---|---|---|---|
 | `--log-level` | Log level (`debug`, `info`, `warn`, `error`) | `warn` | `logLevel` |
 | `--listen-address` | API bind address | bare metal: `127.0.0.1:15133` | `listenAddress` (chart default `0.0.0.0:15133`) |
-| `--components` | Comma-separated enabled components (`all`, `none`, or explicit list) | `all` | `components` |
+| `--components` | Comma-separated enabled components (`all` or explicit list; use `all,-name` to exclude components) | `all` | `components` |
 | `--enable-dcgm-policy` | Enable DCGM non-XID policy monitoring | `false` | not exposed directly |
 | `--enable-fault-injection` | Enable local fault-injection endpoint (testing only) | `false` | not exposed directly |
+
+## Component selection
+
+Use `--components` to control which monitoring components are enabled.
+
+Examples:
+
+```bash
+# Enable all components
+fleetint run --components=all
+
+# Enable only specific components
+fleetint run --components=accelerator-nvidia-dcgm-thermal,accelerator-nvidia-dcgm-utilization,cpu,memory
+
+# Start from the default set and disable one component
+fleetint run --components=all,-accelerator-nvidia-dcgm-prof
+```
+
+Notes:
+
+- `all` (or `*`) enables the default component set.
+- Use `all,-<component-name>` to start from the default set and exclude specific components.
+- A plain explicit list enables only the listed components.
+
+Available component names:
+
+**NVIDIA GPU components**
+
+- `accelerator-nvidia-infiniband`
+- `accelerator-nvidia-nccl`
+- `accelerator-nvidia-peermem`
+- `accelerator-nvidia-persistence-mode`
+- `accelerator-nvidia-processes`
+- `accelerator-nvidia-error-sxid`
+- `accelerator-nvidia-error-xid`
+
+**NVIDIA GPU DCGM components**
+
+- `accelerator-nvidia-dcgm-clock`
+- `accelerator-nvidia-dcgm-cpu`
+- `accelerator-nvidia-dcgm-inforom`
+- `accelerator-nvidia-dcgm-mem`
+- `accelerator-nvidia-dcgm-nvlink`
+- `accelerator-nvidia-dcgm-nvswitch`
+- `accelerator-nvidia-dcgm-pcie`
+- `accelerator-nvidia-dcgm-power`
+- `accelerator-nvidia-dcgm-prof`
+- `accelerator-nvidia-dcgm-thermal`
+- `accelerator-nvidia-dcgm-utilization`
+
+**System components**
+
+- `cpu`
+- `disk`
+- `memory`
+- `network-ethernet`
+- `os`
+- `library`
 
 ## Verify effective config
 
