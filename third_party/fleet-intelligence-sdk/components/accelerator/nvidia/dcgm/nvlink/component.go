@@ -354,13 +354,30 @@ func (c *component) Check() components.CheckResult {
 						"uuid": deviceData.UUID,
 						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
 					}).Set(float64(recoveryFailedValue))
-
-				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_LINK_RECOVERY_EVENTS:
-					recoveryEventsValue := fieldValue.Int64()
-					metricDCGMFIDevNvlinkCountLinkRecoveryEvents.With(prometheus.Labels{
-						"uuid": deviceData.UUID,
-						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
-					}).Set(float64(recoveryEventsValue))
+				case dcgm.DCGM_FI_DEV_FABRIC_MANAGER_STATUS:
+					metricDCGMFIDevFabricManagerStatus.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_C2C_LINK_ERROR_REPLAY:
+					metricDCGMFIDevC2CLinkErrorReplay.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_GENERAL_ERRORS:
+					metricDCGMFIDevNvlinkCountRxGeneralErrors.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_MALFORMED_PACKET_ERRORS:
+					metricDCGMFIDevNvlinkCountRxMalformedPacketErrors.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_REMOTE_ERRORS:
+					metricDCGMFIDevNvlinkCountRxRemoteErrors.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_SYMBOL_ERRORS:
+					metricDCGMFIDevNvlinkCountRxSymbolErrors.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_BUFFER_OVERRUN_ERRORS:
+					metricDCGMFIDevNvlinkCountRxBufferOverrunErrors.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_LOCAL_LINK_INTEGRITY_ERRORS:
+					metricDCGMFIDevNvlinkCountLocalLinkIntegrityErrors.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_EFFECTIVE_ERRORS:
+					metricDCGMFIDevNvlinkCountEffectiveErrors.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_EFFECTIVE_BER:
+					metricDCGMFIDevNvlinkCountEffectiveBER.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_SYMBOL_BER:
+					metricDCGMFIDevNvlinkCountSymbolBER.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_NVLINK_COUNT_TX_DISCARDS:
+					metricDCGMFIDevNvlinkCountTxDiscards.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
 				}
 			}
 		}

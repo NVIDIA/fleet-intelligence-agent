@@ -9,9 +9,11 @@ import (
 )
 
 var cpuLevelFields = []dcgm.Short{
-	dcgm.DCGM_FI_DEV_CPU_TEMP_CURRENT,  // 1110 - CPU
-	dcgm.DCGM_FI_DEV_CPU_POWER_CURRENT, // 1130 - CPU
-	dcgm.DCGM_FI_DEV_CPU_POWER_LIMIT,   // 1131 - CPU
+	dcgm.DCGM_FI_DEV_CPU_TEMP_CURRENT,       // 1110 - CPU
+	dcgm.DCGM_FI_DEV_CPU_POWER_UTIL_CURRENT, // 1130 - CPU
+	dcgm.DCGM_FI_DEV_CPU_POWER_LIMIT,        // 1131 - CPU
+	dcgm.DCGM_FI_DEV_CPU_TEMP_WARNING,       // 1111 - CPU
+	dcgm.DCGM_FI_DEV_CPU_TEMP_CRITICAL,      // 1112 - CPU
 }
 
 var (
@@ -30,16 +32,6 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "cpu_id"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevCPUPowerCurrent = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "",
-			Subsystem: "",
-			Name:      "dcgm_fi_dev_cpu_power_current",
-			Help:      "CPU power utilization.",
-		},
-		[]string{pkgmetrics.MetricComponentLabelKey, "cpu_id"},
-	).MustCurryWith(componentLabel)
-
 	metricDCGMFIDevCPUPowerLimit = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "",
@@ -49,12 +41,29 @@ var (
 		},
 		[]string{pkgmetrics.MetricComponentLabelKey, "cpu_id"},
 	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevCPUTempWarning = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "dcgm_fi_dev_cpu_temp_warning", Help: "CPU Warning Temperature"},
+		[]string{pkgmetrics.MetricComponentLabelKey, "cpu_id"},
+	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevCPUTempCritical = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "dcgm_fi_dev_cpu_temp_critical", Help: "CPU Critical Temperature"},
+		[]string{pkgmetrics.MetricComponentLabelKey, "cpu_id"},
+	).MustCurryWith(componentLabel)
+
+	metricDCGMFIDevCPUPowerUtilCurrent = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "dcgm_fi_dev_cpu_power_util_current", Help: "CPU power utilization"},
+		[]string{pkgmetrics.MetricComponentLabelKey, "cpu_id"},
+	).MustCurryWith(componentLabel)
 )
 
 func init() {
 	pkgmetrics.MustRegister(
 		metricDCGMFIDevCPUTempCurrent,
-		metricDCGMFIDevCPUPowerCurrent,
 		metricDCGMFIDevCPUPowerLimit,
+		metricDCGMFIDevCPUTempWarning,
+		metricDCGMFIDevCPUTempCritical,
+		metricDCGMFIDevCPUPowerUtilCurrent,
 	)
 }

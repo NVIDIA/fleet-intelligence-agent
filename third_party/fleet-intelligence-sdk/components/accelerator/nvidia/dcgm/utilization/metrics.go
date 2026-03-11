@@ -12,8 +12,6 @@ import (
 var utilizationFields = []dcgm.Short{
 	dcgm.DCGM_FI_DEV_GPU_UTIL,      // GPU Utilization
 	dcgm.DCGM_FI_DEV_MEM_COPY_UTIL, // Memory Utilization
-	dcgm.DCGM_FI_DEV_ENC_UTIL,      // Encoder Utilization
-	dcgm.DCGM_FI_DEV_DEC_UTIL,      // Decoder Utilization
 }
 
 var (
@@ -40,33 +38,11 @@ var (
 		},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
-
-	metricDCGMFIDevEncUtil = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "",
-			Subsystem: "",
-			Name:      "dcgm_fi_dev_enc_util",
-			Help:      "Encoder Utilization.",
-		},
-		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
-	).MustCurryWith(componentLabel)
-
-	metricDCGMFIDevDecUtil = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "",
-			Subsystem: "",
-			Name:      "dcgm_fi_dev_dec_util",
-			Help:      "Decoder Utilization.",
-		},
-		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
-	).MustCurryWith(componentLabel)
 )
 
 func init() {
 	pkgmetrics.MustRegister(
 		metricDCGMFIDevGPUUtil,
 		metricDCGMFIDevMemCopyUtil,
-		metricDCGMFIDevEncUtil,
-		metricDCGMFIDevDecUtil,
 	)
 }

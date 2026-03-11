@@ -129,8 +129,10 @@ func TestCheck(t *testing.T) {
 
 	// Look for our power metrics
 	powerMetricsFound := map[string]int{
-		"dcgm_fi_dev_power_usage":              0,
-		"dcgm_fi_dev_total_energy_consumption": 0,
+		"dcgm_fi_dev_power_usage":           0,
+		"dcgm_fi_dev_power_violation":       0,
+		"dcgm_fi_dev_reliability_violation": 0,
+		"dcgm_fi_dev_board_limit_violation": 0,
 	}
 
 	for _, metric := range metrics {

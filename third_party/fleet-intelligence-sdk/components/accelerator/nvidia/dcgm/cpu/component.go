@@ -289,14 +289,14 @@ func (c *component) Check() components.CheckResult {
 			switch fieldValue.FieldID {
 			case dcgm.DCGM_FI_DEV_CPU_TEMP_CURRENT:
 				metricDCGMFIDevCPUTempCurrent.With(prometheus.Labels{"cpu_id": cpuIDStr}).Set(fieldValue.Float64())
-			case dcgm.DCGM_FI_DEV_CPU_POWER_CURRENT:
-				metricDCGMFIDevCPUPowerCurrent.With(prometheus.Labels{"cpu_id": cpuIDStr}).Set(fieldValue.Float64())
+			case dcgm.DCGM_FI_DEV_CPU_POWER_UTIL_CURRENT:
+				metricDCGMFIDevCPUPowerUtilCurrent.With(prometheus.Labels{"cpu_id": cpuIDStr}).Set(fieldValue.Float64())
 			case dcgm.DCGM_FI_DEV_CPU_POWER_LIMIT:
-				// DCGM_FT_FP64_BLANK indicates no data available
-				powerLimit := fieldValue.Float64()
-				if powerLimit < dcgm.DCGM_FT_FP64_BLANK {
-					metricDCGMFIDevCPUPowerLimit.With(prometheus.Labels{"cpu_id": cpuIDStr}).Set(powerLimit)
-				}
+				metricDCGMFIDevCPUPowerLimit.With(prometheus.Labels{"cpu_id": cpuIDStr}).Set(fieldValue.Float64())
+			case dcgm.DCGM_FI_DEV_CPU_TEMP_WARNING:
+				metricDCGMFIDevCPUTempWarning.With(prometheus.Labels{"cpu_id": cpuIDStr}).Set(fieldValue.Float64())
+			case dcgm.DCGM_FI_DEV_CPU_TEMP_CRITICAL:
+				metricDCGMFIDevCPUTempCritical.With(prometheus.Labels{"cpu_id": cpuIDStr}).Set(fieldValue.Float64())
 			}
 		}
 	}

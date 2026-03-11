@@ -124,10 +124,11 @@ func TestCheck(t *testing.T) {
 
 	// Look for our CPU metrics
 	cpuMetricsFound := map[string]int{
-		"dcgm_fi_dev_cpu_util_total":    0,
-		"dcgm_fi_dev_cpu_temp_current":  0,
-		"dcgm_fi_dev_cpu_clock_current": 0,
-		"dcgm_fi_dev_cpu_power_current": 0,
+		"dcgm_fi_dev_cpu_temp_current":       0,
+		"dcgm_fi_dev_cpu_power_limit":        0,
+		"dcgm_fi_dev_cpu_temp_warning":       0,
+		"dcgm_fi_dev_cpu_temp_critical":      0,
+		"dcgm_fi_dev_cpu_power_util_current": 0,
 	}
 
 	totalFound := 0
@@ -142,8 +143,8 @@ func TestCheck(t *testing.T) {
 			continue
 		}
 
-		uuid := metric.Labels["uuid"]
-		t.Logf("  [OK] %s (uuid=%s): %.4f", metric.Name, uuid, metric.Value)
+		cpuID := metric.Labels["cpu_id"]
+		t.Logf("  [OK] %s (cpu_id=%s): %.4f", metric.Name, cpuID, metric.Value)
 		cpuMetricsFound[metric.Name]++
 		totalFound++
 	}

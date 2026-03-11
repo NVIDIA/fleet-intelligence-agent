@@ -353,21 +353,22 @@ func (c *component) Check() components.CheckResult {
 			for _, fieldValue := range deviceData.Values {
 				// Use valid value
 				switch fieldValue.FieldID {
-			case dcgm.DCGM_FI_DEV_POWER_USAGE:
-				metricDCGMFIDevPowerUsage.With(prometheus.Labels{
-					"uuid":      deviceData.UUID,
-					"gpu": fmt.Sprintf("%d", deviceData.DeviceID),
-				}).Set(float64(fieldValue.Float64()))
-			case dcgm.DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION:
-				metricDCGMFIDevTotalEnergyConsumption.With(prometheus.Labels{
-					"uuid":      deviceData.UUID,
-					"gpu": fmt.Sprintf("%d", deviceData.DeviceID),
-				}).Set(float64(fieldValue.Int64()))
-			case dcgm.DCGM_FI_DEV_ENFORCED_POWER_LIMIT:
-				metricDCGMFIDevEnforcedPowerLimit.With(prometheus.Labels{
-					"uuid":      deviceData.UUID,
-					"gpu": fmt.Sprintf("%d", deviceData.DeviceID),
-				}).Set(float64(fieldValue.Float64()))
+				case dcgm.DCGM_FI_DEV_POWER_USAGE:
+					metricDCGMFIDevPowerUsage.With(prometheus.Labels{
+						"uuid": deviceData.UUID,
+						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
+					}).Set(float64(fieldValue.Float64()))
+				case dcgm.DCGM_FI_DEV_ENFORCED_POWER_LIMIT:
+					metricDCGMFIDevEnforcedPowerLimit.With(prometheus.Labels{
+						"uuid": deviceData.UUID,
+						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
+					}).Set(float64(fieldValue.Float64()))
+				case dcgm.DCGM_FI_DEV_POWER_VIOLATION:
+					metricDCGMFIDevPowerViolation.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_RELIABILITY_VIOLATION:
+					metricDCGMFIDevReliabilityViolation.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
+				case dcgm.DCGM_FI_DEV_BOARD_LIMIT_VIOLATION:
+					metricDCGMFIDevBoardLimitViolation.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
 				}
 			}
 		}

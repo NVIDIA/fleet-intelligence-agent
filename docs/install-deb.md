@@ -11,6 +11,7 @@ The Fleet Intelligence Agent DEB package has the following runtime dependencies:
 Before installing Fleet Intelligence Agent, ensure the following prerequisites are met:
 
 - NVIDIA package repository is configured (network or local CUDA repository) so `datacenter-gpu-manager-4-proprietary`, `nvattest`, and `corelib` can be installed
+- DCGM HostEngine `4.2.3` or newer
 - A supported NVIDIA Datacenter Driver is installed
 - Install/upgrade commands are run as `root` or with `sudo`
 - Attestation for the fleetint use case only supports Blackwell and newer GPUs, and applies to non-CC mode systems

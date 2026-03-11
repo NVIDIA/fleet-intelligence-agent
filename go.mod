@@ -21,7 +21,7 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.1 // indirect
-	github.com/NVIDIA/go-dcgm v0.0.0-20251024204555-c48e27bf2bf0 // indirect
+	github.com/NVIDIA/go-dcgm v0.0.0-20260214140307-ad5d86fe3d32 // indirect
 	github.com/NVIDIA/go-nvlib v0.9.0 // indirect
 	github.com/NVIDIA/go-nvml v0.13.0-1 // indirect
 	github.com/akutz/memconn v0.1.0 // indirect

@@ -10,7 +10,16 @@ import (
 	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics/scraper"
 	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
+	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 )
+
+func TestTemperatureFieldsDoNotIncludeConnectXDeviceTemperature(t *testing.T) {
+	for _, field := range temperatureFields {
+		if field == dcgm.DCGM_FI_DEV_CONNECTX_DEVICE_TEMPERATURE {
+			t.Fatalf("unexpected field %v found in temperatureFields", field)
+		}
+	}
+}
 
 func TestNew(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -122,13 +131,19 @@ func TestCheck(t *testing.T) {
 	}
 
 	thermalMetricsFound := map[string]int{
-		"dcgm_fi_dev_gpu_temp":    0,
-		"dcgm_fi_dev_memory_temp": 0,
+		"dcgm_fi_dev_gpu_temp":          0,
+		"dcgm_fi_dev_memory_temp":       0,
+		"dcgm_fi_dev_thermal_violation": 0,
+		"dcgm_fi_dev_gpu_temp_limit":    0,
 	}
 
 	for _, metric := range metrics {
 		if metric.Component != Name {
 			continue
+		}
+
+		if metric.Name == "dcgm_fi_dev_connectx_device_temperature" {
+			t.Fatalf("unexpected metric %s was exported", metric.Name)
 		}
 
 		if _, exists := thermalMetricsFound[metric.Name]; exists {

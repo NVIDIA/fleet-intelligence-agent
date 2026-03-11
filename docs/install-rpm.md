@@ -11,6 +11,7 @@ The Fleet Intelligence Agent RPM package has the following runtime dependencies:
 Before installing Fleet Intelligence Agent, ensure the following prerequisites are met:
 
 - NVIDIA package repository is configured (network or local CUDA repository) so `datacenter-gpu-manager-4-proprietary`, `nvattest`, and `corelib` can be installed
+- DCGM HostEngine `4.2.3` or newer
 - A supported NVIDIA Datacenter Driver is installed
 - Install/upgrade commands are run as `root` or with `sudo`
 - `dnf-plugins-core` is installed (required for `dnf config-manager`)

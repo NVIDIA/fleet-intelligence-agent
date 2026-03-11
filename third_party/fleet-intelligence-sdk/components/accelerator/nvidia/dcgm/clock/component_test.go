@@ -124,8 +124,9 @@ func TestCheck(t *testing.T) {
 
 	// Look for our clock metrics
 	clockMetricsFound := map[string]int{
-		"dcgm_fi_dev_sm_clock":  0,
-		"dcgm_fi_dev_mem_clock": 0,
+		"dcgm_fi_dev_sm_clock":             0,
+		"dcgm_fi_dev_mem_clock":            0,
+		"dcgm_fi_dev_clocks_event_reasons": 0,
 	}
 
 	for _, metric := range metrics {

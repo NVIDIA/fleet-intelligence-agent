@@ -129,13 +129,20 @@ func TestCheck(t *testing.T) {
 
 	// Look for our memory metrics
 	memMetricsFound := map[string]int{
-		"dcgm_fi_dev_fb_free":                     0,
-		"dcgm_fi_dev_fb_used":                     0,
-		"dcgm_fi_dev_fb_reserved":                 0,
-		"dcgm_fi_dev_fb_total":                    0,
-		"dcgm_fi_dev_uncorrectable_remapped_rows": 0,
-		"dcgm_fi_dev_correctable_remapped_rows":   0,
-		"dcgm_fi_dev_row_remap_failure":           0,
+		"dcgm_fi_dev_fb_free":                        0,
+		"dcgm_fi_dev_fb_used":                        0,
+		"dcgm_fi_dev_fb_total":                       0,
+		"dcgm_fi_dev_uncorrectable_remapped_rows":    0,
+		"dcgm_fi_dev_correctable_remapped_rows":      0,
+		"dcgm_fi_dev_row_remap_failure":              0,
+		"dcgm_fi_dev_retired_pending":                0,
+		"dcgm_fi_dev_retired_dbe":                    0,
+		"dcgm_fi_dev_retired_sbe":                    0,
+		"dcgm_fi_dev_banks_remap_rows_avail_high":    0,
+		"dcgm_fi_dev_banks_remap_rows_avail_low":     0,
+		"dcgm_fi_dev_banks_remap_rows_avail_max":     0,
+		"dcgm_fi_dev_banks_remap_rows_avail_none":    0,
+		"dcgm_fi_dev_banks_remap_rows_avail_partial": 0,
 	}
 
 	for _, metric := range metrics {
