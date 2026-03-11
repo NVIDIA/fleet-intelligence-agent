@@ -1,14 +1,9 @@
 ✓ Fleet Intelligence Agent deployed successfully!
 
 NAMESPACE: {{ .Release.Namespace }}
-DEPLOY_ENV: {{ .Values.deployEnv }}
 {{- if .Values.enroll.enabled }}
 ENROLLMENT: Enabled
-{{- if eq .Values.deployEnv "prod" }}
-Open https://fleetint.ngc.nvidia.com to view your Fleet Intelligence status.
-{{- else }}
-Open {{ printf "https://fleetint.%s.ngc.nvidia.com" .Values.deployEnv }} to view your Fleet Intelligence status.
-{{- end }}
+Open https://fleet-intelligence.ngc.nvidia.com to view your Fleet Intelligence status.
 {{- else }}
 ENROLLMENT: Disabled (standalone mode)
 {{- end }}

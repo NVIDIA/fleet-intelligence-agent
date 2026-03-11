@@ -42,9 +42,6 @@ spec:
       {{- if and .Values.enroll.enabled .Values.enroll.unenroll }}
       {{- fail "enroll.enabled and enroll.unenroll cannot both be true" }}
       {{- end }}
-      {{- if not (has .Values.deployEnv (list "prod" "canary" "stg" "dev")) }}
-      {{- fail "deployEnv must be one of: prod, canary, stg, dev" }}
-      {{- end }}
       {{- if or .Values.enroll.enabled .Values.enroll.unenroll }}
       initContainers:
       {{- if .Values.enroll.enabled }}
