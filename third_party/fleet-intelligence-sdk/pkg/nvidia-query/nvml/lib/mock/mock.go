@@ -142,6 +142,9 @@ var AllSuccessInterface = &nvmlmock.Interface{
 			GetVbiosVersionFunc: func() (string, nvml.Return) {
 				return "MOCK-VBIOS-VERSION", nvml.SUCCESS
 			},
+			GetIndexFunc: func() (int, nvml.Return) {
+				return 0, nvml.SUCCESS
+			},
 		}, nvml.SUCCESS
 	},
 

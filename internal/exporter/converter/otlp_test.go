@@ -552,7 +552,7 @@ func TestOTLPConverter_ConvertLabelsToOTLPAttributes(t *testing.T) {
 	}
 
 	converter := &otlpConverter{}
-	attrs := converter.convertLabelsToOTLPAttributes(labels)
+	attrs := converter.convertLabelsToOTLPAttributes(labels, nil)
 
 	assert.Len(t, attrs, 3)
 
@@ -571,9 +571,159 @@ func TestOTLPConverter_ConvertLabelsToOTLPAttributes_EmptyLabels(t *testing.T) {
 	labels := map[string]string{}
 
 	converter := &otlpConverter{}
-	attrs := converter.convertLabelsToOTLPAttributes(labels)
+	attrs := converter.convertLabelsToOTLPAttributes(labels, nil)
 
 	assert.Empty(t, attrs)
+}
+
+func TestOTLPConverter_ConvertLabelsToOTLPAttributes_EnrichesGPUIndex(t *testing.T) {
+	gpuUUIDToIndex := map[string]string{
+		"GPU-abc-123": "0",
+		"GPU-def-456": "1",
+	}
+
+	t.Run("adds gpu label when uuid present but gpu absent", func(t *testing.T) {
+		labels := map[string]string{
+			"uuid":           "GPU-abc-123",
+			"gpud_component": "accelerator-nvidia-utilization",
+		}
+
+		converter := &otlpConverter{}
+		attrs := converter.convertLabelsToOTLPAttributes(labels, gpuUUIDToIndex)
+
+		attrMap := make(map[string]string)
+		for _, attr := range attrs {
+			attrMap[attr.Key] = attr.Value.GetStringValue()
+		}
+
+		assert.Equal(t, "0", attrMap["gpu"], "should enrich with gpu index from machine info")
+		assert.Equal(t, "GPU-abc-123", attrMap["uuid"])
+	})
+
+	t.Run("skips enrichment when gpu label already present (DCGM)", func(t *testing.T) {
+		labels := map[string]string{
+			"uuid":           "GPU-abc-123",
+			"gpu":            "0",
+			"gpud_component": "accelerator-nvidia-dcgm-clock",
+		}
+
+		converter := &otlpConverter{}
+		attrs := converter.convertLabelsToOTLPAttributes(labels, gpuUUIDToIndex)
+
+		gpuCount := 0
+		for _, attr := range attrs {
+			if attr.Key == "gpu" {
+				gpuCount++
+			}
+		}
+		assert.Equal(t, 1, gpuCount, "should not duplicate gpu label for DCGM metrics")
+	})
+
+	t.Run("skips enrichment when uuid not in mapping", func(t *testing.T) {
+		labels := map[string]string{
+			"uuid":           "GPU-unknown-999",
+			"gpud_component": "accelerator-nvidia-utilization",
+		}
+
+		converter := &otlpConverter{}
+		attrs := converter.convertLabelsToOTLPAttributes(labels, gpuUUIDToIndex)
+
+		attrMap := make(map[string]string)
+		for _, attr := range attrs {
+			attrMap[attr.Key] = attr.Value.GetStringValue()
+		}
+
+		_, hasGPU := attrMap["gpu"]
+		assert.False(t, hasGPU, "should not add gpu label when uuid not found in mapping")
+	})
+
+	t.Run("skips enrichment when no uuid label", func(t *testing.T) {
+		labels := map[string]string{
+			"gpud_component": "os",
+			"mount_point":    "/",
+		}
+
+		converter := &otlpConverter{}
+		attrs := converter.convertLabelsToOTLPAttributes(labels, gpuUUIDToIndex)
+
+		attrMap := make(map[string]string)
+		for _, attr := range attrs {
+			attrMap[attr.Key] = attr.Value.GetStringValue()
+		}
+
+		_, hasGPU := attrMap["gpu"]
+		assert.False(t, hasGPU, "should not add gpu label for non-GPU metrics")
+	})
+
+	t.Run("works with nil map", func(t *testing.T) {
+		labels := map[string]string{
+			"uuid":           "GPU-abc-123",
+			"gpud_component": "accelerator-nvidia-utilization",
+		}
+
+		converter := &otlpConverter{}
+		attrs := converter.convertLabelsToOTLPAttributes(labels, nil)
+
+		attrMap := make(map[string]string)
+		for _, attr := range attrs {
+			attrMap[attr.Key] = attr.Value.GetStringValue()
+		}
+
+		_, hasGPU := attrMap["gpu"]
+		assert.False(t, hasGPU, "should not add gpu label when mapping is nil")
+	})
+}
+
+func TestBuildGPUUUIDToIndexMap(t *testing.T) {
+	t.Run("builds map from machine info", func(t *testing.T) {
+		data := &collector.HealthData{
+			MachineInfo: &machineinfo.MachineInfo{
+				GPUInfo: &apiv1.MachineGPUInfo{
+					GPUs: []apiv1.MachineGPUInstance{
+						{UUID: "GPU-abc-123", GPUIndex: "0"},
+						{UUID: "GPU-def-456", GPUIndex: "1"},
+					},
+				},
+			},
+		}
+
+		m := buildGPUUUIDToIndexMap(data)
+		assert.Equal(t, "0", m["GPU-abc-123"])
+		assert.Equal(t, "1", m["GPU-def-456"])
+		assert.Len(t, m, 2)
+	})
+
+	t.Run("returns empty map when machine info is nil", func(t *testing.T) {
+		data := &collector.HealthData{}
+		m := buildGPUUUIDToIndexMap(data)
+		assert.Empty(t, m)
+	})
+
+	t.Run("returns empty map when GPU info is nil", func(t *testing.T) {
+		data := &collector.HealthData{
+			MachineInfo: &machineinfo.MachineInfo{},
+		}
+		m := buildGPUUUIDToIndexMap(data)
+		assert.Empty(t, m)
+	})
+
+	t.Run("skips entries with empty uuid or index", func(t *testing.T) {
+		data := &collector.HealthData{
+			MachineInfo: &machineinfo.MachineInfo{
+				GPUInfo: &apiv1.MachineGPUInfo{
+					GPUs: []apiv1.MachineGPUInstance{
+						{UUID: "GPU-abc-123", GPUIndex: "0"},
+						{UUID: "", GPUIndex: "1"},
+						{UUID: "GPU-ghi-789", GPUIndex: ""},
+					},
+				},
+			},
+		}
+
+		m := buildGPUUUIDToIndexMap(data)
+		assert.Equal(t, "0", m["GPU-abc-123"])
+		assert.Len(t, m, 1)
+	})
 }
 
 func TestOTLPConverter_GetAttestationEvidencesCount(t *testing.T) {

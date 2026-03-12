@@ -262,8 +262,7 @@ func TestMachineGPUInfo_RenderTable(t *testing.T) {
 					},
 				},
 			},
-			wantContains: []string{"UUID", "SN", "MINOR ID", "GPU-abc123", "SN12345", "0"},
-		},
+			wantContains: []string{"UUID", "GPU INDEX", "SN", "MINOR ID", "GPU-abc123", "SN12345", "0"},		},
 		{
 			name: "Multiple GPUs",
 			gpuInfo: MachineGPUInfo{
@@ -274,18 +273,20 @@ func TestMachineGPUInfo_RenderTable(t *testing.T) {
 				GPUs: []MachineGPUInstance{
 					{
 						UUID:    "GPU-abc123",
+						GPUIndex: "0",
 						SN:      "SN12345",
 						MinorID: "0",
 					},
 					{
 						UUID:    "GPU-def456",
+						GPUIndex: "1",
 						SN:      "SN67890",
 						MinorID: "1",
 					},
 				},
 			},
 			wantContains: []string{
-				"UUID", "SN", "MINOR ID",
+				"UUID", "GPU INDEX", "SN", "MINOR ID",
 				"GPU-abc123", "SN12345", "0",
 				"GPU-def456", "SN67890", "1",
 			},

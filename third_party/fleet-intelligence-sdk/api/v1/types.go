@@ -386,6 +386,11 @@ type MachineGPUInstance struct {
 	// e.g., "GPU-46a3bbe2-3e87-3dde-b464-a03eba0c21d7"
 	UUID string `json:"uuid,omitempty"`
 
+	// GPUIndex is the GPU index as reported by NVML (matches nvidia-smi output).
+	// Note: this index may not be stable across DCGM host engine restarts,
+	// but matches the DCGM exporter's "gpu" label convention.
+	GPUIndex string `json:"gpuIndex,omitempty"`
+
 	// BusID is the GPU bus ID from the nvml API.
 	//  e.g., "0000:0f:00.0"
 	BusID string `json:"busID,omitempty"`
@@ -404,11 +409,12 @@ func (gi *MachineGPUInfo) RenderTable(wr io.Writer) {
 	if len(gi.GPUs) > 0 {
 		table := tablewriter.NewWriter(wr)
 		table.SetAlignment(tablewriter.ALIGN_CENTER)
-		table.SetHeader([]string{"GPU UUID", "GPU Bus ID", "SN", "Minor ID", "Board ID", "VBIOS Version", "Chassis SN"})
+		table.SetHeader([]string{"GPU UUID", "GPU Index", "GPU Bus ID", "SN", "Minor ID", "Board ID", "VBIOS Version", "Chassis SN"})
 
 		for _, gpu := range gi.GPUs {
 			table.Append([]string{
 				gpu.UUID,
+				gpu.GPUIndex,
 				gpu.BusID,
 				gpu.SN,
 				gpu.MinorID,

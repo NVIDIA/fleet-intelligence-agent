@@ -69,7 +69,8 @@ type collector struct {
 	nvmlInstance              nvidianvml.Instance
 	attestationManager        *attestation.Manager
 	lastAttestationCollection time.Time
-	machineID                 string // Agent's stable identity from server initialization
+	machineID                 string            // Agent's stable identity from server initialization
+	dcgmGPUIndexes            map[string]string // UUID → DCGM device ID override for GPU indices
 }
 
 // New creates a new health data collector
@@ -83,6 +84,7 @@ func New(
 	nvmlInstance nvidianvml.Instance,
 	attestationManager *attestation.Manager,
 	machineID string,
+	dcgmGPUIndexes map[string]string,
 ) Collector {
 	// Compute config entries once at startup (no dynamic config reload)
 	var configEntries []config.ConfigEntry
@@ -100,6 +102,7 @@ func New(
 		nvmlInstance:       nvmlInstance,
 		attestationManager: attestationManager,
 		machineID:          machineID,
+		dcgmGPUIndexes:     dcgmGPUIndexes,
 	}
 }
 
@@ -168,7 +171,12 @@ func (c *collector) collectMachineInfo(data *HealthData) error {
 		return fmt.Errorf("NVML instance not available")
 	}
 
-	machineInfo, err := machineinfo.GetMachineInfo(c.nvmlInstance)
+	var opts []machineinfo.MachineInfoOption
+	if len(c.dcgmGPUIndexes) > 0 {
+		opts = append(opts, machineinfo.WithDCGMGPUIndexes(c.dcgmGPUIndexes))
+	}
+
+	machineInfo, err := machineinfo.GetMachineInfo(c.nvmlInstance, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to get machine info: %w", err)
 	}

@@ -151,6 +151,8 @@ func (c *otlpConverter) createOTLPResource(data *collector.HealthData) *resource
 func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metricsv1.Metric {
 	var otlpMetrics []*metricsv1.Metric
 
+	gpuUUIDToIndex := buildGPUUUIDToIndexMap(data)
+
 	// Convert regular metrics if available
 	if len(data.Metrics) > 0 {
 		for _, metric := range data.Metrics {
@@ -166,7 +168,7 @@ func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metr
 								Value: &metricsv1.NumberDataPoint_AsDouble{
 									AsDouble: metric.Value,
 								},
-								Attributes: c.convertLabelsToOTLPAttributes(metric.Labels),
+								Attributes: c.convertLabelsToOTLPAttributes(metric.Labels, gpuUUIDToIndex),
 							},
 						},
 					},
@@ -225,8 +227,11 @@ func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metr
 	return otlpMetrics
 }
 
-// convertLabelsToOTLPAttributes converts metric labels to OTLP attributes
-func (c *otlpConverter) convertLabelsToOTLPAttributes(labels map[string]string) []*commonv1.KeyValue {
+// convertLabelsToOTLPAttributes converts metric labels to OTLP attributes.
+// If the labels contain a "uuid" key but no "gpu" key, it enriches the
+// attributes with the GPU index looked up from the machine info mapping.
+// DCGM metrics already carry a "gpu" label and are left unchanged.
+func (c *otlpConverter) convertLabelsToOTLPAttributes(labels map[string]string, gpuUUIDToIndex map[string]string) []*commonv1.KeyValue {
 	var attributes []*commonv1.KeyValue
 	for key, value := range labels {
 		attributes = append(attributes, &commonv1.KeyValue{
@@ -236,7 +241,35 @@ func (c *otlpConverter) convertLabelsToOTLPAttributes(labels map[string]string) 
 			},
 		})
 	}
+
+	if _, hasGPU := labels["gpu"]; !hasGPU {
+		if uuid, hasUUID := labels["uuid"]; hasUUID {
+			if gpuIndex, ok := gpuUUIDToIndex[uuid]; ok {
+				attributes = append(attributes, &commonv1.KeyValue{
+					Key: "gpu",
+					Value: &commonv1.AnyValue{
+						Value: &commonv1.AnyValue_StringValue{StringValue: gpuIndex},
+					},
+				})
+			}
+		}
+	}
+
 	return attributes
+}
+
+// buildGPUUUIDToIndexMap builds a UUID → GPU index lookup from MachineInfo.
+func buildGPUUUIDToIndexMap(data *collector.HealthData) map[string]string {
+	m := make(map[string]string)
+	if data.MachineInfo == nil || data.MachineInfo.GPUInfo == nil {
+		return m
+	}
+	for _, gpu := range data.MachineInfo.GPUInfo.GPUs {
+		if gpu.UUID != "" && gpu.GPUIndex != "" {
+			m[gpu.UUID] = gpu.GPUIndex
+		}
+	}
+	return m
 }
 
 // convertToOTLPLogs converts HealthData events and component data to OTLP log records

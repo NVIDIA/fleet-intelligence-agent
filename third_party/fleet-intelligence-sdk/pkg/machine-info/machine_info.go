@@ -392,8 +392,17 @@ func GetMachineGPUInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineGPUInfo,
 			vbiosVersion = vbios
 		}
 
+		gpuIndex := ""
+		idx, ret := dev.GetIndex()
+		if ret != nvml.SUCCESS {
+			log.Logger.Debugw("failed to get GPU index", "uuid", uuid, "error", nvml.ErrorString(ret))
+		} else {
+			gpuIndex = strconv.Itoa(idx)
+		}
+
 		info.GPUs = append(info.GPUs, apiv1.MachineGPUInstance{
 			UUID:         uuid,
+			GPUIndex:     gpuIndex,
 			SN:           serialID,
 			MinorID:      strconv.Itoa(minorID),
 			BoardID:      boardID,
