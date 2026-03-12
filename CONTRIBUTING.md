@@ -112,10 +112,11 @@ For more information about the DCO, see: https://developercertificate.org/
 
 1. **Fork the Repository**: Create a personal fork of the Fleet Intelligence Agent repository on GitHub.
 
-2. **Create a Feature Branch**: Create a new branch for your changes from the main branch:
+2. **Create a Branch from Main**: Create a new branch for your changes from the main branch using a conventional prefix:
    ```bash
-   git checkout -b feature/your-feature-name
+   git checkout -b feat/your-feature-name
    ```
+   Use a short descriptive branch name with one of these prefixes as appropriate: `feat/`, `fix/`, `chore/`, `docs/`, `test/`, `refactor/`, or `perf/`.
 
 3. **Make Your Changes**: Implement your changes following the coding standards outlined below.
 
@@ -143,23 +144,23 @@ For more information about the DCO, see: https://developercertificate.org/
 
    **Commit Message Format:**
    ```
-   [ISSUE-123] feat: Add GPU temperature monitoring
-   
+   feat: add GPU temperature monitoring
+
    - Implement temperature threshold checking
    - Add Prometheus metrics for temperature alerts
    - Include unit tests for temperature validation
-   
+
    Signed-off-by: Your Name <your.email@example.com>
    ```
    
-   Format: `[ISSUE-NUMBER] type: Brief description`
-   - **Issue/Ticket**: Reference GitHub issue or internal ticket (e.g., `[#456]`, `[PROJ-123]`)
+   Format: `type: brief description`
    - **Type**: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `chore`
    - **Description**: Clear, imperative mood summary (e.g., "Add feature" not "Added feature")
 
 7. **Submit Pull Request**: Create a pull request against the main branch with:
-   - Clear title and description
-   - Reference to the related issue
+   - A clear title in the same default format as commits, for example `feat: add GPU temperature monitoring`
+   - A description with a concise summary of the change
+   - If there is a related GitHub issue, reference it in the PR body using a format like `[#123]`
    - Summary of changes made
    - Any breaking changes highlighted
 
@@ -183,7 +184,9 @@ make lint
 
 ### General Guidelines
 - Write clear, descriptive commit messages
+- Use conventional branch names such as `feat/...`, `fix/...`, `chore/...`, or `docs/...`
 - Keep commits focused and atomic
+- Sign off every commit with `git commit -s`
 - Add comments for non-trivial logic
 - Update documentation when adding or changing features
 - Ensure backward compatibility when possible
