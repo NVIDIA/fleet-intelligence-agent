@@ -183,7 +183,6 @@ make lint
 
 ### General Guidelines
 - Write clear, descriptive commit messages
-- Use conventional branch names such as `feat/...`, `fix/...`, `chore/...`, or `docs/...`
 - Keep commits focused and atomic
 - Sign off every commit with `git commit -s`
 - Add comments for non-trivial logic
