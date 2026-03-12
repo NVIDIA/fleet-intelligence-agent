@@ -112,11 +112,10 @@ For more information about the DCO, see: https://developercertificate.org/
 
 1. **Fork the Repository**: Create a personal fork of the Fleet Intelligence Agent repository on GitHub.
 
-2. **Create a Branch from Main**: Create a new branch for your changes from the main branch using a conventional prefix:
+2. **Create a Branch from Main**: Create a new branch for your changes from the main branch:
    ```bash
-   git checkout -b feat/your-feature-name
+   git checkout -b your-feature-name
    ```
-   Use a short descriptive branch name with one of these prefixes as appropriate: `feat/`, `fix/`, `chore/`, `docs/`, `test/`, `refactor/`, or `perf/`.
 
 3. **Make Your Changes**: Implement your changes following the coding standards outlined below.
 
