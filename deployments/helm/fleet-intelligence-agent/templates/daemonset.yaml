@@ -60,6 +60,9 @@ spec:
       {{- if not (has .Values.deployEnv (list "prod" "canary" "stg" "dev")) }}
       {{- fail "deployEnv must be one of: prod, canary, stg, dev" }}
       {{- end }}
+      {{- /* Enrollment init container: agents always enroll individually.
+           In gateway mode, enrollment is proxied through the gateway (no SAK on the agent).
+           In bare metal mode, agents enroll directly with the backend using a SAK. */}}
       {{- if or .Values.enroll.enabled .Values.enroll.unenroll }}
       initContainers:
       {{- if .Values.enroll.enabled }}
@@ -67,15 +70,24 @@ spec:
           image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
-            - /bin/bash
-            - -c
+            - /usr/bin/fleetint
+          {{- if .Values.otelGateway.enabled }}
+          {{- $gatewayServiceName := printf "%s-otel-gateway" (include "fleet-intelligence-agent.fullname" .) }}
           args:
-            - >
-              /usr/bin/fleetint enroll
-              --endpoint {{ required "enroll.endpoint is required when enroll.enabled=true" .Values.enroll.endpoint | quote }}
-              --token "${FLEETINT_TOKEN}"
+            - enroll
+            - --gateway
+            - {{ printf "http://%s:%d" $gatewayServiceName (int .Values.otelGateway.enrollProxy.port) | quote }}
+          {{- else }}
+          args:
+            - enroll
+            - --endpoint
+            - {{ required "enroll.endpoint is required when enroll.enabled=true and otelGateway.enabled=false" .Values.enroll.endpoint | quote }}
+            - --token
+            - $(FLEETINT_TOKEN)
+          {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- if not .Values.otelGateway.enabled }}
           env:
             - name: FLEETINT_TOKEN
               {{- if .Values.enroll.tokenSecretName }}
@@ -84,8 +96,9 @@ spec:
                   name: {{ .Values.enroll.tokenSecretName | quote }}
                   key: {{ .Values.enroll.tokenSecretKey | quote }}
               {{- else }}
-              value: {{ required "enroll.tokenValue or enroll.tokenSecretName is required when enroll.enabled=true" .Values.enroll.tokenValue | quote }}
+              value: {{ required "enroll.tokenValue or enroll.tokenSecretName is required when enroll.enabled=true and otelGateway.enabled=false" .Values.enroll.tokenValue | quote }}
               {{- end }}
+          {{- end }}
           volumeMounts:
             - name: dev
               mountPath: /dev
@@ -132,6 +145,11 @@ spec:
                   fieldPath: spec.nodeName
             - name: IS_RUNTIME_K8S
               value: "true"
+            {{- if .Values.otelGateway.enabled }}
+            {{- $gatewayServiceName := printf "%s-otel-gateway" (include "fleet-intelligence-agent.fullname" .) }}
+            - name: FLEETINT_COLLECTOR_ENDPOINT
+              value: {{ printf "http://%s:%d" $gatewayServiceName (int .Values.otelGateway.service.port) | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.ports.http }}

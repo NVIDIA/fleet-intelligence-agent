@@ -1,0 +1,108 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# OTel Gateway Collector configuration for fleet-intelligence-agent.
+#
+# Deployment model:
+#
+#   Agents ──► Gateway Collector (SAK→JWT) ──► Backend
+#                      │
+#                      ├──► Prometheus remote write  (optional)
+#                      └──► Any other OTLP exporter  (optional)
+#
+# The gateway holds a service-level SAK and handles all backend authentication.
+# It enrolls each unique agent (identified by machine.id in OTLP resource
+# attributes) with the backend on first sight. Agents send OTLP directly to
+# the gateway — no per-agent enrollment init container is required.
+# The gateway relies on Kubernetes ClusterIP network isolation for inbound security.
+#
+# Required environment variables:
+#   SAK_ENROLL_ENDPOINT - Backend enrollment URL (e.g. https://backend/api/v1/health/enroll)
+#   SAK_TOKEN           - Service Account Key for SAK→JWT exchange
+#   BACKEND_ENDPOINT    - Backend OTLP HTTP base URL (e.g. https://backend/api/v1/health)
+
+extensions:
+  # SAK→JWT auth for outbound backend requests. Automatically refreshes
+  # the JWT on 401 responses without restarting the collector.
+  # enroll_proxy_port exposes POST /enroll on that port so agents can obtain
+  # a JWT without holding a SAK. Defaults to 4319; set to 0 to disable.
+  sakauth:
+    enroll_endpoint: ${env:SAK_ENROLL_ENDPOINT}
+    sak_token: ${env:SAK_TOKEN}
+    enroll_proxy_port: 4319
+
+  # Health check endpoint used by liveness/readiness probes.
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        # No inbound auth: the gateway is a ClusterIP service accessible only
+        # within the cluster. Agents send their enrollment JWT in the
+        # Authorization header, but it is not checked here — cluster network
+        # isolation is the security boundary. The gateway uses its own SAK
+        # JWT when forwarding to the backend. Agent identity flows through
+        # OTLP resource attributes (machine.id, GPU UUIDs) in the payload.
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 400
+    spike_limit_mib: 100
+
+  batch:
+    timeout: 10s
+    send_batch_size: 1000
+
+exporters:
+  otlphttp/backend:
+    endpoint: ${env:BACKEND_ENDPOINT}
+    auth:
+      authenticator: sakauth
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 4
+      queue_size: 1000
+
+  # Optional: uncomment to also fan out to Prometheus remote write.
+  # prometheusremotewrite/monitoring:
+  #   endpoint: ${env:PROMETHEUS_REMOTE_WRITE_URL}
+
+  # Optional: uncomment to fan out logs to Loki.
+  # loki/monitoring:
+  #   endpoint: ${env:LOKI_ENDPOINT}
+
+service:
+  extensions: [sakauth, health_check]
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/backend]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/backend]
+  telemetry:
+    logs:
+      level: warn

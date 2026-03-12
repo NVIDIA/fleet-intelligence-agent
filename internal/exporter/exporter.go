@@ -327,19 +327,19 @@ func (e *healthExporter) refreshJWTToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("no database connection available for JWT refresh")
 	}
 
-	// Read SAK token from metadata
-	sakToken, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "sak_token")
-	if err != nil || sakToken == "" {
-		return "", fmt.Errorf("no SAK token available for JWT refresh")
-	}
+	// Read SAK token from metadata (absent in gateway-proxied enrollment mode).
+	sakToken, _ := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "sak_token")
 
-	// Read enroll endpoint from metadata (stored during enrollment)
+	// Read enroll endpoint from metadata (stored during enrollment).
+	// In gateway mode this points at the gateway enrollment proxy; in bare metal
+	// mode it points at the backend directly.
 	enrollEndpoint, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "enroll_endpoint")
 	if err != nil || enrollEndpoint == "" {
 		return "", fmt.Errorf("no enroll endpoint available for JWT refresh")
 	}
 
-	// Perform enrollment to get new JWT token using the shared function
+	// Perform enrollment to get new JWT token using the shared function.
+	// sakToken may be empty in gateway mode; PerformEnrollment handles that case.
 	newJWT, err := enrollment.PerformEnrollment(ctx, enrollEndpoint, sakToken)
 	if err != nil {
 		return "", fmt.Errorf("failed to refresh JWT token: %w", err)

@@ -50,6 +50,16 @@ listenAddress: 0.0.0.0:15133
 components: all
 deployEnv: prod
 
+# Enrollment init container — runs fleetint enroll before the agent starts.
+# Required for both bare metal and K8s gateway deployments.
+#
+# Bare metal (otelGateway.enabled=false):
+#   Agents enroll directly with the backend using endpoint + token (SAK).
+#   Requires: enroll.endpoint, enroll.tokenValue or enroll.tokenSecretName.
+#
+# K8s gateway (otelGateway.enabled=true):
+#   Agents enroll via the gateway proxy — no SAK needed on agent pods.
+#   endpoint/token values are ignored; only enroll.enabled=true is required.
 enroll:
   enabled: false
   unenroll: false
@@ -85,3 +95,52 @@ serviceAccount:
   create: true
   name: ""
   automountToken: false
+
+# OTel gateway collector deployed alongside the agents in the same cluster.
+# When enabled:
+#   - A Deployment + Service for the fleetint-otelcol collector is created.
+#   - Each agent enrolls via the gateway proxy (no SAK on agent pods).
+#     The gateway uses its SAK to call the backend and returns a JWT to the agent.
+#     The agent stores the JWT locally — on pod restart it skips re-enrollment.
+#   - Each agent sends OTLP to the gateway via FLEETINT_COLLECTOR_ENDPOINT.
+#   - The gateway authenticates outbound requests to the backend via its own SAK→JWT.
+#   - Agent identity flows through OTLP resource attributes (machine.id, GPU UUIDs).
+otelGateway:
+  enabled: false
+
+  image:
+    repository: ghcr.io/nvidia/fleetint-otelcol
+    tag: "0.0.1"
+    pullPolicy: IfNotPresent
+
+  replicas: 1
+
+  # SAK credentials for gateway→backend authentication.
+  # The gateway is the only component that holds the SAK; agents never see it.
+  sak:
+    # enrollEndpoint is the backend enrollment URL.
+    # Example: https://backend/api/v1/health/enroll
+    enrollEndpoint: ""
+    token:
+      # Provide either secretName (reference an existing Secret) or value (creates one).
+      secretName: ""
+      secretKey: "sak-token"
+      value: ""
+
+  # Backend OTLP HTTP base URL (e.g. https://backend/api/v1/health).
+  backendEndpoint: ""
+
+  service:
+    port: 4318
+
+  # Enrollment proxy: agents POST here to get a JWT without needing a SAK.
+  enrollProxy:
+    port: 4319
+
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"

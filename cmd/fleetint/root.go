@@ -202,19 +202,24 @@ func App() *cli.App {
 			},
 		},
 		{
-			Name:   "enroll",
-			Usage:  "enroll the agent with Fleet Intelligence backend endpoints and credentials",
+			Name:  "enroll",
+			Usage: "enroll the agent with Fleet Intelligence backend endpoints and credentials",
+			Description: "Bare metal: --endpoint + --token\n   K8s gateway: --gateway <http://gateway:4319>\n\n" +
+				"In gateway mode the gateway authenticates with the backend on the agent's behalf.\n" +
+				"Enrollment is idempotent: if a JWT is already stored the command exits immediately.",
 			Action: enrollCommand,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:     "endpoint",
-					Usage:    "base endpoint URL (required)",
-					Required: true,
+					Name:  "endpoint",
+					Usage: "base backend URL for direct enrollment (bare metal, requires --token)",
 				},
 				&cli.StringFlag{
-					Name:     "token",
-					Usage:    "authentication token (required)",
-					Required: true,
+					Name:  "token",
+					Usage: "service account key for direct enrollment (bare metal, requires --endpoint)",
+				},
+				&cli.StringFlag{
+					Name:  "gateway",
+					Usage: "gateway enrollment proxy base URL (K8s, e.g. http://otel-gateway:4319)",
 				},
 			},
 		},

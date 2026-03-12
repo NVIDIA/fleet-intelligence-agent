@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	stdos "os"
 	"time"
 
@@ -160,12 +161,47 @@ func shouldEnableComponent(name string, enabledByDefault bool, config *config.Co
 	return shouldEnable
 }
 
+// applyCollectorConfig overrides the metrics and logs endpoints in the metadata DB
+// to point at the OTel gateway. Only the destination endpoints are changed; the JWT
+// and SAK from enrollment are preserved so token refresh continues to work normally.
+func applyCollectorConfig(ctx context.Context, dbRW *sql.DB, collectorEndpoint string) error {
+	metricsEndpoint, err := url.JoinPath(collectorEndpoint, "v1", "metrics")
+	if err != nil {
+		return fmt.Errorf("failed to construct metrics endpoint from collector URL: %w", err)
+	}
+	logsEndpoint, err := url.JoinPath(collectorEndpoint, "v1", "logs")
+	if err != nil {
+		return fmt.Errorf("failed to construct logs endpoint from collector URL: %w", err)
+	}
+	if err := pkgmetadata.SetMetadata(ctx, dbRW, "metrics_endpoint", metricsEndpoint); err != nil {
+		return fmt.Errorf("failed to set metrics endpoint: %w", err)
+	}
+	if err := pkgmetadata.SetMetadata(ctx, dbRW, "logs_endpoint", logsEndpoint); err != nil {
+		return fmt.Errorf("failed to set logs endpoint: %w", err)
+	}
+	return nil
+}
+
 // New creates a new simplified health server for metrics export only
 func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config) (retServer *Server, retErr error) {
 	// Initialize database connections
 	dbRW, dbRO, err := initializeDatabases(ctx, config)
 	if err != nil {
 		return nil, err
+	}
+
+	// If collector mode is configured, seed the metadata DB with the gateway endpoints
+	// Only the destination endpoints are overridden; JWT and SAK from enrollment are
+	// preserved so token refresh continues to work normally.
+	if config.HealthExporter != nil && config.HealthExporter.CollectorEndpoint != "" {
+		if err := applyCollectorConfig(ctx, dbRW, config.HealthExporter.CollectorEndpoint); err != nil {
+			return nil, fmt.Errorf("failed to apply OTel gateway collector config: %w", err)
+		}
+		log.Logger.Infow("configured agent for OTel gateway mode",
+			"collector_endpoint", config.HealthExporter.CollectorEndpoint,
+			"metrics_endpoint", config.HealthExporter.CollectorEndpoint+"/v1/metrics",
+			"logs_endpoint", config.HealthExporter.CollectorEndpoint+"/v1/logs",
+		)
 	}
 
 	s := &Server{
