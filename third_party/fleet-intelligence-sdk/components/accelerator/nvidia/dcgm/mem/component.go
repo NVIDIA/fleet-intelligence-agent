@@ -438,12 +438,6 @@ func (c *component) Check() components.CheckResult {
 						"uuid": deviceData.UUID,
 						"gpu":  fmt.Sprintf("%d", deviceData.DeviceID),
 					}).Set(float64(fieldValue.Int64()))
-				case dcgm.DCGM_FI_DEV_RETIRED_PENDING:
-					metricDCGMFIDevRetiredPending.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
-				case dcgm.DCGM_FI_DEV_RETIRED_DBE:
-					metricDCGMFIDevRetiredDBE.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
-				case dcgm.DCGM_FI_DEV_RETIRED_SBE:
-					metricDCGMFIDevRetiredSBE.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
 				case dcgm.DCGM_FI_DEV_BANKS_REMAP_ROWS_AVAIL_HIGH:
 					metricDCGMFIDevBanksRemapRowsAvailHigh.With(prometheus.Labels{"uuid": deviceData.UUID, "gpu": fmt.Sprintf("%d", deviceData.DeviceID)}).Set(float64(fieldValue.Int64()))
 				case dcgm.DCGM_FI_DEV_BANKS_REMAP_ROWS_AVAIL_LOW:
