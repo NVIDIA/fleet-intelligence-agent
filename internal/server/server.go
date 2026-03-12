@@ -324,6 +324,15 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 	promRecorder := pkgmetricsrecorder.NewPrometheusRecorder(ctx, 15*time.Minute, dbRO)
 	promRecorder.Start()
 
+	// Build UUID→DCGM-device-ID map so MachineInfo GPU indices match
+	// the "gpu" label already emitted by DCGM component metrics.
+	dcgmGPUIndexes := make(map[string]string)
+	for _, dev := range dcgmInstance.GetDevices() {
+		if dev.UUID != "" {
+			dcgmGPUIndexes[dev.UUID] = fmt.Sprintf("%d", dev.ID)
+		}
+	}
+
 	// Create and start health exporter with all dependencies if enabled
 	if config.HealthExporter != nil {
 		var err error
@@ -337,6 +346,7 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 			exporter.WithNVMLInstance(nvmlInstance),
 			exporter.WithDatabaseConnections(dbRW, dbRO),
 			exporter.WithMachineID(machineID),
+			exporter.WithDCGMGPUIndexes(dcgmGPUIndexes),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create health exporter: %w", err)

@@ -73,8 +73,29 @@ type MachineInfo struct {
 	NICInfo *apiv1.MachineNICInfo `json:"nicInfo,omitempty"`
 }
 
-// GetMachineInfo retrieves machine info and customizes it for Fleet Intelligence
-func GetMachineInfo(nvmlInstance nvidianvml.Instance) (*MachineInfo, error) {
+// MachineInfoOption configures GetMachineInfo behavior.
+type MachineInfoOption func(*machineInfoOpts)
+
+type machineInfoOpts struct {
+	// dcgmGPUIndexes overrides NVML-sourced GPUIndex values with DCGM device IDs.
+	// Key: GPU UUID, Value: DCGM device ID as string (e.g. "0", "1").
+	dcgmGPUIndexes map[string]string
+}
+
+// WithDCGMGPUIndexes supplies a UUID→DCGM-device-ID mapping so that
+// MachineInfo.GPUIndex matches the "gpu" label emitted by DCGM metrics.
+func WithDCGMGPUIndexes(m map[string]string) MachineInfoOption {
+	return func(o *machineInfoOpts) { o.dcgmGPUIndexes = m }
+}
+
+// GetMachineInfo retrieves machine info and customizes it for Fleet Intelligence.
+// Pass WithDCGMGPUIndexes to override NVML GPU indices with DCGM device IDs.
+func GetMachineInfo(nvmlInstance nvidianvml.Instance, opts ...MachineInfoOption) (*MachineInfo, error) {
+	var o machineInfoOpts
+	for _, fn := range opts {
+		fn(&o)
+	}
+
 	// Get the original machine info from gpud
 	gpudInfo, err := pkgmachineinfo.GetMachineInfo(nvmlInstance)
 	if err != nil {
@@ -84,6 +105,16 @@ func GetMachineInfo(nvmlInstance nvidianvml.Instance) (*MachineInfo, error) {
 	// Override the hostname if it's set in the environment for containerized deployments
 	if hostname := strings.TrimSpace(os.Getenv("HOSTNAME")); hostname != "" {
 		gpudInfo.Hostname = hostname
+	}
+
+	// Override NVML GPU indices with DCGM device IDs when available, so the
+	// "gpu" label is consistent across DCGM and non-DCGM metrics in OTLP.
+	if gpudInfo.GPUInfo != nil && len(o.dcgmGPUIndexes) > 0 {
+		for i, gpu := range gpudInfo.GPUInfo.GPUs {
+			if idx, ok := o.dcgmGPUIndexes[gpu.UUID]; ok {
+				gpudInfo.GPUInfo.GPUs[i].GPUIndex = idx
+			}
+		}
 	}
 
 	// Convert to our custom MachineInfo struct with Fleet Intelligence version

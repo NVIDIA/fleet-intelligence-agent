@@ -45,9 +45,10 @@ type exporterOptions struct {
 	nvmlInstance       nvidianvml.Instance
 	httpClient         *http.Client
 	timeout            time.Duration
-	dbRW               *sql.DB // Read-write database connection
-	dbRO               *sql.DB // Read-only database connection
-	machineID          string  // Agent's stable identity from server initialization
+	dbRW               *sql.DB           // Read-write database connection
+	dbRO               *sql.DB           // Read-only database connection
+	machineID          string            // Agent's stable identity from server initialization
+	dcgmGPUIndexes     map[string]string // UUID → DCGM device ID for GPU index override
 }
 
 // WithConfig sets the health exporter configuration
@@ -147,6 +148,15 @@ func WithMachineID(machineID string) ExporterOption {
 			return errors.New("machine ID cannot be empty")
 		}
 		c.machineID = machineID
+		return nil
+	}
+}
+
+// WithDCGMGPUIndexes sets the UUID→DCGM-device-ID mapping so that
+// MachineInfo GPU indices match the "gpu" label emitted by DCGM metrics.
+func WithDCGMGPUIndexes(m map[string]string) ExporterOption {
+	return func(c *exporterOptions) error {
+		c.dcgmGPUIndexes = m
 		return nil
 	}
 }
