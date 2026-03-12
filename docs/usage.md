@@ -218,7 +218,7 @@ Returns event data from all monitored components (errors, warnings, state change
 curl "http://localhost:15133/v1/events?since=$(date -d '1 hour ago' +%s)"
 
 # Get events for specific component
-curl "http://localhost:15133/v1/events?components=accelerator-nvidia-xid"
+curl "http://localhost:15133/v1/events?components=accelerator-nvidia-error-xid"
 ```
 
 ### Prometheus Metrics
