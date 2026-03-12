@@ -228,8 +228,12 @@ func (e *healthExporter) exportToHTTP(ctx context.Context, data *collector.Healt
 	}
 
 	if e.options.config.AuthToken == "" {
-		log.Logger.Infow("No auth token configured, skipping HTTP export")
-		return nil
+		if e.options.config.CollectorEndpoint == "" {
+			log.Logger.Infow("No auth token configured, skipping HTTP export")
+			return nil
+		}
+		// Gateway mode: the gateway handles backend auth, no token needed on the agent.
+		log.Logger.Debugw("No auth token on agent, proceeding in gateway mode", "collector_endpoint", e.options.config.CollectorEndpoint)
 	}
 
 	newToken, err := e.httpWriter.Send(ctx, data, e.options.config.MetricsEndpoint, e.options.config.LogsEndpoint, e.options.config.RetryMaxAttempts, e.options.config.AuthToken)
@@ -328,20 +332,23 @@ func (e *healthExporter) refreshJWTToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("no database connection available for JWT refresh")
 	}
 
-	// Read SAK token from metadata
-	sakToken, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "sak_token")
-	if err != nil || sakToken == "" {
-		return "", fmt.Errorf("no SAK token available for JWT refresh")
-	}
+	// Read SAK token from metadata (present in bare metal mode, absent in gateway mode).
+	sakToken, _ := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "sak_token")
 
-	// Read enroll endpoint from metadata (stored during enrollment)
+	// Read customer ID from metadata (present in bare metal mode, absent in gateway mode).
+	customerID, _ := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "customer_id")
+
+	// Read enroll endpoint from metadata (stored during enrollment).
+	// In gateway mode this points at the gateway enrollment proxy; in bare metal
+	// mode it points at the backend directly.
 	enrollEndpoint, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "enroll_endpoint")
 	if err != nil || enrollEndpoint == "" {
 		return "", fmt.Errorf("no enroll endpoint available for JWT refresh")
 	}
 
-	// Perform enrollment to get new JWT token using the shared function
-	newJWT, err := enrollment.PerformEnrollment(ctx, enrollEndpoint, sakToken)
+	// Perform enrollment to get new JWT token using the shared function.
+	// sakToken and customerID are empty in gateway mode; PerformEnrollment handles that.
+	newJWT, err := enrollment.PerformEnrollment(ctx, enrollEndpoint, sakToken, customerID)
 	if err != nil {
 		return "", fmt.Errorf("failed to refresh JWT token: %w", err)
 	}

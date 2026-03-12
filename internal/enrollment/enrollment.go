@@ -33,13 +33,13 @@ type EnrollResponse struct {
 	JWTToken string `json:"jwt_assertion"`
 }
 
-// PerformEnrollment performs the enrollment request to get a new JWT token
-func PerformEnrollment(ctx context.Context, enrollEndpoint, sakToken string) (string, error) {
+// PerformEnrollment performs the enrollment request to get a new JWT token.
+// sakToken is sent as Authorization: Bearer when non-empty (required for direct
+// backend enrollment through the API gateway). customerID is sent as Nv-Actor-Id
+// when non-empty. Both are omitted in gateway-proxied enrollment.
+func PerformEnrollment(ctx context.Context, enrollEndpoint, sakToken, customerID string) (string, error) {
 	if enrollEndpoint == "" {
 		return "", fmt.Errorf("enrollEndpoint cannot be empty")
-	}
-	if sakToken == "" {
-		return "", fmt.Errorf("sakToken cannot be empty")
 	}
 
 	// Use the provided enrollment endpoint directly
@@ -56,9 +56,13 @@ func PerformEnrollment(ctx context.Context, enrollEndpoint, sakToken string) (st
 		return "", fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
-	// Set headers (no Content-Type since no body is sent)
 	req.Header.Set("User-Agent", "fleet-intelligence-agent")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", sakToken))
+	if sakToken != "" {
+		req.Header.Set("Authorization", "Bearer "+sakToken)
+	}
+	if customerID != "" {
+		req.Header.Set("Nv-Actor-Id", customerID)
+	}
 
 	// Make the request
 	resp, err := client.Do(req)

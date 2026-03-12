@@ -203,23 +203,32 @@ func App() *cli.App {
 			Action: precheckCommand,
 		},
 		{
-			Name:   "enroll",
-			Usage:  "enroll the agent with Fleet Intelligence backend endpoints and credentials",
+			Name:  "enroll",
+			Usage: "enroll the agent with Fleet Intelligence backend endpoints and credentials",
+			Description: "Bare metal: --endpoint + --customer-id\n   K8s gateway: --gateway <http://gateway:4319>\n\n" +
+				"In gateway mode the gateway authenticates with the backend on the agent's behalf.\n" +
+				"Enrollment is idempotent: if a JWT is already stored the command exits immediately.",
 			Action: enrollCommand,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:     "endpoint",
-					Usage:    "base endpoint URL (required)",
-					Required: true,
+					Name:  "endpoint",
+					Usage: "base backend URL for direct enrollment (bare metal, requires --token and --customer-id)",
 				},
 				&cli.StringFlag{
-					Name:     "token",
-					Usage:    "authentication token (required)",
-					Required: true,
+					Name:  "token",
+					Usage: "SAK (Service API Key) sent as Authorization: Bearer (bare metal, requires --endpoint)",
+				},
+				&cli.StringFlag{
+					Name:  "customer-id",
+					Usage: "customer/actor ID sent as Nv-Actor-Id (bare metal, requires --endpoint)",
+				},
+				&cli.StringFlag{
+					Name:  "gateway",
+					Usage: "gateway enrollment proxy base URL (K8s, e.g. http://otel-gateway:4319)",
 				},
 				&cli.BoolFlag{
 					Name:  "force",
-					Usage: "continue enrollment even when precheck fails",
+					Usage: "no-op; retained for Helm enroll.force (use precheck subcommand to validate the host)",
 				},
 			},
 		},

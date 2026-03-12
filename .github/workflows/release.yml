@@ -108,6 +108,25 @@ jobs:
           fi
           echo "EOF" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare fleetint-otelcol image tags
+        id: otelcol_image
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          NVCR_IMAGE="nvcr.io/0753215517602916/agent-artifact/fleetint-otelcol"
+          GHCR_IMAGE="ghcr.io/${OWNER_LC}/fleetint-otelcol"
+          echo "nvcr_image=${NVCR_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "ghcr_image=${GHCR_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "tags<<EOF" >> "$GITHUB_OUTPUT"
+          echo "${NVCR_IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "${GHCR_IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
+          if [ "${{ steps.version.outputs.is_prerelease }}" = "false" ]; then
+            echo "${NVCR_IMAGE}:latest" >> "$GITHUB_OUTPUT"
+            echo "${GHCR_IMAGE}:latest" >> "$GITHUB_OUTPUT"
+          fi
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -142,6 +161,15 @@ jobs:
             VERSION=${{ steps.version.outputs.version }}
             REVISION=${{ steps.version.outputs.commit }}
             BUILD_TIMESTAMP=${{ github.event.head_commit.timestamp }}
+
+      - name: Build and push fleetint-otelcol image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./otelcol/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.otelcol_image.outputs.tags }}
 
       - name: Package Helm chart
         run: |
@@ -235,6 +263,9 @@ jobs:
           echo "**fleet-intelligence-agent image tags:**" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.agent_image.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.agent_image_ghcr.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**fleetint-otelcol image tags:**" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.otelcol_image.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Helm chart (NGC Helm repo):**" >> $GITHUB_STEP_SUMMARY
           echo "repo: https://helm.ngc.nvidia.com/0753215517602916/agent-artifact" >> $GITHUB_STEP_SUMMARY

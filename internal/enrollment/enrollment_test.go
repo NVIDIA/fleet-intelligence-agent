@@ -51,7 +51,7 @@ func TestPerformEnrollment_Success(t *testing.T) {
 	defer server.Close()
 
 	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
+	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token", "")
 
 	require.NoError(t, err)
 	assert.Equal(t, expectedToken, token)
@@ -59,20 +59,30 @@ func TestPerformEnrollment_Success(t *testing.T) {
 
 func TestPerformEnrollment_EmptyEndpoint(t *testing.T) {
 	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, "", "test-sak-token")
+	token, err := PerformEnrollment(ctx, "", "test-sak-token", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "enrollEndpoint cannot be empty")
 	assert.Empty(t, token)
 }
 
-func TestPerformEnrollment_EmptyToken(t *testing.T) {
-	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, "http://example.com", "")
+// TestPerformEnrollment_EmptySAK verifies that an empty SAK is valid (gateway-proxy mode).
+// The gateway proxy endpoint handles authentication on the agent's behalf, so no SAK is needed.
+func TestPerformEnrollment_EmptySAK(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Empty(t, r.Header.Get("Authorization"))
+		response := EnrollResponse{JWTToken: "test-jwt"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "sakToken cannot be empty")
-	assert.Empty(t, token)
+	ctx := context.Background()
+	token, err := PerformEnrollment(ctx, server.URL, "", "")
+
+	require.NoError(t, err)
+	assert.Equal(t, "test-jwt", token)
 }
 
 func TestPerformEnrollment_HTTPStatusCodes(t *testing.T) {
@@ -136,7 +146,7 @@ func TestPerformEnrollment_HTTPStatusCodes(t *testing.T) {
 			defer server.Close()
 
 			ctx := context.Background()
-			token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
+			token, err := PerformEnrollment(ctx, server.URL, "test-sak-token", "")
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.expectedErrMsg)
@@ -159,7 +169,7 @@ func TestPerformEnrollment_MissingJWTToken(t *testing.T) {
 	defer server.Close()
 
 	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
+	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "enrollment response missing jwt-token field")
@@ -176,7 +186,7 @@ func TestPerformEnrollment_InvalidJSON(t *testing.T) {
 	defer server.Close()
 
 	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
+	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse enrollment response")
@@ -194,7 +204,7 @@ func TestPerformEnrollment_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
+	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to make enrollment request")
@@ -204,7 +214,7 @@ func TestPerformEnrollment_ContextCancellation(t *testing.T) {
 func TestPerformEnrollment_ServerUnavailable(t *testing.T) {
 	// Use an invalid URL that will fail to connect
 	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, "http://localhost:99999", "test-sak-token")
+	token, err := PerformEnrollment(ctx, "http://localhost:99999", "test-sak-token", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to make enrollment request")
@@ -227,7 +237,7 @@ func TestPerformEnrollment_RequestBodyEmpty(t *testing.T) {
 	defer server.Close()
 
 	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
+	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token", "")
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, token)
@@ -286,7 +296,7 @@ func TestPerformEnrollment_MultipleSuccessiveRequests(t *testing.T) {
 
 	// Make multiple requests
 	for i := 1; i <= 3; i++ {
-		token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
+		token, err := PerformEnrollment(ctx, server.URL, "test-sak-token", "")
 		require.NoError(t, err)
 		assert.Equal(t, fmt.Sprintf("token-%d", i), token)
 	}

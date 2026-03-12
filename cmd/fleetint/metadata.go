@@ -73,8 +73,8 @@ func metadataCommand(cliContext *cli.Context) error {
 	log.Logger.Debugw("successfully read metadata")
 
 	for k, v := range metadata {
-		// Mask sensitive tokens (JWT and SAK)
-		if k == pkgmetadata.MetadataKeyToken || k == "sak_token" {
+		// Mask sensitive tokens (JWT)
+		if k == pkgmetadata.MetadataKeyToken {
 			v = pkgmetadata.MaskToken(v)
 		}
 		fmt.Printf("%s: %s\n", k, v)

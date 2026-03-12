@@ -168,6 +168,34 @@ jobs:
           path: fleetint-${{ matrix.goos }}-${{ matrix.goarch }}
           retention-days: 7
 
+  build_check_otelcol:
+    name: Build Check (otelcol)
+    runs-on: [self-hosted, rocky8]
+    needs: [lint]
+    strategy:
+      matrix:
+        goos: [linux]
+        goarch: [amd64, arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install OTel Collector Builder
+        run: go install go.opentelemetry.io/collector/cmd/builder@v0.121.0
+
+      - name: Build fleetint-otelcol
+        working-directory: otelcol
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: builder --config=otelcol-builder.yaml
+
   sonarqube:
     name: SonarQube Analysis
     runs-on: [self-hosted, rocky8]

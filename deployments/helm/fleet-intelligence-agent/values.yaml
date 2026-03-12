@@ -48,12 +48,22 @@ env:
 logLevel: warn
 listenAddress: 0.0.0.0:15133
 components: all
+deployEnv: prod
 
+# Enrollment init container — only used in bare metal (direct) mode.
+# In gateway mode (otelGateway.enabled=true) no enrollment is needed: the gateway
+# owns all backend auth, and agents send OTLP to the gateway without credentials.
+#
+# Bare metal (otelGateway.enabled=false):
+#   Agents enroll directly with the backend using a SAK token + customer ID.
+#   Requires: enroll.endpoint, enroll.customerID, and either enroll.tokenValue
+#   (the SAK) or enroll.tokenSecretName (a K8s Secret holding the SAK).
 enroll:
   enabled: false
   unenroll: false
   force: false
   endpoint: ""
+  customerID: ""
   tokenSecretName: ""
   tokenSecretKey: "token"
   tokenValue: ""
@@ -85,3 +95,50 @@ serviceAccount:
   create: true
   name: ""
   automountToken: false
+
+# OTel gateway collector deployed alongside the agents in the same cluster.
+# When enabled:
+#   - A Deployment + Service for the fleetint-otelcol collector is created.
+#   - Each agent enrolls via the gateway proxy (no credentials on agent pods).
+#     The gateway authenticates with its SAK and returns a JWT to the agent.
+#     Customer identity (Nv-Actor-Id) is extracted from the JWT's assertion.customer_id claim.
+#   - Each agent sends OTLP to the gateway via FLEETINT_COLLECTOR_ENDPOINT.
+#   - The gateway authenticates outbound requests to the backend via its JWT.
+#   - Agent identity flows through OTLP resource attributes (machine.id, GPU UUIDs).
+otelGateway:
+  enabled: false
+
+  image:
+    repository: ghcr.io/nvidia/fleetint-otelcol
+    tag: "0.0.1"
+    pullPolicy: IfNotPresent
+
+  replicas: 1
+
+  # Enrollment credentials for gateway→backend authentication.
+  # The gateway is the only component that holds these; agents never see them.
+  enroll:
+    # endpoint is the backend enrollment URL.
+    # Example: https://backend/api/v1/health/enroll
+    endpoint: ""
+    # sakToken is the Service API Key used to authenticate with the API gateway
+    # on enrollment. Stored in a Kubernetes Secret; never put in plain values files.
+    # Use --set otelGateway.enroll.sakToken=nvapi-... or reference an existingSecret.
+    sakToken: ""
+    # existingSecret: if set, SAK_TOKEN is read from this secret instead of
+    # creating one from sakToken. The secret must have a key named "sak-token".
+    existingSecret: ""
+
+  # Backend OTLP HTTP base URL (e.g. https://backend/api/v1/health).
+  backendEndpoint: ""
+
+  service:
+    port: 4318
+
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"

@@ -123,6 +123,13 @@ type HealthExporterConfig struct {
 	// RetryMaxAttempts is the maximum number of retry attempts for failed requests
 	RetryMaxAttempts int `json:"retry_max_attempts"`
 
+	// CollectorEndpoint is the base URL of an OTel gateway collector (e.g. http://otel-gateway:4318).
+	// When set, the agent sends OTLP to {CollectorEndpoint}/v1/metrics and /v1/logs.
+	// Enrollment still runs per agent; the resulting JWT is sent to the gateway but not checked
+	// (cluster network isolation is the security boundary). Agent identity flows through OTLP
+	// resource attributes. The gateway authenticates to the backend via OAuth2 or SAK.
+	CollectorEndpoint string `json:"collector_endpoint,omitempty"`
+
 	// Offline mode configuration
 	// OfflineMode controls whether to use offline mode (write to files instead of HTTP endpoint)
 	OfflineMode bool `json:"offline_mode"`
@@ -322,8 +329,9 @@ func extractHealthExporterEntries(cfg *HealthExporterConfig) []ConfigEntry {
 			continue
 		}
 		key := strings.Split(jsonTag, ",")[0]
-		// Skip sensitive/enrollment-assigned field
-		if key == "auth_token" || key == "metrics_endpoint" || key == "logs_endpoint" {
+		// Skip sensitive/enrollment-assigned fields
+		if key == "auth_token" || key == "metrics_endpoint" || key == "logs_endpoint" ||
+			key == "collector_endpoint" {
 			continue
 		}
 

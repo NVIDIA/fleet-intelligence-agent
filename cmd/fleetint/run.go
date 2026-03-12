@@ -175,6 +175,14 @@ func configureHealthExporterFromEnv(cfg *config.Config) error {
 		return err
 	}
 
+	// OTel gateway collector mode: when set, metrics/logs are routed to the gateway
+	// instead of the backend directly. Enrollment still runs to register the machine;
+	// the resulting JWT is used to authenticate requests to the gateway.
+	if val := os.Getenv("FLEETINT_COLLECTOR_ENDPOINT"); val != "" {
+		he.CollectorEndpoint = val
+		log.Logger.Infow("set OTel gateway collector endpoint from env", "collector_endpoint", val)
+	}
+
 	return nil
 }
 

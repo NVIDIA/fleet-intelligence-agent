@@ -17,104 +17,54 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/precheck"
 )
 
-func TestEnrollCommandPrecheckError(t *testing.T) {
-	originalRunPrecheck := runPrecheck
-	t.Cleanup(func() {
-		runPrecheck = originalRunPrecheck
-	})
-
-	runPrecheck = func() (precheck.Result, error) {
-		return precheck.Result{}, fmt.Errorf("nvml init failed")
+// TestEnrollCommand_MissingArgs verifies that the enroll command fails fast
+// when neither --gateway nor the full bare-metal flag set is provided.
+func TestEnrollCommand_MissingArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		errContains string
+	}{
+		{
+			name:        "no flags",
+			args:        []string{"fleetint", "enroll"},
+			errContains: "either --gateway or --endpoint",
+		},
+		{
+			name:        "endpoint without token and customer-id",
+			args:        []string{"fleetint", "enroll", "--endpoint", "https://example.com"},
+			errContains: "either --gateway or --endpoint",
+		},
+		{
+			name:        "endpoint and token without customer-id",
+			args:        []string{"fleetint", "enroll", "--endpoint", "https://example.com", "--token", "nvapi-xxx"},
+			errContains: "either --gateway or --endpoint",
+		},
+		{
+			name:        "gateway and endpoint are mutually exclusive",
+			args:        []string{"fleetint", "enroll", "--gateway", "http://gw:4319", "--endpoint", "https://example.com"},
+			errContains: "mutually exclusive",
+		},
+		{
+			name:        "gateway and token are mutually exclusive",
+			args:        []string{"fleetint", "enroll", "--gateway", "http://gw:4319", "--token", "nvapi-xxx"},
+			errContains: "mutually exclusive",
+		},
 	}
 
-	app := App()
-	app.Writer = &bytes.Buffer{}
-
-	err := app.Run([]string{"fleetint", "enroll", "--endpoint", "https://example.com", "--token", "token"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to run precheck")
-	assert.Contains(t, err.Error(), "nvml init failed")
-}
-
-func TestEnrollCommandBlocksOnFailedPrecheck(t *testing.T) {
-	originalRunPrecheck := runPrecheck
-	originalPerformEnrollment := performEnrollment
-	originalStoreConfig := storeEnrollmentConfig
-	t.Cleanup(func() {
-		runPrecheck = originalRunPrecheck
-		performEnrollment = originalPerformEnrollment
-		storeEnrollmentConfig = originalStoreConfig
-	})
-
-	enrollmentCalled := false
-	runPrecheck = func() (precheck.Result, error) {
-		return precheck.Result{
-			Checks: []precheck.Check{
-				{Name: "gpu-present", Message: "no NVIDIA GPU detected"},
-			},
-		}, nil
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := App()
+			app.Writer = &bytes.Buffer{}
+			err := app.Run(tt.args)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.errContains)
+		})
 	}
-	performEnrollment = func(enrollEndpoint, sakToken string) (string, error) {
-		enrollmentCalled = true
-		return "jwt-token", nil
-	}
-	storeEnrollmentConfig = func(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken string) error {
-		return nil
-	}
-
-	out := &bytes.Buffer{}
-	app := App()
-	app.Writer = out
-
-	err := app.Run([]string{"fleetint", "enroll", "--endpoint", "https://example.com", "--token", "token"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "precheck failed")
-	assert.Contains(t, out.String(), "Enrollment skipped: precheck failed")
-	assert.False(t, enrollmentCalled)
-}
-
-func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
-	originalRunPrecheck := runPrecheck
-	originalPerformEnrollment := performEnrollment
-	originalStoreConfig := storeEnrollmentConfig
-	t.Cleanup(func() {
-		runPrecheck = originalRunPrecheck
-		performEnrollment = originalPerformEnrollment
-		storeEnrollmentConfig = originalStoreConfig
-	})
-
-	enrollmentCalled := false
-	runPrecheck = func() (precheck.Result, error) {
-		return precheck.Result{
-			Checks: []precheck.Check{
-				{Name: "gpu-present", Message: "no NVIDIA GPU detected"},
-			},
-		}, nil
-	}
-	performEnrollment = func(enrollEndpoint, sakToken string) (string, error) {
-		enrollmentCalled = true
-		return "jwt-token", nil
-	}
-	storeEnrollmentConfig = func(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken string) error {
-		return nil
-	}
-
-	app := App()
-	app.Writer = &bytes.Buffer{}
-
-	err := app.Run([]string{"fleetint", "enroll", "--endpoint", "https://example.com", "--token", "token", "--force"})
-
-	require.NoError(t, err)
-	assert.True(t, enrollmentCalled)
 }

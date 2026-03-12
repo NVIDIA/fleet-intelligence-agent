@@ -64,6 +64,7 @@ func removeEnrollmentMetadata(ctx context.Context, dbRW *sql.DB) error {
 	keysToDelete := []string{
 		pkgmetadata.MetadataKeyToken,
 		"sak_token",
+		"customer_id",
 		"enroll_endpoint",
 		"metrics_endpoint",
 		"logs_endpoint",
@@ -71,7 +72,7 @@ func removeEnrollmentMetadata(ctx context.Context, dbRW *sql.DB) error {
 	}
 
 	// Build batch delete query
-	query := "DELETE FROM gpud_metadata WHERE key IN (?, ?, ?, ?, ?, ?)"
+	query := "DELETE FROM gpud_metadata WHERE key IN (?, ?, ?, ?, ?, ?, ?)"
 
 	// Convert string slice to []interface{} for ExecContext
 	args := make([]interface{}, len(keysToDelete))
