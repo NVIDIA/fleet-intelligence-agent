@@ -41,9 +41,6 @@ var memFields = []dcgm.Short{
 	dcgm.DCGM_FI_DEV_ECC_DBE_VOL_DEV,                // Double bit volatile ECC errors detected in device memory
 	dcgm.DCGM_FI_DEV_ECC_SBE_AGG_DEV,                // Aggregate single bit ECC errors detected in device memory
 	dcgm.DCGM_FI_DEV_ECC_DBE_AGG_DEV,                // Aggregate double bit ECC errors detected in device memory
-	dcgm.DCGM_FI_DEV_RETIRED_PENDING,                // Whether pages are pending retirement
-	dcgm.DCGM_FI_DEV_RETIRED_DBE,                    // Retired DBE pages
-	dcgm.DCGM_FI_DEV_RETIRED_SBE,                    // Retired SBE pages
 	dcgm.DCGM_FI_DEV_BANKS_REMAP_ROWS_AVAIL_HIGH,    // Banks with high remap row availability
 	dcgm.DCGM_FI_DEV_BANKS_REMAP_ROWS_AVAIL_LOW,     // Banks with low remap row availability
 	dcgm.DCGM_FI_DEV_BANKS_REMAP_ROWS_AVAIL_MAX,     // Banks with max remap row availability
@@ -208,21 +205,6 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevRetiredPending = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_retired_pending", Help: "Number of pages pending retirement"},
-		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
-	).MustCurryWith(componentLabel)
-
-	metricDCGMFIDevRetiredDBE = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_retired_dbe", Help: "Number of retired pages because of double bit errors. Note: monotonically increasing"},
-		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
-	).MustCurryWith(componentLabel)
-
-	metricDCGMFIDevRetiredSBE = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_retired_sbe", Help: "Number of retired pages because of single bit errors. Note: monotonically increasing"},
-		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
-	).MustCurryWith(componentLabel)
-
 	metricDCGMFIDevBanksRemapRowsAvailHigh = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{Name: "dcgm_fi_dev_banks_remap_rows_avail_high", Help: "Historical high mark of available spare memory rows per memory bank"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
@@ -267,9 +249,6 @@ func init() {
 		metricDCGMFIDevECCDBEVolDev,
 		metricDCGMFIDevECCSBEAggDev,
 		metricDCGMFIDevECCDBEAggDev,
-		metricDCGMFIDevRetiredPending,
-		metricDCGMFIDevRetiredDBE,
-		metricDCGMFIDevRetiredSBE,
 		metricDCGMFIDevBanksRemapRowsAvailHigh,
 		metricDCGMFIDevBanksRemapRowsAvailLow,
 		metricDCGMFIDevBanksRemapRowsAvailMax,
