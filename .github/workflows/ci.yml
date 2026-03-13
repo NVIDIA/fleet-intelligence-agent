@@ -77,6 +77,15 @@ jobs:
           version: latest
           args: --timeout=5m
 
+      - name: Check license headers in third_party
+        run: |
+          missing=$(find third_party -name "*.go" | xargs grep -rL "Copyright\|SPDX" 2>/dev/null)
+          if [ -n "$missing" ]; then
+            echo "ERROR: missing license header in:"
+            echo "$missing" | sed 's/^/  /'
+            exit 1
+          fi
+
       - name: Run govulncheck
         run: make vuln
 

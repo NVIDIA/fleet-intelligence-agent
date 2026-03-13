@@ -58,4 +58,5 @@ ENV GOFLAGS=-trimpath
 COPY . .
 
 # Default: run lint, tests, then vulnerability check (exit on first failure).
-CMD ["sh", "-c", "make lint && make test && make vuln && cd third_party/fleet-intelligence-sdk && go test ./..."]
+# Mirrors CI: lint job (golangci-lint + third_party license check + govulncheck) and unit_test job (make test).
+CMD ["sh", "-c", "make lint && make test && make vuln"]
