@@ -184,28 +184,31 @@ release:
 # Changelog configuration
 changelog:
   sort: asc
-  use: git
+  use: github
   groups:
     - title: 'New Features'
-      regexp: "^.*feat[(\\w)]*:+.*$"
+      regexp: "^(\\[.*?\\]\\s+)?feat(\\(\\w+\\))?:"
       order: 0
     - title: 'Bug Fixes'
-      regexp: "^.*fix[(\\w)]*:+.*$"
+      regexp: "^(\\[.*?\\]\\s+)?fix(\\(\\w+\\))?:"
       order: 1
     - title: 'Performance Improvements'
-      regexp: "^.*perf[(\\w)]*:+.*$"
+      regexp: "^(\\[.*?\\]\\s+)?perf(\\(\\w+\\))?:"
       order: 2
     - title: 'Documentation Updates'
-      regexp: "^.*docs[(\\w)]*:+.*$"
+      regexp: "^(\\[.*?\\]\\s+)?docs(\\(\\w+\\))?:"
       order: 3
+    - title: 'Refactors'
+      regexp: "^(\\[.*?\\]\\s+)?refactor(\\(\\w+\\))?:"
+      order: 4
     - title: 'Other Changes'
       order: 999
   filters:
     exclude:
-      - '^test:'
-      - '^ci:'
-      - '^build:'
-      - '^style:'
-      - '^chore:'
+      - 'test(\(\w+\))?:'
+      - 'ci(\(\w+\))?:'
+      - 'build(\(\w+\))?:'
+      - 'style(\(\w+\))?:'
+      - 'chore(\(\w+\))?:'
       - Merge pull request
       - Merge branch
