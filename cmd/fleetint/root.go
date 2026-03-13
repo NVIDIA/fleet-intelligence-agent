@@ -202,6 +202,11 @@ func App() *cli.App {
 			},
 		},
 		{
+			Name:   "precheck",
+			Usage:  "validate host prerequisites required for installation and enrollment",
+			Action: precheckCommand,
+		},
+		{
 			Name:   "enroll",
 			Usage:  "enroll the agent with Fleet Intelligence backend endpoints and credentials",
 			Action: enrollCommand,
@@ -215,6 +220,10 @@ func App() *cli.App {
 					Name:     "token",
 					Usage:    "authentication token (required)",
 					Required: true,
+				},
+				&cli.BoolFlag{
+					Name:  "force",
+					Usage: "continue enrollment even when precheck fails",
 				},
 			},
 		},
