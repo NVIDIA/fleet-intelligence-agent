@@ -72,7 +72,7 @@ Validates the local prerequisites required for installation and enrollment.
 **What it checks:**
 - NVIDIA GPU presence
 - supported GPU architecture (`Hopper`, `Blackwell`, `Rubin`)
-- NVIDIA driver detection
+- NVIDIA driver major version (`510` or newer)
 - DCGM HostEngine reachability
 - DCGM HostEngine minimum version (`4.2.3`)
 - `nvattest` availability

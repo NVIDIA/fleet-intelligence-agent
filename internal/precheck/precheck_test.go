@@ -137,6 +137,28 @@ func TestEvaluateDriverAndNVAT(t *testing.T) {
 			},
 		},
 		{
+			name: "fails for malformed driver version",
+			input: Input{
+				MachineInfo:     machineInfoWithGPU("Hopper", "not-a-version"),
+				NVAttestPresent: boolPtr(true),
+			},
+			wantPassed: false,
+			wantMessages: []string{
+				"failed to parse NVIDIA driver version: failed to parse driver version (expected at least 2 parts): not-a-version",
+			},
+		},
+		{
+			name: "fails for driver below minimum major version",
+			input: Input{
+				MachineInfo:     machineInfoWithGPU("Hopper", "509.12.01"),
+				NVAttestPresent: boolPtr(true),
+			},
+			wantPassed: false,
+			wantMessages: []string{
+				"NVIDIA driver major version 509 is below required minimum 510",
+			},
+		},
+		{
 			name: "fails for missing nvattest",
 			input: Input{
 				MachineInfo:     machineInfoWithGPU("Hopper", "575.57.08"),
@@ -148,7 +170,15 @@ func TestEvaluateDriverAndNVAT(t *testing.T) {
 			},
 		},
 		{
-			name: "passes when driver and nvattest are present",
+			name: "passes when driver major is at minimum and nvattest is present",
+			input: Input{
+				MachineInfo:     machineInfoWithGPU("Hopper", "510.47.03"),
+				NVAttestPresent: boolPtr(true),
+			},
+			wantPassed: true,
+		},
+		{
+			name: "passes when newer driver and nvattest are present",
 			input: Input{
 				MachineInfo:     machineInfoWithGPU("Hopper", "575.57.08"),
 				NVAttestPresent: boolPtr(true),

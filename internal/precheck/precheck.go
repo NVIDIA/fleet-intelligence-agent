@@ -33,6 +33,7 @@ import (
 var supportedArchitectures = []string{"Hopper", "Blackwell", "Rubin"}
 
 const minimumDCGMVersion = "4.2.3"
+const minimumDriverMajorVersion = 510
 
 var (
 	newNVML              = nvidianvml.New
@@ -191,6 +192,21 @@ func evaluateDriver(info *machineinfo.MachineInfo) Check {
 		return Check{
 			Name:    "gpu-driver",
 			Message: "NVIDIA driver not detected",
+		}
+	}
+
+	driverMajor, _, _, err := nvidianvml.ParseDriverVersion(info.GPUDriverVersion)
+	if err != nil {
+		return Check{
+			Name:    "gpu-driver",
+			Message: "failed to parse NVIDIA driver version: " + err.Error(),
+		}
+	}
+
+	if driverMajor < minimumDriverMajorVersion {
+		return Check{
+			Name:    "gpu-driver",
+			Message: fmt.Sprintf("NVIDIA driver major version %d is below required minimum %d", driverMajor, minimumDriverMajorVersion),
 		}
 	}
 
