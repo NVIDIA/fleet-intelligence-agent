@@ -71,9 +71,18 @@ spec:
               /usr/bin/fleetint enroll
               --endpoint {{ required "enroll.endpoint is required when enroll.enabled=true" .Values.enroll.endpoint | quote }}
               --token "${FLEETINT_TOKEN}"
+              {{- if .Values.enroll.force }}
+              --force
+              {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
+            {{- range $name, $value := .Values.env }}
+            {{- if ne (toString $value) "" }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
             - name: FLEETINT_TOKEN
               {{- if .Values.enroll.tokenSecretName }}
               valueFrom:

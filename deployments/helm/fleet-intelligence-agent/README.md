@@ -42,6 +42,7 @@ Common values (defaults from `values.yaml`):
 | `components` | `all` | Enabled components. |
 | `enroll.enabled` | `false` | Enable enrollment init container. |
 | `enroll.unenroll` | `false` | Run explicit unenroll init container (cleanup persisted enrollment metadata). |
+| `enroll.force` | `false` | Append `--force` to the enrollment command. |
 | `enroll.endpoint` | `""` | Enrollment endpoint. |
 | `enroll.tokenSecretName` | `""` | Secret name for enrollment token. |
 | `enroll.tokenSecretKey` | `token` | Secret key for enrollment token. |
@@ -64,6 +65,7 @@ Common values (defaults from `values.yaml`):
 ### Enrollment (per node via init container)
 
 `enroll.enabled` and `enroll.unenroll` are mutually exclusive; do not set both to `true`.
+Set `enroll.force=true` to append `--force` to `fleetint enroll`.
 
 See `docs/install-helm.md` for the enrollment flow and secret creation steps.
 

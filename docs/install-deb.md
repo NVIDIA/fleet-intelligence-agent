@@ -12,7 +12,7 @@ Before installing Fleet Intelligence Agent, ensure the following prerequisites a
 
 - NVIDIA package repository is configured (network or local CUDA repository) so `datacenter-gpu-manager-4-proprietary`, `nvattest`, and `corelib` can be installed
 - DCGM HostEngine `4.2.3` or newer
-- A supported NVIDIA Datacenter Driver is installed
+- NVIDIA Datacenter Driver major version `510` or newer is installed
 - Install/upgrade commands are run as `root` or with `sudo`
 - Attestation for the fleetint use case only supports Blackwell and newer GPUs, and applies to non-CC mode systems
 - For NVSwitch systems (driver branch must match installed datacenter driver):

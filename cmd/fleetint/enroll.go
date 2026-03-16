@@ -28,9 +28,30 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/enrollment"
 )
 
+var (
+	performEnrollment = func(enrollEndpoint, sakToken string) (string, error) {
+		return enrollment.PerformEnrollment(context.Background(), enrollEndpoint, sakToken)
+	}
+	storeEnrollmentConfig = storeConfigInMetadata
+)
+
 func enrollCommand(cliContext *cli.Context) error {
 	baseEndpoint := cliContext.String("endpoint")
 	sakToken := cliContext.String("token")
+	force := cliContext.Bool("force")
+
+	result, err := runPrecheck()
+	if err != nil {
+		return fmt.Errorf("failed to run precheck: %w", err)
+	}
+	printPrecheckResult(writerFromContext(cliContext), result)
+	if !result.Passed() {
+		if !force {
+			fmt.Fprintln(writerFromContext(cliContext), "Enrollment skipped: precheck failed")
+			return fmt.Errorf("precheck failed")
+		}
+		fmt.Fprintln(writerFromContext(cliContext), "Proceeding with enrollment because --force was provided")
+	}
 
 	// Validate base endpoint
 	baseURL, err := url.Parse(baseEndpoint)
@@ -56,7 +77,7 @@ func enrollCommand(cliContext *cli.Context) error {
 	}
 
 	// Make enrollment request to get JWT token
-	jwtToken, err := enrollment.PerformEnrollment(context.Background(), enrollEndpoint, sakToken)
+	jwtToken, err := performEnrollment(enrollEndpoint, sakToken)
 	if err != nil {
 		// Error already printed to stderr by PerformEnrollment
 		return err
@@ -77,7 +98,7 @@ func enrollCommand(cliContext *cli.Context) error {
 	}
 
 	// Store endpoints and JWT token in metadata table
-	if err := storeConfigInMetadata(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken); err != nil {
+	if err := storeEnrollmentConfig(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken); err != nil {
 		return fmt.Errorf("failed to store configuration: %w", err)
 	}
 
