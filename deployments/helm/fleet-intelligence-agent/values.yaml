@@ -52,6 +52,7 @@ components: all
 enroll:
   enabled: false
   unenroll: false
+  force: false
   endpoint: ""
   tokenSecretName: ""
   tokenSecretKey: "token"
