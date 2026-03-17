@@ -18,8 +18,6 @@ package common
 
 import (
 	"fmt"
-	"sort"
-	"strings"
 
 	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 
@@ -253,27 +251,16 @@ func FormatIncidents(prefix string, incidents []EnrichedIncident) string {
 	}
 
 	devices := make(map[string]struct{})
-	codes := make(map[string]struct{})
 	for _, incident := range incidents {
 		if incident.UUID != "" {
 			devices[incident.UUID] = struct{}{}
 		}
-		if incident.ErrorCode != "" {
-			codes[incident.ErrorCode] = struct{}{}
-		}
 	}
 
-	codeList := make([]string, 0, len(codes))
-	for code := range codes {
-		codeList = append(codeList, code)
-	}
-	sort.Strings(codeList)
-
-	return fmt.Sprintf("%s: %d incident(s) across %d device(s) [%s]",
+	return fmt.Sprintf("%s: %d incident(s) across %d device(s)",
 		prefix,
 		len(incidents),
 		len(devices),
-		strings.Join(codeList, ", "),
 	)
 }
 

@@ -168,7 +168,7 @@ func TestCheckResultHealthStates_PreservesLegacyIncidentsAndAddsTypedIncidents(t
 	cr := &checkResult{
 		ts:                time.Now().UTC(),
 		health:            apiv1.HealthStateTypeDegraded,
-		reason:            "InfoROM health warning: 1 incident(s) across 1 device(s) [DCGM_FR_CORRUPT_INFOROM]",
+		reason:            "InfoROM health warning: 1 incident(s) across 1 device(s)",
 		incidents:         dcgmcommon.ToHealthStateIncidents(enriched),
 		enrichedIncidents: enriched,
 	}

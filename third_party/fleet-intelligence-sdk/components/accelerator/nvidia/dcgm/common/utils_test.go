@@ -52,7 +52,7 @@ func TestFormatEnrichedIncidents(t *testing.T) {
 					ErrorCode: "DCGM_FR_TEMP_VIOLATION",
 				},
 			},
-			want: "thermal warning: 1 incident(s) across 1 device(s) [DCGM_FR_TEMP_VIOLATION]",
+			want: "thermal warning: 1 incident(s) across 1 device(s)",
 		},
 		{
 			name:   "multiple incidents",
@@ -69,7 +69,7 @@ func TestFormatEnrichedIncidents(t *testing.T) {
 					ErrorCode: "DCGM_FR_ROW_REMAP_FAILURE",
 				},
 			},
-			want: "memory failure: 2 incident(s) across 2 device(s) [DCGM_FR_ROW_REMAP_FAILURE, DCGM_FR_VOLATILE_DBE_DETECTED]",
+			want: "memory failure: 2 incident(s) across 2 device(s)",
 		},
 	}
 

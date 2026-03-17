@@ -129,7 +129,7 @@ func TestCheckResultHealthStates_UsesNVSwitchIdentifiers(t *testing.T) {
 	cr := &checkResult{
 		ts:                time.Now().UTC(),
 		health:            apiv1.HealthStateTypeUnhealthy,
-		reason:            "NVSwitch health failure: 1 incident(s) across 1 device(s) [DCGM_FR_NVSWITCH_FATAL_ERROR]",
+		reason:            "NVSwitch health failure: 1 incident(s) across 1 device(s)",
 		incidents:         dcgmcommon.ToHealthStateIncidents(enriched),
 		enrichedIncidents: enriched,
 	}
