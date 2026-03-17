@@ -258,6 +258,14 @@ func TestOTLPConverter_Convert_WithComponentData(t *testing.T) {
 					"device_uuid": "PCI:0000:04:00",
 					"data":        rawData,
 				},
+				"incidents": []apiv1.HealthStateIncident{
+					{
+						DeviceID: "GPU-1234",
+						Message:  "Clock throttled",
+						Severity: apiv1.HealthStateTypeDegraded,
+						Error:    "DCGM_FR_CLOCK_THROTTLE_POWER",
+					},
+				},
 			},
 		},
 	}
@@ -282,6 +290,16 @@ func TestOTLPConverter_Convert_WithComponentData(t *testing.T) {
 			require.NotEmpty(t, extraInfo)
 			assert.Contains(t, extraInfo, `"device_uuid":"PCI:0000:04:00"`)
 			assert.Contains(t, extraInfo, `"data":"{\"time\":\"2026-02-20T23:22:44Z\",\"data_source\":\"kmsg\",\"xid\":149}"`)
+
+			incidents := findAttribute(t, log.Attributes, "incidents").GetArrayValue()
+			require.NotNil(t, incidents)
+			require.Len(t, incidents.Values, 1)
+			incident := incidents.Values[0].GetKvlistValue()
+			require.NotNil(t, incident)
+			assert.Equal(t, "GPU-1234", findMapValue(t, incident.Values, "device_id").GetStringValue())
+			assert.Equal(t, "Clock throttled", findMapValue(t, incident.Values, "message").GetStringValue())
+			assert.Equal(t, "Degraded", findMapValue(t, incident.Values, "severity").GetStringValue())
+			assert.Equal(t, "DCGM_FR_CLOCK_THROTTLE_POWER", findMapValue(t, incident.Values, "error").GetStringValue())
 			found = true
 			break
 		}

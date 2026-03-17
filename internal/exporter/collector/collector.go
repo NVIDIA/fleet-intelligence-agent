@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"time"
 
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
@@ -269,12 +270,16 @@ func (c *collector) collectComponentData(data *HealthData) error {
 		reason := "No health data"
 		var timeValue interface{}
 		var extraInfo interface{} = map[string]interface{}{} // Default to empty map for JSON marshaling
+		var incidents interface{} = []apiv1.HealthStateIncident{}
 
 		if len(healthStates) > 0 {
 			firstState := healthStates[0]
 			health = string(firstState.Health)
 			reason = firstState.Reason
 			timeValue = firstState.Time
+			if len(firstState.Incidents) > 0 {
+				incidents = firstState.Incidents
+			}
 
 			// Handle ExtraInfo - ensure it's properly set for JSON marshaling downstream
 			// ExtraInfo can be map[string]string, map[string]interface{}, or nil
@@ -303,6 +308,7 @@ func (c *collector) collectComponentData(data *HealthData) error {
 			"reason":         reason,
 			"time":           timeValue,
 			"extra_info":     extraInfo,
+			"incidents":      incidents,
 		}
 	}
 

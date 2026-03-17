@@ -397,10 +397,12 @@ func (c *component) Check() components.CheckResult {
 	case dcgm.DCGM_HEALTH_RESULT_WARN:
 		cr.health = apiv1.HealthStateTypeDegraded
 		cr.enrichedIncidents = dcgmcommon.EnrichIncidents(incidents, deviceMapping)
+		cr.incidents = dcgmcommon.ToHealthStateIncidents(cr.enrichedIncidents)
 		cr.reason = dcgmcommon.FormatIncidents("power health warning", cr.enrichedIncidents)
 	case dcgm.DCGM_HEALTH_RESULT_FAIL:
 		cr.health = apiv1.HealthStateTypeUnhealthy
 		cr.enrichedIncidents = dcgmcommon.EnrichIncidents(incidents, deviceMapping)
+		cr.incidents = dcgmcommon.ToHealthStateIncidents(cr.enrichedIncidents)
 		cr.reason = dcgmcommon.FormatIncidents("power health failure", cr.enrichedIncidents)
 	default:
 		cr.health = apiv1.HealthStateTypeDegraded
@@ -419,6 +421,7 @@ type checkResult struct {
 	err               error
 	health            apiv1.HealthStateType
 	reason            string
+	incidents         []apiv1.HealthStateIncident
 	enrichedIncidents []dcgmcommon.EnrichedIncident
 }
 
@@ -474,6 +477,7 @@ func (cr *checkResult) HealthStates() apiv1.HealthStates {
 		Reason:    cr.reason,
 		Error:     cr.getError(),
 		Health:    cr.health,
+		Incidents: cr.incidents,
 	}
 
 	// Add enriched DCGM incidents to ExtraInfo if available

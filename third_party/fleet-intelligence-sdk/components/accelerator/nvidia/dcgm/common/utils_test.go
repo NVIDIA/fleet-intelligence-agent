@@ -19,6 +19,8 @@ import (
 	"testing"
 
 	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
+
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 )
 
 func TestFormatEnrichedIncidents(t *testing.T) {
@@ -45,29 +47,29 @@ func TestFormatEnrichedIncidents(t *testing.T) {
 			prefix: "thermal warning",
 			incidents: []EnrichedIncident{
 				{
-					UUID:    "GPU-46a3bbe2-3e87-3dde-b464-a03eba0c21d7",
-					Message: "Temperature above threshold",
-					Code:    dcgm.DCGM_FR_TEMP_VIOLATION,
+					UUID:      "GPU-46a3bbe2-3e87-3dde-b464-a03eba0c21d7",
+					Message:   "Temperature above threshold",
+					ErrorCode: "DCGM_FR_TEMP_VIOLATION",
 				},
 			},
-			want: "thermal warning - GPU GPU-46a3bbe2-3e87-3dde-b464-a03eba0c21d7: Temperature above threshold (code: 42)",
+			want: "thermal warning: 1 incident(s) across 1 device(s) [DCGM_FR_TEMP_VIOLATION]",
 		},
 		{
 			name:   "multiple incidents",
 			prefix: "memory failure",
 			incidents: []EnrichedIncident{
 				{
-					UUID:    "GPU-46a3bbe2-3e87-3dde-b464-a03eba0c21d7",
-					Message: "DBE detected",
-					Code:    dcgm.DCGM_FR_VOLATILE_DBE_DETECTED,
+					UUID:      "GPU-46a3bbe2-3e87-3dde-b464-a03eba0c21d7",
+					Message:   "DBE detected",
+					ErrorCode: "DCGM_FR_VOLATILE_DBE_DETECTED",
 				},
 				{
-					UUID:    "GPU-7b4f2c1a-8d6e-4c5b-9a1f-2e3d4c5a6b7c",
-					Message: "Row remap failure",
-					Code:    dcgm.DCGM_FR_ROW_REMAP_FAILURE,
+					UUID:      "GPU-7b4f2c1a-8d6e-4c5b-9a1f-2e3d4c5a6b7c",
+					Message:   "Row remap failure",
+					ErrorCode: "DCGM_FR_ROW_REMAP_FAILURE",
 				},
 			},
-			want: "memory failure - GPU GPU-46a3bbe2-3e87-3dde-b464-a03eba0c21d7: DBE detected (code: 4); GPU GPU-7b4f2c1a-8d6e-4c5b-9a1f-2e3d4c5a6b7c: Row remap failure (code: 80)",
+			want: "memory failure: 2 incident(s) across 2 device(s) [DCGM_FR_ROW_REMAP_FAILURE, DCGM_FR_VOLATILE_DBE_DETECTED]",
 		},
 	}
 
@@ -78,5 +80,100 @@ func TestFormatEnrichedIncidents(t *testing.T) {
 				t.Errorf("FormatIncidents() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestToHealthStateIncidents(t *testing.T) {
+	got := ToHealthStateIncidents([]EnrichedIncident{
+		{
+			UUID:      "GPU-1234",
+			Message:   "Power violation",
+			ErrorCode: "DCGM_FR_POWER_VIOLATION",
+			Severity:  apiv1.HealthStateTypeUnhealthy,
+		},
+	})
+
+	if len(got) != 1 {
+		t.Fatalf("len(ToHealthStateIncidents()) = %d, want 1", len(got))
+	}
+
+	want := apiv1.HealthStateIncident{
+		DeviceID: "GPU-1234",
+		Message:  "Power violation",
+		Severity: apiv1.HealthStateTypeUnhealthy,
+		Error:    "DCGM_FR_POWER_VIOLATION",
+	}
+	if got[0] != want {
+		t.Fatalf("ToHealthStateIncidents()[0] = %#v, want %#v", got[0], want)
+	}
+}
+
+func TestHealthCheckErrorCodeString(t *testing.T) {
+	if got := healthCheckErrorCodeString(dcgm.DCGM_FR_VOLATILE_DBE_DETECTED); got != "DCGM_FR_VOLATILE_DBE_DETECTED" {
+		t.Fatalf("healthCheckErrorCodeString(known) = %q", got)
+	}
+	if got := healthCheckErrorCodeString(dcgm.DCGM_FR_XID_ERROR); got != "DCGM_FR_XID_ERROR" {
+		t.Fatalf("healthCheckErrorCodeString(late known) = %q", got)
+	}
+	if got := healthCheckErrorCodeString(dcgm.DCGM_FR_ERROR_SENTINEL); got != "DCGM_FR_ERROR_SENTINEL" {
+		t.Fatalf("healthCheckErrorCodeString(sentinel) = %q", got)
+	}
+	if got := healthCheckErrorCodeString(dcgm.HealthCheckErrorCode(9999)); got != "DCGM_FR_UNKNOWN(9999)" {
+		t.Fatalf("healthCheckErrorCodeString(unknown) = %q", got)
+	}
+}
+
+func TestHealthSystemString(t *testing.T) {
+	if got := healthSystemString(dcgm.DCGM_HEALTH_WATCH_MEM); got != "DCGM_HEALTH_WATCH_MEM" {
+		t.Fatalf("healthSystemString(single) = %q", got)
+	}
+	if got := healthSystemString(dcgm.DCGM_HEALTH_WATCH_DRIVER); got != "DCGM_HEALTH_WATCH_DRIVER" {
+		t.Fatalf("healthSystemString(driver) = %q", got)
+	}
+	if got := healthSystemString(dcgm.DCGM_HEALTH_WATCH_NVSWITCH_FATAL); got != "DCGM_HEALTH_WATCH_NVSWITCH_FATAL" {
+		t.Fatalf("healthSystemString(nvswitch fatal) = %q", got)
+	}
+	if got := healthSystemString(dcgm.DCGM_HEALTH_WATCH_ALL); got != "DCGM_HEALTH_WATCH_ALL" {
+		t.Fatalf("healthSystemString(all) = %q", got)
+	}
+	if got := healthSystemString(dcgm.DCGM_HEALTH_WATCH_POWER | dcgm.DCGM_HEALTH_WATCH_THERMAL); got != "DCGM_HEALTH_WATCH_UNKNOWN(0x180)" {
+		t.Fatalf("healthSystemString(mask) = %q", got)
+	}
+	if got := healthSystemString(dcgm.DCGM_HEALTH_WATCH_NVLINK | dcgm.DCGM_HEALTH_WATCH_DRIVER | dcgm.DCGM_HEALTH_WATCH_NVSWITCH_FATAL); got != "DCGM_HEALTH_WATCH_UNKNOWN(0xA02)" {
+		t.Fatalf("healthSystemString(composite mask) = %q", got)
+	}
+}
+
+func TestHealthResultToSeverity(t *testing.T) {
+	if got := healthResultToSeverity(dcgm.DCGM_HEALTH_RESULT_WARN); got != apiv1.HealthStateTypeDegraded {
+		t.Fatalf("healthResultToSeverity(WARN) = %q", got)
+	}
+	if got := healthResultToSeverity(dcgm.DCGM_HEALTH_RESULT_FAIL); got != apiv1.HealthStateTypeUnhealthy {
+		t.Fatalf("healthResultToSeverity(FAIL) = %q", got)
+	}
+}
+
+func TestEnrichSwitchIncidents_UsesSwitchIdentifiers(t *testing.T) {
+	incidents := []dcgm.Incident{
+		{
+			EntityInfo: dcgm.GroupEntityPair{
+				EntityGroupId: dcgm.FE_SWITCH,
+				EntityId:      7,
+			},
+			Error: dcgm.DiagErrorDetail{
+				Message: "switch failure",
+				Code:    dcgm.DCGM_FR_NVSWITCH_FATAL_ERROR,
+			},
+			System: dcgm.DCGM_HEALTH_WATCH_NVSWITCH_FATAL,
+			Health: dcgm.DCGM_HEALTH_RESULT_FAIL,
+		},
+	}
+
+	got := EnrichSwitchIncidents(incidents)
+	if len(got) != 1 {
+		t.Fatalf("len(EnrichSwitchIncidents()) = %d, want 1", len(got))
+	}
+	if got[0].UUID != "nvswitch-7" {
+		t.Fatalf("EnrichSwitchIncidents()[0].UUID = %q, want nvswitch-7", got[0].UUID)
 	}
 }

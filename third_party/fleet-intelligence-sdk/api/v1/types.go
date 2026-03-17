@@ -89,11 +89,26 @@ type HealthState struct {
 	// ExtraInfo represents the extra information of the state.
 	ExtraInfo map[string]string `json:"extra_info,omitempty"`
 
+	// Incidents contains structured per-device faults detected during the check.
+	Incidents []HealthStateIncident `json:"incidents,omitempty"`
+
 	// RawOutput represents the raw output of the health checker.
 	// e.g., If a custom plugin runs a Python script, the raw output
 	// is the stdout/stderr of the script.
 	// The maximum length of the raw output is 4096 bytes.
 	RawOutput string `json:"raw_output,omitempty"`
+}
+
+// HealthStateIncident represents a discrete fault detected during a component check.
+type HealthStateIncident struct {
+	// DeviceID identifies the affected entity, such as GPU UUID or device name.
+	DeviceID string `json:"device_id,omitempty"`
+	// Message is the human-readable description of the fault.
+	Message string `json:"message"`
+	// Severity mirrors HealthState health levels.
+	Severity HealthStateType `json:"severity,omitempty"`
+	// Error is a symbolic error identifier when available.
+	Error string `json:"error,omitempty"`
 }
 
 type HealthStates []HealthState
