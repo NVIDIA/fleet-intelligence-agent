@@ -158,6 +158,7 @@ func TestCheckResultHealthStates_PreservesLegacyIncidentsAndAddsTypedIncidents(t
 	enriched := []dcgmcommon.EnrichedIncident{
 		{
 			UUID:      "GPU-1234",
+			EntityID:  "GPU-0",
 			Message:   "Inforom corruption detected",
 			ErrorCode: "DCGM_FR_CORRUPT_INFOROM",
 			System:    "DCGM_HEALTH_WATCH_INFOROM",
@@ -182,8 +183,8 @@ func TestCheckResultHealthStates_PreservesLegacyIncidentsAndAddsTypedIncidents(t
 	if len(state.Incidents) != 1 {
 		t.Fatalf("len(state.Incidents) = %d, want 1", len(state.Incidents))
 	}
-	if got := state.Incidents[0].DeviceID; got != "GPU-1234" {
-		t.Fatalf("state.Incidents[0].DeviceID = %q", got)
+	if got := state.Incidents[0].EntityID; got != "GPU-0" {
+		t.Fatalf("state.Incidents[0].EntityID = %q", got)
 	}
 
 	raw := state.ExtraInfo["dcgm_incidents"]

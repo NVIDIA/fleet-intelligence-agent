@@ -649,7 +649,7 @@ func TestCollector_CollectComponentData_WithComponents(t *testing.T) {
 				ExtraInfo: map[string]string{"key": "value"},
 				Incidents: []apiv1.HealthStateIncident{
 					{
-						DeviceID: "GPU-1234",
+						EntityID: "GPU-1234",
 						Message:  "Clock throttled",
 						Severity: apiv1.HealthStateTypeDegraded,
 						Error:    "DCGM_FR_CLOCK_THROTTLE_POWER",
@@ -680,7 +680,7 @@ func TestCollector_CollectComponentData_WithComponents(t *testing.T) {
 	incidents, ok := dataMap["incidents"].([]apiv1.HealthStateIncident)
 	require.True(t, ok, "incidents should preserve the typed health incidents slice")
 	require.Len(t, incidents, 1)
-	assert.Equal(t, "GPU-1234", incidents[0].DeviceID)
+	assert.Equal(t, "GPU-1234", incidents[0].EntityID)
 }
 
 func TestCollector_CollectComponentData_NoHealthStates(t *testing.T) {

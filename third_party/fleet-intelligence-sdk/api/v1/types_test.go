@@ -15,7 +15,7 @@ func TestHealthState_JSONIncludesIncidents(t *testing.T) {
 		Health:    HealthStateTypeDegraded,
 		Incidents: []HealthStateIncident{
 			{
-				DeviceID: "GPU-1234",
+				EntityID: "GPU-0",
 				Message:  "Clock throttled",
 				Severity: HealthStateTypeDegraded,
 				Error:    "DCGM_FR_CLOCK_THROTTLE_POWER",
@@ -31,7 +31,7 @@ func TestHealthState_JSONIncludesIncidents(t *testing.T) {
 	got := string(data)
 	for _, want := range []string{
 		`"incidents":[`,
-		`"device_id":"GPU-1234"`,
+		`"entity_id":"GPU-0"`,
 		`"message":"Clock throttled"`,
 		`"severity":"Degraded"`,
 		`"error":"DCGM_FR_CLOCK_THROTTLE_POWER"`,

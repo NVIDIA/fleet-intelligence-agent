@@ -438,7 +438,7 @@ func incidentsToOTLPArrayValue(incidents []apiv1.HealthStateIncident) *commonv1.
 	values := make([]*commonv1.AnyValue, 0, len(incidents))
 	for _, inc := range incidents {
 		kvs := []*commonv1.KeyValue{
-			{Key: "device_id", Value: stringAnyValue(inc.DeviceID)},
+			{Key: "entity_id", Value: stringAnyValue(inc.EntityID)},
 			{Key: "message", Value: stringAnyValue(inc.Message)},
 			{Key: "severity", Value: stringAnyValue(string(inc.Severity))},
 			{Key: "error", Value: stringAnyValue(inc.Error)},

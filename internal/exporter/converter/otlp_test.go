@@ -260,7 +260,7 @@ func TestOTLPConverter_Convert_WithComponentData(t *testing.T) {
 				},
 				"incidents": []apiv1.HealthStateIncident{
 					{
-						DeviceID: "GPU-1234",
+						EntityID: "GPU-1234",
 						Message:  "Clock throttled",
 						Severity: apiv1.HealthStateTypeDegraded,
 						Error:    "DCGM_FR_CLOCK_THROTTLE_POWER",
@@ -296,7 +296,7 @@ func TestOTLPConverter_Convert_WithComponentData(t *testing.T) {
 			require.Len(t, incidents.Values, 1)
 			incident := incidents.Values[0].GetKvlistValue()
 			require.NotNil(t, incident)
-			assert.Equal(t, "GPU-1234", findMapValue(t, incident.Values, "device_id").GetStringValue())
+			assert.Equal(t, "GPU-1234", findMapValue(t, incident.Values, "entity_id").GetStringValue())
 			assert.Equal(t, "Clock throttled", findMapValue(t, incident.Values, "message").GetStringValue())
 			assert.Equal(t, "Degraded", findMapValue(t, incident.Values, "severity").GetStringValue())
 			assert.Equal(t, "DCGM_FR_CLOCK_THROTTLE_POWER", findMapValue(t, incident.Values, "error").GetStringValue())

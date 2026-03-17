@@ -119,6 +119,7 @@ func TestCheckResultHealthStates_UsesNVSwitchIdentifiers(t *testing.T) {
 	enriched := []dcgmcommon.EnrichedIncident{
 		{
 			UUID:      "nvswitch-3",
+			EntityID:  "NvSwitch-3",
 			Message:   "Fatal NVSwitch error",
 			ErrorCode: "DCGM_FR_NVSWITCH_FATAL_ERROR",
 			System:    "DCGM_HEALTH_WATCH_NVSWITCH_FATAL",
@@ -143,8 +144,8 @@ func TestCheckResultHealthStates_UsesNVSwitchIdentifiers(t *testing.T) {
 	if len(state.Incidents) != 1 {
 		t.Fatalf("len(state.Incidents) = %d, want 1", len(state.Incidents))
 	}
-	if got := state.Incidents[0].DeviceID; got != "nvswitch-3" {
-		t.Fatalf("state.Incidents[0].DeviceID = %q", got)
+	if got := state.Incidents[0].EntityID; got != "NvSwitch-3" {
+		t.Fatalf("state.Incidents[0].EntityID = %q", got)
 	}
 
 	raw := state.ExtraInfo["dcgm_incidents"]

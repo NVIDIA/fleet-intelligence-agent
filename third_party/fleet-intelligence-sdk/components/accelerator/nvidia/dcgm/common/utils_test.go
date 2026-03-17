@@ -87,6 +87,7 @@ func TestToHealthStateIncidents(t *testing.T) {
 	got := ToHealthStateIncidents([]EnrichedIncident{
 		{
 			UUID:      "GPU-1234",
+			EntityID:  "GPU-0",
 			Message:   "Power violation",
 			ErrorCode: "DCGM_FR_POWER_VIOLATION",
 			Severity:  apiv1.HealthStateTypeUnhealthy,
@@ -98,7 +99,7 @@ func TestToHealthStateIncidents(t *testing.T) {
 	}
 
 	want := apiv1.HealthStateIncident{
-		DeviceID: "GPU-1234",
+		EntityID: "GPU-0",
 		Message:  "Power violation",
 		Severity: apiv1.HealthStateTypeUnhealthy,
 		Error:    "DCGM_FR_POWER_VIOLATION",

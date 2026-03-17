@@ -101,8 +101,8 @@ type HealthState struct {
 
 // HealthStateIncident represents a discrete fault detected during a component check.
 type HealthStateIncident struct {
-	// DeviceID identifies the affected entity, such as GPU UUID or device name.
-	DeviceID string `json:"device_id,omitempty"`
+	// EntityID identifies the affected entity.
+	EntityID string `json:"entity_id,omitempty"`
 	// Message is the human-readable description of the fault.
 	Message string `json:"message"`
 	// Severity mirrors HealthState health levels.

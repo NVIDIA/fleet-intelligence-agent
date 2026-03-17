@@ -165,6 +165,8 @@ var healthSystemNames = map[dcgm.HealthSystem]string{
 type EnrichedIncident struct {
 	// GPU UUID mapped from entity ID
 	UUID string `json:"uuid"`
+	// entity identifier derived from DCGM entity type and entity ID
+	EntityID string `json:"-"`
 	// error message from the incident
 	Message string `json:"message"`
 	// symbolic DCGM_FR_* error code
@@ -193,6 +195,7 @@ func EnrichIncidents(incidents []dcgm.Incident, deviceMapping map[uint]string) [
 
 		enriched = append(enriched, EnrichedIncident{
 			UUID:      uuid,
+			EntityID:  dcgmEntityID(incident.EntityInfo),
 			Message:   incident.Error.Message,
 			ErrorCode: healthCheckErrorCodeString(incident.Error.Code),
 			System:    healthSystemString(incident.System),
@@ -213,6 +216,7 @@ func EnrichSwitchIncidents(incidents []dcgm.Incident) []EnrichedIncident {
 	for _, incident := range incidents {
 		enriched = append(enriched, EnrichedIncident{
 			UUID:      fmt.Sprintf("nvswitch-%d", incident.EntityInfo.EntityId),
+			EntityID:  dcgmEntityID(incident.EntityInfo),
 			Message:   incident.Error.Message,
 			ErrorCode: healthCheckErrorCodeString(incident.Error.Code),
 			System:    healthSystemString(incident.System),
@@ -225,11 +229,15 @@ func EnrichSwitchIncidents(incidents []dcgm.Incident) []EnrichedIncident {
 
 func (e EnrichedIncident) ToHealthStateIncident() apiv1.HealthStateIncident {
 	return apiv1.HealthStateIncident{
-		DeviceID: e.UUID,
+		EntityID: e.EntityID,
 		Message:  e.Message,
 		Severity: e.Severity,
 		Error:    e.ErrorCode,
 	}
+}
+
+func dcgmEntityID(entity dcgm.GroupEntityPair) string {
+	return fmt.Sprintf("%s-%d", entity.EntityGroupId.String(), entity.EntityId)
 }
 
 func ToHealthStateIncidents(incidents []EnrichedIncident) []apiv1.HealthStateIncident {
