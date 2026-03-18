@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	logsv1 "go.opentelemetry.io/proto/otlp/logs/v1"
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
@@ -341,6 +342,7 @@ func (c *otlpConverter) convertToOTLPLogs(data *collector.HealthData) []*logsv1.
 			reason := componentInfo["reason"]
 			timeVal := componentInfo["time"]
 			extraInfo := componentInfo["extra_info"]
+			incidents := componentInfo["incidents"]
 
 			attributes := []*commonv1.KeyValue{
 				{
@@ -391,6 +393,13 @@ func (c *otlpConverter) convertToOTLPLogs(data *collector.HealthData) []*logsv1.
 				}
 			}
 
+			if typedIncidents, ok := toHealthStateIncidents(incidents); ok && len(typedIncidents) > 0 {
+				attributes = append(attributes, &commonv1.KeyValue{
+					Key:   "incidents",
+					Value: incidentsToOTLPArrayValue(typedIncidents),
+				})
+			}
+
 			logRecord := &logsv1.LogRecord{
 				TimeUnixNano:   uint64(data.Timestamp.UnixNano()),
 				SeverityNumber: logsv1.SeverityNumber_SEVERITY_NUMBER_INFO,
@@ -422,6 +431,46 @@ func extraInfoToAnyValue(extraInfo map[string]string) *commonv1.AnyValue {
 		Value: &commonv1.AnyValue_KvlistValue{
 			KvlistValue: &commonv1.KeyValueList{Values: values},
 		},
+	}
+}
+
+func incidentsToOTLPArrayValue(incidents []apiv1.HealthStateIncident) *commonv1.AnyValue {
+	values := make([]*commonv1.AnyValue, 0, len(incidents))
+	for _, inc := range incidents {
+		kvs := []*commonv1.KeyValue{
+			{Key: "entity_id", Value: stringAnyValue(inc.EntityID)},
+			{Key: "message", Value: stringAnyValue(inc.Message)},
+			{Key: "severity", Value: stringAnyValue(string(inc.Severity))},
+			{Key: "error", Value: stringAnyValue(inc.Error)},
+		}
+		values = append(values, &commonv1.AnyValue{
+			Value: &commonv1.AnyValue_KvlistValue{
+				KvlistValue: &commonv1.KeyValueList{Values: kvs},
+			},
+		})
+	}
+
+	return &commonv1.AnyValue{
+		Value: &commonv1.AnyValue_ArrayValue{
+			ArrayValue: &commonv1.ArrayValue{Values: values},
+		},
+	}
+}
+
+func toHealthStateIncidents(v interface{}) ([]apiv1.HealthStateIncident, bool) {
+	switch typed := v.(type) {
+	case []apiv1.HealthStateIncident:
+		return typed, true
+	case apiv1.HealthStateIncident:
+		return []apiv1.HealthStateIncident{typed}, true
+	default:
+		return nil, false
+	}
+}
+
+func stringAnyValue(v string) *commonv1.AnyValue {
+	return &commonv1.AnyValue{
+		Value: &commonv1.AnyValue_StringValue{StringValue: v},
 	}
 }
 

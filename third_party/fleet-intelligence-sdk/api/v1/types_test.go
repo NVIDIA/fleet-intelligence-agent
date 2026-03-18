@@ -5,8 +5,42 @@ package v1
 
 import (
 	"bytes"
+	"encoding/json"
 	"testing"
 )
+
+func TestHealthState_JSONIncludesIncidents(t *testing.T) {
+	state := HealthState{
+		Component: "accelerator-nvidia-dcgm-power",
+		Health:    HealthStateTypeDegraded,
+		Incidents: []HealthStateIncident{
+			{
+				EntityID: "GPU-0",
+				Message:  "Clock throttled",
+				Severity: HealthStateTypeDegraded,
+				Error:    "DCGM_FR_CLOCK_THROTTLE_POWER",
+			},
+		},
+	}
+
+	data, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	got := string(data)
+	for _, want := range []string{
+		`"incidents":[`,
+		`"entity_id":"GPU-0"`,
+		`"message":"Clock throttled"`,
+		`"severity":"Degraded"`,
+		`"error":"DCGM_FR_CLOCK_THROTTLE_POWER"`,
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Fatalf("Marshal() = %s, want substring %s", got, want)
+		}
+	}
+}
 
 func TestEventTypeFromString(t *testing.T) {
 	tests := []struct {
@@ -262,7 +296,7 @@ func TestMachineGPUInfo_RenderTable(t *testing.T) {
 					},
 				},
 			},
-			wantContains: []string{"UUID", "GPU INDEX", "SN", "MINOR ID", "GPU-abc123", "SN12345", "0"},		},
+			wantContains: []string{"UUID", "GPU INDEX", "SN", "MINOR ID", "GPU-abc123", "SN12345", "0"}},
 		{
 			name: "Multiple GPUs",
 			gpuInfo: MachineGPUInfo{
@@ -272,16 +306,16 @@ func TestMachineGPUInfo_RenderTable(t *testing.T) {
 				Memory:       "40GB",
 				GPUs: []MachineGPUInstance{
 					{
-						UUID:    "GPU-abc123",
+						UUID:     "GPU-abc123",
 						GPUIndex: "0",
-						SN:      "SN12345",
-						MinorID: "0",
+						SN:       "SN12345",
+						MinorID:  "0",
 					},
 					{
-						UUID:    "GPU-def456",
+						UUID:     "GPU-def456",
 						GPUIndex: "1",
-						SN:      "SN67890",
-						MinorID: "1",
+						SN:       "SN67890",
+						MinorID:  "1",
 					},
 				},
 			},

@@ -17,11 +17,13 @@ package power
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
+	dcgmcommon "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/dcgm/common"
 	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics/scraper"
 	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
@@ -169,5 +171,58 @@ func TestCheck(t *testing.T) {
 		} else {
 			t.Logf("Found %d instance(s) of metric %s", count, metricName)
 		}
+	}
+}
+
+func TestCheckResultHealthStates_PreservesLegacyIncidentsAndAddsTypedIncidents(t *testing.T) {
+	enriched := []dcgmcommon.EnrichedIncident{
+		{
+			UUID:      "GPU-1234",
+			EntityID:  "GPU-0",
+			Message:   "Clock throttled",
+			ErrorCode: "DCGM_FR_CLOCK_THROTTLE_POWER",
+			System:    "DCGM_HEALTH_WATCH_POWER",
+			Severity:  apiv1.HealthStateTypeDegraded,
+		},
+	}
+
+	cr := &checkResult{
+		ts:                time.Now().UTC(),
+		health:            apiv1.HealthStateTypeDegraded,
+		reason:            "power health warning: 1 incident(s) across 1 device(s)",
+		incidents:         dcgmcommon.ToHealthStateIncidents(enriched),
+		enrichedIncidents: enriched,
+	}
+
+	states := cr.HealthStates()
+	if len(states) != 1 {
+		t.Fatalf("len(HealthStates()) = %d, want 1", len(states))
+	}
+
+	state := states[0]
+	if len(state.Incidents) != 1 {
+		t.Fatalf("len(state.Incidents) = %d, want 1", len(state.Incidents))
+	}
+	if got := state.Incidents[0].EntityID; got != "GPU-0" {
+		t.Fatalf("state.Incidents[0].EntityID = %q", got)
+	}
+
+	raw := state.ExtraInfo["dcgm_incidents"]
+	if raw == "" {
+		t.Fatal("state.ExtraInfo[dcgm_incidents] is empty")
+	}
+
+	var legacy []map[string]any
+	if err := json.Unmarshal([]byte(raw), &legacy); err != nil {
+		t.Fatalf("json.Unmarshal(dcgm_incidents) error = %v", err)
+	}
+	if len(legacy) != 1 {
+		t.Fatalf("len(legacy incidents) = %d, want 1", len(legacy))
+	}
+	if got := legacy[0]["uuid"]; got != "GPU-1234" {
+		t.Fatalf("legacy uuid = %v", got)
+	}
+	if got := legacy[0]["code"]; got != "DCGM_FR_CLOCK_THROTTLE_POWER" {
+		t.Fatalf("legacy code = %v", got)
 	}
 }

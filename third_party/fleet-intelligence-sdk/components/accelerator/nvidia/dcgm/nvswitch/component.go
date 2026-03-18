@@ -191,13 +191,6 @@ func (c *component) Check() components.CheckResult {
 		return cr
 	}
 
-	// Build entity ID to UUID mapping from DCGM devices
-	// This provides the mapping from entity ID (0, 1, 2, etc.) to entity UUID
-	deviceMapping := make(map[uint]string)
-	for _, device := range c.dcgmInstance.GetDevices() {
-		deviceMapping[device.ID] = device.UUID
-	}
-
 	// Check if NVSwitch entities exist in the system
 	// Query DCGM directly for NVSwitch entities
 	switchEntities, err := dcgm.GetEntityGroupEntities(dcgm.FE_SWITCH)
@@ -266,11 +259,13 @@ func (c *component) Check() components.CheckResult {
 		cr.reason = fmt.Sprintf("all NVSwitch health checks passed (%d switches found)", len(switchEntities))
 	case dcgm.DCGM_HEALTH_RESULT_WARN:
 		cr.health = apiv1.HealthStateTypeDegraded
-		cr.enrichedIncidents = dcgmcommon.EnrichIncidents(allIncidents, deviceMapping)
+		cr.enrichedIncidents = dcgmcommon.EnrichSwitchIncidents(allIncidents)
+		cr.incidents = dcgmcommon.ToHealthStateIncidents(cr.enrichedIncidents)
 		cr.reason = dcgmcommon.FormatIncidents("NVSwitch health warning", cr.enrichedIncidents)
 	case dcgm.DCGM_HEALTH_RESULT_FAIL:
 		cr.health = apiv1.HealthStateTypeUnhealthy
-		cr.enrichedIncidents = dcgmcommon.EnrichIncidents(allIncidents, deviceMapping)
+		cr.enrichedIncidents = dcgmcommon.EnrichSwitchIncidents(allIncidents)
+		cr.incidents = dcgmcommon.ToHealthStateIncidents(cr.enrichedIncidents)
 		cr.reason = dcgmcommon.FormatIncidents("NVSwitch health failure", cr.enrichedIncidents)
 	default:
 		cr.health = apiv1.HealthStateTypeDegraded
@@ -287,6 +282,7 @@ type checkResult struct {
 	err               error
 	health            apiv1.HealthStateType
 	reason            string
+	incidents         []apiv1.HealthStateIncident
 	enrichedIncidents []dcgmcommon.EnrichedIncident
 }
 
@@ -340,6 +336,7 @@ func (cr *checkResult) HealthStates() apiv1.HealthStates {
 		Reason:    cr.reason,
 		Error:     cr.getError(),
 		Health:    cr.health,
+		Incidents: cr.incidents,
 	}
 
 	// Add enriched DCGM incidents to ExtraInfo if available
