@@ -232,7 +232,7 @@ func (e *healthExporter) exportToHTTP(ctx context.Context, data *collector.Healt
 		return nil
 	}
 
-	newToken, err := e.httpWriter.Send(ctx, data, e.options.config.MetricsEndpoint, e.options.config.LogsEndpoint, e.options.config.RetryMaxAttempts, e.options.config.AuthToken)
+	newToken, err := e.httpWriter.Send(ctx, data, e.options.config.MetricsEndpoint, e.options.config.LogsEndpoint, e.options.config.RetryMaxAttempts, e.options.config.AuthToken, e.options.config.Interval.Duration)
 	if err != nil {
 		return fmt.Errorf("failed to send data: %w", err)
 	}
