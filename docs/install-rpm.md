@@ -25,7 +25,7 @@ References:
 - Fabric Manager: <https://docs.nvidia.com/datacenter/tesla/fabric-manager-user-guide/index.html#installing-fabric-manager>
 - NVAT (`nvattest`/`corelib`): <https://docs.nvidia.com/attestation/nv-attestation-sdk-cpp/latest/overview.html>
 
-Fleet Intelligence Agent package dependencies (`datacenter-gpu-manager-4-proprietary`, `nvattest`, and `corelib`) are available through NVIDIA's CUDA repository. Before installing Fleet Intelligence Agent, add the appropriate NVIDIA CUDA repository for your system.
+Fleet Intelligence Agent package dependencies (`datacenter-gpu-manager-4-proprietary`, `nvattest`, and `corelib`) are available through NVIDIA's CUDA repository. Before installing Fleet Intelligence Agent, add the NVIDIA CUDA repository for your system.
 
 Install `dnf-plugins-core` first if `dnf config-manager` is not available:
 
@@ -36,40 +36,19 @@ sudo dnf install -y dnf-plugins-core
 ### RHEL/Rocky/AlmaLinux Systems
 
 ```bash
-# RHEL/Rocky/AlmaLinux 8 (x86_64)
-sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
-sudo dnf clean all
-
-# RHEL/Rocky/AlmaLinux 9 (x86_64)
-sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo
-sudo dnf clean all
-
-# RHEL/Rocky/AlmaLinux 10 (x86_64)
-sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel10/x86_64/cuda-rhel10.repo
-sudo dnf clean all
-
-# RHEL/Rocky/AlmaLinux 8 (ARM64)
-sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/sbsa/cuda-rhel8.repo
-sudo dnf clean all
-
-# RHEL/Rocky/AlmaLinux 9 (ARM64)
-sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/sbsa/cuda-rhel9.repo
-sudo dnf clean all
-
-# RHEL/Rocky/AlmaLinux 10 (ARM64)
-sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel10/sbsa/cuda-rhel10.repo
+. /etc/os-release
+ARCH=$(uname -m)
+URL_ARCH=$([ "$ARCH" = "aarch64" ] && echo "sbsa" || echo "$ARCH")
+sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel${VERSION_ID%%.*}/${URL_ARCH}/cuda-rhel${VERSION_ID%%.*}.repo
 sudo dnf clean all
 ```
 
 ### Amazon Linux 2023
 
 ```bash
-# Amazon Linux 2023 (x86_64)
-sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/amzn2023/x86_64/cuda-amzn2023.repo
-sudo dnf clean all
-
-# Amazon Linux 2023 (ARM64)
-sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/amzn2023/sbsa/cuda-amzn2023.repo
+ARCH=$(uname -m)
+URL_ARCH=$([ "$ARCH" = "aarch64" ] && echo "sbsa" || echo "$ARCH")
+sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/amzn2023/${URL_ARCH}/cuda-amzn2023.repo
 sudo dnf clean all
 ```
 
@@ -77,15 +56,16 @@ After adding the CUDA repository, package dependencies (`datacenter-gpu-manager-
 
 ## Install package
 
-Download the package from [Latest stable release](https://github.com/NVIDIA/fleet-intelligence-agent/releases/latest), then install:
-
 ```bash
-# RHEL/Rocky/AlmaLinux/Amazon Linux (x86_64)
-sudo dnf install ./fleetint-VERSION-1.x86_64.rpm
+VERSION=$(curl -fsSL https://api.github.com/repos/NVIDIA/fleet-intelligence-agent/releases/latest \
+  | grep '"tag_name"' | cut -d '"' -f 4 | tr -d 'v')
+ARCH=$(uname -m)
 
-# RHEL/Rocky/AlmaLinux/Amazon Linux (ARM64)
-sudo dnf install ./fleetint-VERSION-1.aarch64.rpm
+curl -fLO https://github.com/NVIDIA/fleet-intelligence-agent/releases/download/v${VERSION}/fleetint-${VERSION}-1.${ARCH}.rpm
+sudo dnf install ./fleetint-${VERSION}-1.${ARCH}.rpm
 ```
+
+To install a specific version, set `VERSION` explicitly instead (e.g., `VERSION=0.2.0`).
 
 Verify:
 
@@ -96,14 +76,14 @@ systemctl status fleetintd
 
 ## Update
 
-Install the newer package version:
+Set `VERSION` to the target version and reinstall:
 
 ```bash
-# RHEL/Rocky/AlmaLinux/Amazon Linux (x86_64)
-sudo dnf install ./fleetint-VERSION-1.x86_64.rpm
+VERSION=<new-version>
+ARCH=$(uname -m)
 
-# RHEL/Rocky/AlmaLinux/Amazon Linux (ARM64)
-sudo dnf install ./fleetint-VERSION-1.aarch64.rpm
+curl -fLO https://github.com/NVIDIA/fleet-intelligence-agent/releases/download/v${VERSION}/fleetint-${VERSION}-1.${ARCH}.rpm
+sudo dnf install ./fleetint-${VERSION}-1.${ARCH}.rpm
 ```
 
 The service will automatically restart with the new version.

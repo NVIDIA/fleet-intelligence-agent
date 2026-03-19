@@ -24,26 +24,14 @@ References:
 - Fabric Manager: <https://docs.nvidia.com/datacenter/tesla/fabric-manager-user-guide/index.html#installing-fabric-manager>
 - NVAT (`nvattest`/`corelib`): <https://docs.nvidia.com/attestation/nv-attestation-sdk-cpp/latest/overview.html>
 
-Fleet Intelligence Agent package dependencies (`datacenter-gpu-manager-4-proprietary`, `nvattest`, and `corelib`) are available through NVIDIA's CUDA repository. Before installing Fleet Intelligence Agent, add the appropriate NVIDIA CUDA repository for your system:
+Fleet Intelligence Agent package dependencies (`datacenter-gpu-manager-4-proprietary`, `nvattest`, and `corelib`) are available through NVIDIA's CUDA repository. Before installing Fleet Intelligence Agent, add the NVIDIA CUDA repository for your system:
 
 ```bash
-# Ubuntu 22.04 (x86_64)
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
-sudo dpkg -i cuda-keyring_1.1-1_all.deb
-sudo apt-get update
-
-# Ubuntu 24.04 (x86_64)
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
-sudo dpkg -i cuda-keyring_1.1-1_all.deb
-sudo apt-get update
-
-# Ubuntu 22.04 (ARM64)
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/sbsa/cuda-keyring_1.1-1_all.deb
-sudo dpkg -i cuda-keyring_1.1-1_all.deb
-sudo apt-get update
-
-# Ubuntu 24.04 (ARM64)
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/cuda-keyring_1.1-1_all.deb
+. /etc/os-release
+DISTRO="${ID}${VERSION_ID//./}"
+ARCH=$(dpkg --print-architecture)
+URL_ARCH=$([ "$ARCH" = "arm64" ] && echo "sbsa" || echo "$ARCH")
+curl -fLO https://developer.download.nvidia.com/compute/cuda/repos/${DISTRO}/${URL_ARCH}/cuda-keyring_1.1-1_all.deb
 sudo dpkg -i cuda-keyring_1.1-1_all.deb
 sudo apt-get update
 ```
@@ -52,15 +40,16 @@ After adding the CUDA repository, package dependencies (`datacenter-gpu-manager-
 
 ## Install package
 
-Download the package from [Latest stable release](https://github.com/NVIDIA/fleet-intelligence-agent/releases/latest), then install:
-
 ```bash
-# Ubuntu (x86_64)
-sudo apt install ./fleetint_VERSION_amd64.deb
+VERSION=$(curl -fsSL https://api.github.com/repos/NVIDIA/fleet-intelligence-agent/releases/latest \
+  | grep '"tag_name"' | cut -d '"' -f 4 | tr -d 'v')
+ARCH=$(dpkg --print-architecture)
 
-# Ubuntu (ARM64)
-sudo apt install ./fleetint_VERSION_arm64.deb
+curl -fLO https://github.com/NVIDIA/fleet-intelligence-agent/releases/download/v${VERSION}/fleetint_${VERSION}_${ARCH}.deb
+sudo apt install ./fleetint_${VERSION}_${ARCH}.deb
 ```
+
+To install a specific version, set `VERSION` explicitly instead (e.g., `VERSION=0.2.0`).
 
 Verify:
 
@@ -71,14 +60,14 @@ systemctl status fleetintd
 
 ## Update
 
-Install the newer package version:
+Set `VERSION` to the target version and reinstall:
 
 ```bash
-# Ubuntu (x86_64)
-sudo apt install ./fleetint_VERSION_amd64.deb
+VERSION=<new-version>
+ARCH=$(dpkg --print-architecture)
 
-# Ubuntu (ARM64)
-sudo apt install ./fleetint_VERSION_arm64.deb
+curl -fLO https://github.com/NVIDIA/fleet-intelligence-agent/releases/download/v${VERSION}/fleetint_${VERSION}_${ARCH}.deb
+sudo apt install ./fleetint_${VERSION}_${ARCH}.deb
 ```
 
 The service will automatically restart with the new version.
