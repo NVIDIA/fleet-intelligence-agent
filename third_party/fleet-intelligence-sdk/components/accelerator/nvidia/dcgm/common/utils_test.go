@@ -16,11 +16,14 @@
 package common
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 )
 
 func TestFormatEnrichedIncidents(t *testing.T) {
@@ -151,6 +154,122 @@ func TestHealthResultToSeverity(t *testing.T) {
 	}
 	if got := healthResultToSeverity(dcgm.DCGM_HEALTH_RESULT_FAIL); got != apiv1.HealthStateTypeUnhealthy {
 		t.Fatalf("healthResultToSeverity(FAIL) = %q", got)
+	}
+}
+
+// fakeEventBucket is a minimal in-memory eventstore.Bucket for testing.
+type fakeEventBucket struct {
+	inserted []eventstore.Event
+}
+
+func (f *fakeEventBucket) Name() string { return "fake" }
+func (f *fakeEventBucket) Insert(_ context.Context, ev eventstore.Event) error {
+	f.inserted = append(f.inserted, ev)
+	return nil
+}
+func (f *fakeEventBucket) Find(_ context.Context, _ eventstore.Event) (*eventstore.Event, error) {
+	return nil, nil
+}
+func (f *fakeEventBucket) Get(_ context.Context, _ time.Time) (eventstore.Events, error) {
+	return nil, nil
+}
+func (f *fakeEventBucket) Latest(_ context.Context) (*eventstore.Event, error) { return nil, nil }
+func (f *fakeEventBucket) Purge(_ context.Context, _ int64) (int, error)       { return 0, nil }
+func (f *fakeEventBucket) Close()                                               {}
+
+func TestEmitNewIncidentEvents(t *testing.T) {
+	now := time.Now().UTC()
+	ctx := context.Background()
+
+	gpu0Thermal := EnrichedIncident{
+		UUID:      "GPU-0000",
+		ErrorCode: "DCGM_FR_TEMP_VIOLATION",
+		System:    "DCGM_HEALTH_WATCH_THERMAL",
+		Message:   "temp too high",
+		Severity:  apiv1.HealthStateTypeDegraded,
+	}
+	gpu1Mem := EnrichedIncident{
+		UUID:      "GPU-0001",
+		ErrorCode: "DCGM_FR_VOLATILE_DBE_DETECTED",
+		System:    "DCGM_HEALTH_WATCH_MEM",
+		Message:   "memory error",
+		Severity:  apiv1.HealthStateTypeUnhealthy,
+	}
+
+	tests := []struct {
+		name          string
+		prev          []EnrichedIncident
+		curr          []EnrichedIncident
+		wantCount     int
+		wantEventType string // of first event, if any
+	}{
+		{
+			name:      "no incidents",
+			prev:      nil,
+			curr:      nil,
+			wantCount: 0,
+		},
+		{
+			name:      "same incident in prev and curr — no new event",
+			prev:      []EnrichedIncident{gpu0Thermal},
+			curr:      []EnrichedIncident{gpu0Thermal},
+			wantCount: 0,
+		},
+		{
+			name:          "new incident not in prev — event emitted",
+			prev:          nil,
+			curr:          []EnrichedIncident{gpu0Thermal},
+			wantCount:     1,
+			wantEventType: string(apiv1.EventTypeWarning),
+		},
+		{
+			name:          "unhealthy severity maps to critical",
+			prev:          nil,
+			curr:          []EnrichedIncident{gpu1Mem},
+			wantCount:     1,
+			wantEventType: string(apiv1.EventTypeCritical),
+		},
+		{
+			name:      "multiple new incidents all emitted",
+			prev:      nil,
+			curr:      []EnrichedIncident{gpu0Thermal, gpu1Mem},
+			wantCount: 2,
+		},
+		{
+			name:      "one existing one new — only new emitted",
+			prev:      []EnrichedIncident{gpu0Thermal},
+			curr:      []EnrichedIncident{gpu0Thermal, gpu1Mem},
+			wantCount: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bucket := &fakeEventBucket{}
+			EmitNewIncidentEvents(ctx, now, "test-component", bucket, tt.prev, tt.curr)
+
+			if len(bucket.inserted) != tt.wantCount {
+				t.Fatalf("inserted %d events, want %d", len(bucket.inserted), tt.wantCount)
+			}
+			if tt.wantCount > 0 {
+				ev := bucket.inserted[0]
+				if ev.Name != EventNameDCGMHealthIncident {
+					t.Errorf("event Name = %q, want %q", ev.Name, EventNameDCGMHealthIncident)
+				}
+				if tt.wantEventType != "" && ev.Type != tt.wantEventType {
+					t.Errorf("event Type = %q, want %q", ev.Type, tt.wantEventType)
+				}
+				if ev.ExtraInfo[EventKeyUUID] == "" {
+					t.Errorf("event ExtraInfo[uuid] is empty")
+				}
+				if ev.ExtraInfo[EventKeyErrorCode] == "" {
+					t.Errorf("event ExtraInfo[error_code] is empty")
+				}
+				if ev.ExtraInfo[EventKeySystem] == "" {
+					t.Errorf("event ExtraInfo[system] is empty")
+				}
+			}
+		})
 	}
 }
 

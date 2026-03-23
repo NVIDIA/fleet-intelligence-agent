@@ -226,3 +226,14 @@ func TestCheckResultHealthStates_PreservesLegacyIncidentsAndAddsTypedIncidents(t
 		t.Fatalf("legacy code = %v", got)
 	}
 }
+
+func TestEvents_NilBucket(t *testing.T) {
+	c := &component{}
+	events, err := c.Events(context.Background(), time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("Events() returned unexpected error: %v", err)
+	}
+	if events != nil {
+		t.Fatalf("Events() returned %v, want nil", events)
+	}
+}

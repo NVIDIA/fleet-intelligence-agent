@@ -30,6 +30,7 @@ import (
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
 	dcgmcommon "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/dcgm/common"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
 )
@@ -50,6 +51,8 @@ type component struct {
 	dcgmInstance        nvidiadcgm.Instance
 	dcgmHealthCache     *nvidiadcgm.HealthCache
 	dcgmFieldValueCache *nvidiadcgm.FieldValueCache
+
+	eventBucket eventstore.Bucket
 
 	lastMu          sync.RWMutex
 	lastCheckResult *checkResult
@@ -83,6 +86,15 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 			log.Logger.Warnw("failed to register inforom fields", "error", err)
 		} else {
 			log.Logger.Infow("registered inforom fields for centralized watching", "numFields", len(inforomFields))
+		}
+	}
+
+	if gpudInstance.EventStore != nil {
+		var err error
+		c.eventBucket, err = gpudInstance.EventStore.Bucket(Name)
+		if err != nil {
+			ccancel()
+			return nil, err
 		}
 	}
 
@@ -136,17 +148,38 @@ func (c *component) LastHealthStates() apiv1.HealthStates {
 }
 
 func (c *component) Events(ctx context.Context, since time.Time) (apiv1.Events, error) {
-	return nil, nil
+	if c.eventBucket == nil {
+		return nil, nil
+	}
+	events, err := c.eventBucket.Get(ctx, since)
+	if err != nil {
+		return nil, err
+	}
+	var ret apiv1.Events
+	for _, ev := range events {
+		ret = append(ret, ev.ToEvent())
+	}
+	return ret, nil
 }
 
 func (c *component) Close() error {
 	log.Logger.Debugw("closing component")
 	c.cancel()
+	if c.eventBucket != nil {
+		c.eventBucket.Close()
+	}
 	return nil
 }
 
 func (c *component) Check() components.CheckResult {
 	log.Logger.Infow("checking nvidia gpu InfoROM metrics via DCGM")
+
+	c.lastMu.RLock()
+	var prevIncidents []dcgmcommon.EnrichedIncident
+	if c.lastCheckResult != nil {
+		prevIncidents = c.lastCheckResult.enrichedIncidents
+	}
+	c.lastMu.RUnlock()
 
 	cr := &checkResult{ts: time.Now().UTC()}
 	defer func() {
@@ -230,6 +263,8 @@ func (c *component) Check() components.CheckResult {
 		cr.health = apiv1.HealthStateTypeDegraded
 		cr.reason = "unknown health status"
 	}
+
+	dcgmcommon.EmitNewIncidentEvents(c.ctx, cr.ts, Name, c.eventBucket, prevIncidents, cr.enrichedIncidents)
 
 	return cr
 }

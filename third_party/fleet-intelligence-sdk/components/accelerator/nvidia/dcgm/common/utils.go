@@ -17,12 +17,75 @@
 package common
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 )
+
+// Event name and extra-info key constants for DCGM health incident events.
+const (
+	EventNameDCGMHealthIncident = "dcgm_health_incident"
+	EventKeyUUID                = "uuid"
+	EventKeyErrorCode           = "error_code"
+	EventKeySystem              = "system"
+)
+
+// EmitNewIncidentEvents inserts an event into eventBucket for each incident in curr
+// that is not already present in prev (onset detection). It uses UUID+ErrorCode+System
+// as the deduplication key to identify the same fault across check cycles.
+// Errors are logged as warnings and do not propagate to the caller.
+func EmitNewIncidentEvents(
+	ctx context.Context,
+	now time.Time,
+	componentName string,
+	eventBucket eventstore.Bucket,
+	prev []EnrichedIncident,
+	curr []EnrichedIncident,
+) {
+	if eventBucket == nil || len(curr) == 0 {
+		return
+	}
+
+	// Build dedup set from previous incidents.
+	prevKeys := make(map[string]struct{}, len(prev))
+	for _, inc := range prev {
+		prevKeys[inc.UUID+"/"+inc.ErrorCode+"/"+inc.System] = struct{}{}
+	}
+
+	for _, inc := range curr {
+		key := inc.UUID + "/" + inc.ErrorCode + "/" + inc.System
+		if _, seen := prevKeys[key]; seen {
+			continue
+		}
+
+		eventType := apiv1.EventTypeWarning
+		if inc.Severity == apiv1.HealthStateTypeUnhealthy {
+			eventType = apiv1.EventTypeCritical
+		}
+
+		ev := eventstore.Event{
+			Component: componentName,
+			Time:      now,
+			Name:      EventNameDCGMHealthIncident,
+			Type:      string(eventType),
+			Message:   inc.Message,
+			ExtraInfo: map[string]string{
+				EventKeyUUID:      inc.UUID,
+				EventKeyErrorCode: inc.ErrorCode,
+				EventKeySystem:    inc.System,
+			},
+		}
+		if err := eventBucket.Insert(ctx, ev); err != nil {
+			log.Logger.Warnw("failed to insert DCGM incident event", "component", componentName, "error", err)
+		}
+	}
+}
 
 var healthCheckErrorCodeNames = map[dcgm.HealthCheckErrorCode]string{
 	dcgm.DCGM_FR_OK:                              "DCGM_FR_OK",
