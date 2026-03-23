@@ -235,20 +235,20 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 	log.Logger.Infow("DCGM field value cache created", "healthCheckInterval", healthCheckInterval)
 
 	s.gpudInstance = &components.GPUdInstance{
-		RootCtx:                  ctx,
-		MachineID:                machineID,
-		NVMLInstance:             nvmlInstance,
-		DCGMInstance:             dcgmInstance,
+		RootCtx:              ctx,
+		MachineID:            machineID,
+		NVMLInstance:         nvmlInstance,
+		DCGMInstance:         dcgmInstance,
 		DCGMHealthCache:      dcgmHealthCache,
 		DCGMFieldValueCache:  dcgmFieldValueCache,
 		NVIDIAToolOverwrites: config.NvidiaToolOverwrites,
-		DBRW:                     dbRW,
-		DBRO:                     dbRO,
-		EventStore:               eventStore,
-		RebootEventStore:         rebootEventStore,
-		MountPoints:              []string{"/"},
-		MountTargets:             []string{},
-		HealthCheckInterval: healthCheckInterval,
+		DBRW:                 dbRW,
+		DBRO:                 dbRO,
+		EventStore:           eventStore,
+		RebootEventStore:     rebootEventStore,
+		MountPoints:          []string{"/"},
+		MountTargets:         []string{},
+		HealthCheckInterval:  healthCheckInterval,
 	}
 
 	// Register only enabled components for health monitoring

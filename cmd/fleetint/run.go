@@ -280,8 +280,6 @@ func runCommand(cliContext *cli.Context) error {
 		cfg.Components = strings.Split(components, ",")
 	}
 
-
-
 	// Only apply CLI flag if true, to avoid overwriting env var setting
 	// (since we can't distinguish between explicit --enable-fault-injection=false and default false)
 	if enableFaultInjection {
