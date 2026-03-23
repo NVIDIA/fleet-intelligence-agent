@@ -83,6 +83,7 @@ func EmitNewIncidentEvents(
 		if err := eventBucket.Insert(ctx, ev); err != nil {
 			log.Logger.Warnw("failed to insert DCGM incident event", "component", componentName, "error", err)
 		}
+		prevKeys[key] = struct{}{} // suppress in-curr duplicates
 	}
 }
 
