@@ -29,19 +29,13 @@ import (
 
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
-	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
 )
 
 const Name = "accelerator-nvidia-dcgm-xid"
 
-const (
-	defaultHealthCheckInterval = time.Minute
-
-	// Legacy event name for XID errors (kept for backward compatibility)
-	EventNameXIDError = "xid_error"
-)
+const defaultHealthCheckInterval = time.Minute
 
 var _ components.Component = &component{}
 
@@ -52,7 +46,6 @@ type component struct {
 	healthCheckInterval time.Duration
 	dcgmInstance        nvidiadcgm.Instance
 	dcgmFieldValueCache *nvidiadcgm.FieldValueCache
-	eventBucket         eventstore.Bucket
 
 	// XID-specific field group and watching
 	fieldGroupID    dcgm.FieldHandle
@@ -171,39 +164,7 @@ func (c *component) LastHealthStates() apiv1.HealthStates {
 }
 
 func (c *component) Events(ctx context.Context, since time.Time) (apiv1.Events, error) {
-	if c.eventBucket == nil {
-		return nil, nil
-	}
-
-	events, err := c.eventBucket.Get(ctx, since)
-	if err != nil {
-		return nil, err
-	}
-
-	// Enrich events with type and message
-	var ret apiv1.Events
-	for _, event := range events {
-		enriched := c.enrichXIDEvent(event)
-		ret = append(ret, enriched.ToEvent())
-	}
-
-	return ret, nil
-}
-
-// enrichXIDEvent adds type and message to XID events
-func (c *component) enrichXIDEvent(event eventstore.Event) eventstore.Event {
-	ret := event
-
-	if event.Name == EventNameXIDError && event.ExtraInfo != nil {
-		xidCode := event.ExtraInfo["xid_code"]
-
-		// All XID errors are considered critical as they indicate GPU hardware/driver issues
-		ret.Type = string(apiv1.EventTypeCritical)
-		ret.Message = fmt.Sprintf("XID error %s detected at %s",
-			xidCode, event.Time.Format(time.RFC3339))
-	}
-
-	return ret
+	return nil, nil
 }
 
 func (c *component) Close() error {
@@ -374,9 +335,9 @@ func (c *component) Check() components.CheckResult {
 		gpuIndex := fmt.Sprintf("%d", uuidToDeviceID[uuid])
 		for xidNum, count := range xidCounts {
 			metricDCGMXIDErrors.With(prometheus.Labels{
-				"uuid":      uuid,
-				"gpu": gpuIndex,
-				"xid":       fmt.Sprintf("%d", xidNum),
+				"uuid": uuid,
+				"gpu":  gpuIndex,
+				"xid":  fmt.Sprintf("%d", xidNum),
 			}).Set(float64(count))
 		}
 	}
@@ -450,4 +411,3 @@ func (cr *checkResult) HealthStates() apiv1.HealthStates {
 		Health:    cr.health,
 	}}
 }
-
