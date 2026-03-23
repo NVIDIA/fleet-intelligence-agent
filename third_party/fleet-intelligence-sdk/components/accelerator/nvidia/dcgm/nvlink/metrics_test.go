@@ -16,9 +16,11 @@
 package nvlink
 
 import (
+	"strings"
 	"testing"
 
 	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestNVLinkFieldsIncludeExpectedCounters(t *testing.T) {
@@ -44,8 +46,8 @@ func TestNVLinkFieldsIncludeExpectedCounters(t *testing.T) {
 		dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_BUFFER_OVERRUN_ERRORS,
 		dcgm.DCGM_FI_DEV_NVLINK_COUNT_LOCAL_LINK_INTEGRITY_ERRORS,
 		dcgm.DCGM_FI_DEV_NVLINK_COUNT_EFFECTIVE_ERRORS,
-		dcgm.DCGM_FI_DEV_NVLINK_COUNT_EFFECTIVE_BER,
-		dcgm.DCGM_FI_DEV_NVLINK_COUNT_SYMBOL_BER,
+		dcgm.DCGM_FI_DEV_NVLINK_COUNT_EFFECTIVE_BER_FLOAT,
+		dcgm.DCGM_FI_DEV_NVLINK_COUNT_SYMBOL_BER_FLOAT,
 		dcgm.DCGM_FI_DEV_NVLINK_COUNT_TX_DISCARDS,
 	}
 
@@ -53,5 +55,38 @@ func TestNVLinkFieldsIncludeExpectedCounters(t *testing.T) {
 		if _, ok := fieldSet[field]; !ok {
 			t.Errorf("missing expected nvlink field: %d", field)
 		}
+	}
+
+	testCases := []struct {
+		name      string
+		collector interface{ Describe(chan<- *prometheus.Desc) }
+		wantName  string
+	}{
+		{
+			name:      "effective ber",
+			collector: metricDCGMFIDevNvlinkCountEffectiveBERFloat,
+			wantName:  `fqName: "dcgm_fi_dev_nvlink_count_effective_ber_float"`,
+		},
+		{
+			name:      "symbol ber",
+			collector: metricDCGMFIDevNvlinkCountSymbolBERFloat,
+			wantName:  `fqName: "dcgm_fi_dev_nvlink_count_symbol_ber_float"`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			descCh := make(chan *prometheus.Desc, 1)
+			tc.collector.Describe(descCh)
+			close(descCh)
+
+			for desc := range descCh {
+				if strings.Contains(desc.String(), tc.wantName) {
+					return
+				}
+			}
+
+			t.Fatalf("collector did not describe metric name %q", tc.wantName)
+		})
 	}
 }
