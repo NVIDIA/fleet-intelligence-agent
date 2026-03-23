@@ -39,6 +39,8 @@ const Name = "accelerator-nvidia-dcgm-thermal"
 
 const (
 	defaultHealthCheckInterval = time.Minute
+
+	EventNameIncident = "dcgm_thermal_incident"
 )
 
 var _ components.Component = &component{}
@@ -305,7 +307,7 @@ func (c *component) Check() components.CheckResult {
 		cr.reason = "unknown health status"
 	}
 
-	dcgmcommon.EmitNewIncidentEvents(c.ctx, cr.ts, Name, c.eventBucket, prevIncidents, cr.enrichedIncidents)
+	dcgmcommon.EmitNewIncidentEvents(c.ctx, cr.ts, Name, EventNameIncident, c.eventBucket, prevIncidents, cr.enrichedIncidents)
 
 	return cr
 }

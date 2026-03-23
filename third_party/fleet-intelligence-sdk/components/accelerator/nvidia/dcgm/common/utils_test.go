@@ -246,15 +246,15 @@ func TestEmitNewIncidentEvents(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			bucket := &fakeEventBucket{}
-			EmitNewIncidentEvents(ctx, now, "test-component", bucket, tt.prev, tt.curr)
+			EmitNewIncidentEvents(ctx, now, "test-component", "test_incident", bucket, tt.prev, tt.curr)
 
 			if len(bucket.inserted) != tt.wantCount {
 				t.Fatalf("inserted %d events, want %d", len(bucket.inserted), tt.wantCount)
 			}
 			if tt.wantCount > 0 {
 				ev := bucket.inserted[0]
-				if ev.Name != EventNameDCGMHealthIncident {
-					t.Errorf("event Name = %q, want %q", ev.Name, EventNameDCGMHealthIncident)
+				if ev.Name != "test_incident" {
+					t.Errorf("event Name = %q, want %q", ev.Name, "test_incident")
 				}
 				if tt.wantEventType != "" && ev.Type != tt.wantEventType {
 					t.Errorf("event Type = %q, want %q", ev.Type, tt.wantEventType)

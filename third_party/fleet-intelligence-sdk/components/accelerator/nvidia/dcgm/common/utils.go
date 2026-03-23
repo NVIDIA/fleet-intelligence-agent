@@ -28,22 +28,23 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 )
 
-// Event name and extra-info key constants for DCGM health incident events.
+// Extra-info key constants for DCGM health incident events.
 const (
-	EventNameDCGMHealthIncident = "dcgm_health_incident"
-	EventKeyUUID                = "uuid"
-	EventKeyErrorCode           = "error_code"
-	EventKeySystem              = "system"
+	EventKeyUUID      = "uuid"
+	EventKeyErrorCode = "error_code"
+	EventKeySystem    = "system"
 )
 
 // EmitNewIncidentEvents inserts an event into eventBucket for each incident in curr
 // that is not already present in prev (onset detection). It uses UUID+ErrorCode+System
 // as the deduplication key to identify the same fault across check cycles.
+// eventName should be a component-specific constant (e.g. "dcgm_thermal_incident").
 // Errors are logged as warnings and do not propagate to the caller.
 func EmitNewIncidentEvents(
 	ctx context.Context,
 	now time.Time,
 	componentName string,
+	eventName string,
 	eventBucket eventstore.Bucket,
 	prev []EnrichedIncident,
 	curr []EnrichedIncident,
@@ -72,7 +73,7 @@ func EmitNewIncidentEvents(
 		ev := eventstore.Event{
 			Component: componentName,
 			Time:      now,
-			Name:      EventNameDCGMHealthIncident,
+			Name:      eventName,
 			Type:      string(eventType),
 			Message:   inc.Message,
 			ExtraInfo: map[string]string{

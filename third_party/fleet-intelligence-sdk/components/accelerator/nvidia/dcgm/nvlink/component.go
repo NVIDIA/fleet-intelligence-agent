@@ -37,6 +37,8 @@ import (
 
 const Name = "accelerator-nvidia-dcgm-nvlink"
 
+const EventNameIncident = "dcgm_nvlink_incident"
+
 const (
 	defaultHealthCheckInterval = time.Minute
 )
@@ -345,7 +347,7 @@ func (c *component) Check() components.CheckResult {
 		}
 	}
 
-	dcgmcommon.EmitNewIncidentEvents(c.ctx, cr.ts, Name, c.eventBucket, prevIncidents, cr.enrichedIncidents)
+	dcgmcommon.EmitNewIncidentEvents(c.ctx, cr.ts, Name, EventNameIncident, c.eventBucket, prevIncidents, cr.enrichedIncidents)
 
 	return cr
 }
