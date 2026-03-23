@@ -159,8 +159,8 @@ func TestCheck(t *testing.T) {
 		"dcgm_fi_dev_nvlink_count_rx_buffer_overrun_errors":        0,
 		"dcgm_fi_dev_nvlink_count_local_link_integrity_errors":     0,
 		"dcgm_fi_dev_nvlink_count_effective_errors":                0,
-		"dcgm_fi_dev_nvlink_count_effective_ber":                   0,
-		"dcgm_fi_dev_nvlink_count_symbol_ber":                      0,
+		"dcgm_fi_dev_nvlink_count_effective_ber_float":             0,
+		"dcgm_fi_dev_nvlink_count_symbol_ber_float":                0,
 		"dcgm_fi_dev_nvlink_count_tx_discards":                     0,
 	}
 

@@ -41,8 +41,8 @@ var nvlinkFields = []dcgm.Short{
 	dcgm.DCGM_FI_DEV_NVLINK_COUNT_RX_BUFFER_OVERRUN_ERRORS,
 	dcgm.DCGM_FI_DEV_NVLINK_COUNT_LOCAL_LINK_INTEGRITY_ERRORS,
 	dcgm.DCGM_FI_DEV_NVLINK_COUNT_EFFECTIVE_ERRORS,
-	dcgm.DCGM_FI_DEV_NVLINK_COUNT_EFFECTIVE_BER,
-	dcgm.DCGM_FI_DEV_NVLINK_COUNT_SYMBOL_BER,
+	dcgm.DCGM_FI_DEV_NVLINK_COUNT_EFFECTIVE_BER_FLOAT,
+	dcgm.DCGM_FI_DEV_NVLINK_COUNT_SYMBOL_BER_FLOAT,
 	dcgm.DCGM_FI_DEV_NVLINK_COUNT_TX_DISCARDS,
 }
 
@@ -151,12 +151,12 @@ var (
 		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_effective_errors", Help: "Sum of the number of errors in each Nvlink packet"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
-	metricDCGMFIDevNvlinkCountEffectiveBER = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_effective_ber", Help: "Effective BER for effective errors - raw value"},
+	metricDCGMFIDevNvlinkCountEffectiveBERFloat = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_effective_ber_float", Help: "Effective BER for effective errors - decoded float value"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
-	metricDCGMFIDevNvlinkCountSymbolBER = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_symbol_ber", Help: "BER for symbol errors - raw value"},
+	metricDCGMFIDevNvlinkCountSymbolBERFloat = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_symbol_ber_float", Help: "BER for symbol errors - decoded float value"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 	metricDCGMFIDevNvlinkCountTxDiscards = prometheus.NewGaugeVec(
@@ -183,8 +183,8 @@ func init() {
 		metricDCGMFIDevNvlinkCountRxBufferOverrunErrors,
 		metricDCGMFIDevNvlinkCountLocalLinkIntegrityErrors,
 		metricDCGMFIDevNvlinkCountEffectiveErrors,
-		metricDCGMFIDevNvlinkCountEffectiveBER,
-		metricDCGMFIDevNvlinkCountSymbolBER,
+		metricDCGMFIDevNvlinkCountEffectiveBERFloat,
+		metricDCGMFIDevNvlinkCountSymbolBERFloat,
 		metricDCGMFIDevNvlinkCountTxDiscards,
 	)
 }
