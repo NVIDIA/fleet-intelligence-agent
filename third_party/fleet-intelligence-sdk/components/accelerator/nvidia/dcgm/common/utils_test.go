@@ -193,6 +193,20 @@ func TestEmitNewIncidentEvents(t *testing.T) {
 		Message:  "memory error",
 		Severity: apiv1.HealthStateTypeUnhealthy,
 	}
+	// Same EntityID as gpu0Thermal but different Severity — distinct key.
+	gpu0ThermalEscalated := apiv1.HealthStateIncident{
+		EntityID: "GPU-0",
+		Error:    "DCGM_FR_TEMP_VIOLATION",
+		Message:  "temp critical",
+		Severity: apiv1.HealthStateTypeUnhealthy,
+	}
+	// Same EntityID as gpu0Thermal but different Error — distinct key.
+	gpu0Power := apiv1.HealthStateIncident{
+		EntityID: "GPU-0",
+		Error:    "DCGM_FR_POWER_VIOLATION",
+		Message:  "power too high",
+		Severity: apiv1.HealthStateTypeDegraded,
+	}
 
 	tests := []struct {
 		name          string
@@ -237,6 +251,35 @@ func TestEmitNewIncidentEvents(t *testing.T) {
 			name:      "one existing one new — only new emitted",
 			prev:      []apiv1.HealthStateIncident{gpu0Thermal},
 			curr:      []apiv1.HealthStateIncident{gpu0Thermal, gpu1Mem},
+			wantCount: 1,
+		},
+		{
+			// Same EntityID + Error, different Severity → different key → new event.
+			name:          "same entityID and error but escalated severity — new event emitted",
+			prev:          []apiv1.HealthStateIncident{gpu0Thermal},
+			curr:          []apiv1.HealthStateIncident{gpu0ThermalEscalated},
+			wantCount:     1,
+			wantEventType: string(apiv1.EventTypeCritical),
+		},
+		{
+			// Same EntityID + Severity, different Error → different key → new event.
+			name:      "same entityID and severity but different error — new event emitted",
+			prev:      []apiv1.HealthStateIncident{gpu0Thermal},
+			curr:      []apiv1.HealthStateIncident{gpu0Power},
+			wantCount: 1,
+		},
+		{
+			// Both old and new incidents for the same GPU co-exist in curr.
+			name:      "same entityID two distinct errors — both emitted when neither in prev",
+			prev:      nil,
+			curr:      []apiv1.HealthStateIncident{gpu0Thermal, gpu0Power},
+			wantCount: 2,
+		},
+		{
+			// gpu0Thermal already seen; gpu0Power is new — only gpu0Power emitted.
+			name:      "same entityID two errors — existing suppressed new emitted",
+			prev:      []apiv1.HealthStateIncident{gpu0Thermal},
+			curr:      []apiv1.HealthStateIncident{gpu0Thermal, gpu0Power},
 			wantCount: 1,
 		},
 	}
