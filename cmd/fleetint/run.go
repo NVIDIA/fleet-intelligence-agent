@@ -208,7 +208,6 @@ func runCommand(cliContext *cli.Context) error {
 
 	gpuCount := cliContext.Int("gpu-count")
 	infinibandExpectedPortStates := cliContext.String("infiniband-expected-port-states")
-	enableDCGMPolicy := cliContext.Bool("enable-dcgm-policy")
 	enableFaultInjection := cliContext.Bool("enable-fault-injection")
 
 	// Fleet Intelligence Exporter configuration
@@ -279,13 +278,6 @@ func runCommand(cliContext *cli.Context) error {
 
 	if components != "" {
 		cfg.Components = strings.Split(components, ",")
-	}
-
-	cfg.EnableDCGMPolicy = enableDCGMPolicy
-	if enableDCGMPolicy {
-		log.Logger.Infow("DCGM policy violation monitoring enabled for all policies (XID, PCIe, DBE, NVLink, Power, Thermal, Page Retirement)")
-	} else {
-		log.Logger.Infow("DCGM policy violation monitoring disabled by default")
 	}
 
 	// Only apply CLI flag if true, to avoid overwriting env var setting

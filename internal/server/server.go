@@ -234,26 +234,21 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 	dcgmFieldValueCache := nvidiadcgm.NewFieldValueCache(ctx, dcgmInstance, healthCheckInterval)
 	log.Logger.Infow("DCGM field value cache created", "healthCheckInterval", healthCheckInterval)
 
-	dcgmPolicyViolationCache := nvidiadcgm.NewPolicyViolationCache(ctx, dcgmInstance)
-	log.Logger.Infow("DCGM policy violation cache created")
-
 	s.gpudInstance = &components.GPUdInstance{
-		RootCtx:                  ctx,
-		MachineID:                machineID,
-		NVMLInstance:             nvmlInstance,
-		DCGMInstance:             dcgmInstance,
-		DCGMHealthCache:          dcgmHealthCache,
-		DCGMFieldValueCache:      dcgmFieldValueCache,
-		DCGMPolicyViolationCache: dcgmPolicyViolationCache,
-		NVIDIAToolOverwrites:     config.NvidiaToolOverwrites,
-		DBRW:                     dbRW,
-		DBRO:                     dbRO,
-		EventStore:               eventStore,
-		RebootEventStore:         rebootEventStore,
-		MountPoints:              []string{"/"},
-		MountTargets:             []string{},
-		HealthCheckInterval:      healthCheckInterval,
-		EnableDCGMPolicy:         config.EnableDCGMPolicy,
+		RootCtx:              ctx,
+		MachineID:            machineID,
+		NVMLInstance:         nvmlInstance,
+		DCGMInstance:         dcgmInstance,
+		DCGMHealthCache:      dcgmHealthCache,
+		DCGMFieldValueCache:  dcgmFieldValueCache,
+		NVIDIAToolOverwrites: config.NvidiaToolOverwrites,
+		DBRW:                 dbRW,
+		DBRO:                 dbRO,
+		EventStore:           eventStore,
+		RebootEventStore:     rebootEventStore,
+		MountPoints:          []string{"/"},
+		MountTargets:         []string{},
+		HealthCheckInterval:  healthCheckInterval,
 	}
 
 	// Register only enabled components for health monitoring
@@ -278,24 +273,10 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 		}
 	}
 
-	// Set up centralized DCGM policy violation watching
-	if dcgmPolicyViolationCache != nil {
-		if err := dcgmPolicyViolationCache.SetupPolicyWatching(); err != nil {
-			log.Logger.Errorw("failed to set up DCGM policy watching, DCGM policy violations undetected", "error", err)
-		}
-	}
-
 	// Start DCGM field value cache polling
 	if dcgmFieldValueCache != nil {
 		if err := dcgmFieldValueCache.Start(); err != nil {
 			log.Logger.Errorw("failed to start DCGM field value cache, DCGM metrics polling disabled", "error", err)
-		}
-	}
-
-	// Start DCGM policy violation cache distribution
-	if dcgmPolicyViolationCache != nil {
-		if err := dcgmPolicyViolationCache.Start(); err != nil {
-			log.Logger.Errorw("failed to start DCGM policy violation cache, DCGM policy violation monitoring disabled", "error", err)
 		}
 	}
 
@@ -388,15 +369,6 @@ func (s *Server) Stop() {
 	if s.gpudInstance != nil && s.gpudInstance.DCGMFieldValueCache != nil {
 		s.gpudInstance.DCGMFieldValueCache.Stop()
 		log.Logger.Debugw("stopped DCGM field value cache")
-	}
-
-	// Close DCGM policy violation cache to stop distributor and clear policies
-	if s.gpudInstance != nil && s.gpudInstance.DCGMPolicyViolationCache != nil {
-		if err := s.gpudInstance.DCGMPolicyViolationCache.Close(); err != nil {
-			log.Logger.Warnw("failed to close DCGM policy violation cache", "error", err)
-		} else {
-			log.Logger.Debugw("closed DCGM policy violation cache")
-		}
 	}
 
 	if s.componentsRegistry != nil {

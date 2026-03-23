@@ -60,11 +60,6 @@ type Config struct {
 	selectedComponents map[string]any `json:"-"`
 	disabledComponents map[string]any `json:"-"`
 
-	// EnableDCGMPolicy enables DCGM policy violation monitoring.
-	// All policies (XID, PCIe, DBE, NVLink, Power, Thermal, Page Retirement) are disabled by default.
-	// PCIe, DBE, and NVLink have false-positive issues with monotonic counter checks.
-	EnableDCGMPolicy bool `json:"enable_dcgm_policy"`
-
 	// EnableFaultInjection enables the /inject-fault endpoint for testing.
 	// This endpoint allows injecting faults (kernel messages, component errors, events) into the system.
 	// SECURITY: Only accessible from localhost (127.0.0.0/8 or ::1). Disabled by default.
@@ -261,7 +256,6 @@ func (config *Config) ToConfigEntries(allComponentNames []string) []ConfigEntry 
 	entries = append(entries,
 		ConfigEntry{Key: "enabled_components", Value: string(enabledJSON)},
 		ConfigEntry{Key: "disabled_components", Value: string(disabledJSON)},
-		ConfigEntry{Key: "enable_dcgm_policy", Value: fmt.Sprintf("%t", config.EnableDCGMPolicy)},
 	)
 
 	if config.HealthExporter != nil {

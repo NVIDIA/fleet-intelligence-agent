@@ -30,7 +30,6 @@ import (
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
 	dcgmcommon "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/dcgm/common"
-	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
 )
@@ -39,12 +38,6 @@ const Name = "accelerator-nvidia-dcgm-nvlink"
 
 const (
 	defaultHealthCheckInterval = time.Minute
-
-	// Event names for NVLink policy violations
-	EventNameNVLinkPolicyViolation = "nvlink_policy_violation"
-
-	// Default retention period for events
-	DefaultRetentionPeriod = 3 * 24 * time.Hour
 )
 
 var _ components.Component = &component{}
@@ -52,17 +45,11 @@ var _ components.Component = &component{}
 type component struct {
 	ctx    context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
 
-	healthCheckInterval      time.Duration
-	dcgmInstance             nvidiadcgm.Instance
-	dcgmHealthCache          *nvidiadcgm.HealthCache
-	dcgmFieldValueCache      *nvidiadcgm.FieldValueCache
-	dcgmPolicyViolationCache *nvidiadcgm.PolicyViolationCache
-	eventBucket              eventstore.Bucket
-
-	// Policy violation listener - receives violations from DCGM
-	policyViolationCh <-chan dcgm.PolicyViolation
+	healthCheckInterval time.Duration
+	dcgmInstance        nvidiadcgm.Instance
+	dcgmHealthCache     *nvidiadcgm.HealthCache
+	dcgmFieldValueCache *nvidiadcgm.FieldValueCache
 
 	lastMu          sync.RWMutex
 	lastCheckResult *checkResult
@@ -77,13 +64,12 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	}
 
 	c := &component{
-		ctx:                      cctx,
-		cancel:                   ccancel,
-		healthCheckInterval:      healthCheckInterval,
-		dcgmInstance:             gpudInstance.DCGMInstance,
-		dcgmHealthCache:          gpudInstance.DCGMHealthCache,
-		dcgmFieldValueCache:      gpudInstance.DCGMFieldValueCache,
-		dcgmPolicyViolationCache: gpudInstance.DCGMPolicyViolationCache,
+		ctx:                 cctx,
+		cancel:              ccancel,
+		healthCheckInterval: healthCheckInterval,
+		dcgmInstance:        gpudInstance.DCGMInstance,
+		dcgmHealthCache:     gpudInstance.DCGMHealthCache,
+		dcgmFieldValueCache: gpudInstance.DCGMFieldValueCache,
 	}
 
 	// Only initialize if DCGM is available
@@ -101,46 +87,6 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		} else {
 			log.Logger.Infow("registered NVLink fields for centralized watching",
 				"numFields", len(nvlinkFields))
-		}
-
-		// Setup event bucket and subscribe to NVLink policy violations
-		if gpudInstance.EventStore != nil && gpudInstance.DCGMPolicyViolationCache != nil && gpudInstance.EnableDCGMPolicy {
-			// Check existing policies and register NVLink policy if needed
-			existingPolicies := c.dcgmInstance.GetExistingPolicies()
-			shouldEnableNvlinkPolicy := false
-			hadExistingPolicies := existingPolicies != nil && existingPolicies.Conditions != nil && len(existingPolicies.Conditions) > 0
-
-			if !hadExistingPolicies {
-				log.Logger.Infow("no existing policies, registering NVLink policy")
-				policyConfig := dcgm.PolicyConfig{
-					Condition: dcgm.NvlinkPolicy,
-				}
-				gpudInstance.DCGMPolicyViolationCache.RegisterPolicyToSet(policyConfig)
-				shouldEnableNvlinkPolicy = true
-			} else {
-				// Check if NVLink policy is already configured
-				if _, hasNvlinkPolicy := existingPolicies.Conditions[dcgm.NvlinkPolicy]; hasNvlinkPolicy {
-					shouldEnableNvlinkPolicy = true
-				} else {
-					log.Logger.Infow("NVLink policy not configured, skipping violation monitoring")
-				}
-			}
-
-			// Only setup event bucket and subscribe if NVLink policy is enabled
-			if shouldEnableNvlinkPolicy {
-				var err error
-				c.eventBucket, err = gpudInstance.EventStore.Bucket(Name)
-				if err != nil {
-					log.Logger.Warnw("failed to create event bucket, policy violation logging disabled", "error", err)
-				} else {
-					// Subscribe to NVLink policy violations from centralized cache
-					c.policyViolationCh = gpudInstance.DCGMPolicyViolationCache.Subscribe("NvlinkPolicy")
-					// Start processing violations
-					c.wg.Add(1)
-					go c.processPolicyViolations()
-					log.Logger.Infow("NVLink policy violation monitoring enabled")
-				}
-			}
 		}
 	}
 
@@ -194,42 +140,7 @@ func (c *component) LastHealthStates() apiv1.HealthStates {
 }
 
 func (c *component) Events(ctx context.Context, since time.Time) (apiv1.Events, error) {
-	if c.eventBucket == nil {
-		return nil, nil
-	}
-
-	events, err := c.eventBucket.Get(ctx, since)
-	if err != nil {
-		return nil, err
-	}
-
-	// Enrich events with type and message
-	var ret apiv1.Events
-	for _, event := range events {
-		enriched := c.enrichNVLinkEvent(event)
-		ret = append(ret, enriched.ToEvent())
-	}
-
-	return ret, nil
-}
-
-// enrichNVLinkEvent adds type and message to NVLink policy violation events
-func (c *component) enrichNVLinkEvent(event eventstore.Event) eventstore.Event {
-	ret := event
-
-	if event.Name == EventNameNVLinkPolicyViolation && event.ExtraInfo != nil {
-		fieldID := event.ExtraInfo["field_id"]
-		counter := event.ExtraInfo["counter"]
-
-		// All NVLink policy violations are Fatal (critical)
-		ret.Type = string(apiv1.EventTypeCritical)
-
-		// Build human-readable message
-		ret.Message = fmt.Sprintf("NVLink policy violation (field_id=%s, counter=%s) detected at %s",
-			fieldID, counter, event.Time.Format(time.RFC3339))
-	}
-
-	return ret
+	return nil, nil
 }
 
 func (c *component) Close() error {
@@ -238,7 +149,6 @@ func (c *component) Close() error {
 	// Field watching is managed by centralized FieldValueCache, no cleanup needed here
 
 	c.cancel()
-	c.wg.Wait() // Wait for processPolicyViolations goroutine to complete
 	return nil
 }
 
@@ -477,59 +387,4 @@ func (cr *checkResult) HealthStates() apiv1.HealthStates {
 	}
 
 	return apiv1.HealthStates{state}
-}
-
-// processPolicyViolations runs in a goroutine to listen for policy violations
-func (c *component) processPolicyViolations() {
-	defer c.wg.Done()
-
-	if c.policyViolationCh == nil {
-		return
-	}
-
-	log.Logger.Debugw("NVLink policy violation processor started")
-	defer log.Logger.Debugw("NVLink policy violation processor stopped")
-
-	for {
-		select {
-		case <-c.ctx.Done():
-			return
-
-		case violation, ok := <-c.policyViolationCh:
-			if !ok {
-				log.Logger.Warnw("NVLink policy violation channel closed")
-				return
-			}
-
-			// Extract error information from NVLink policy condition
-			var fieldID uint16
-			var counter uint
-			if nvlinkData, ok := violation.Data.(dcgm.NvlinkPolicyCondition); ok {
-				fieldID = nvlinkData.FieldId
-				counter = nvlinkData.Counter
-			}
-
-			// Create event
-			event := eventstore.Event{
-				Component: Name,
-				Time:      violation.Timestamp.UTC(),
-				Name:      EventNameNVLinkPolicyViolation,
-				Type:      string(apiv1.EventTypeCritical), // All NVLink policy violations are Fatal (critical)
-				Message: fmt.Sprintf("NVLink policy violation (field_id=%d, counter=%d) detected at %s",
-					fieldID, counter, violation.Timestamp.Format(time.RFC3339)),
-				ExtraInfo: map[string]string{
-					"field_id":  fmt.Sprintf("%d", fieldID),
-					"counter":   fmt.Sprintf("%d", counter),
-					"timestamp": violation.Timestamp.Format(time.RFC3339),
-				},
-			}
-
-			// Insert the event
-			cctx, ccancel := context.WithTimeout(c.ctx, 15*time.Second)
-			defer ccancel()
-			if err := c.eventBucket.Insert(cctx, event); err != nil {
-				log.Logger.Errorw("failed to insert NVLink violation event", "error", err)
-			}
-		}
-	}
 }

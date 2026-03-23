@@ -113,9 +113,6 @@ type Instance interface {
 	// GetDevices returns the cached list of GPU devices.
 	GetDevices() []DeviceInfo
 
-	// GetExistingPolicies returns the policy configuration that existed when the instance was created.
-	GetExistingPolicies() *dcgm.PolicyStatus
-
 	// Shutdown shuts down the DCGM library.
 	Shutdown() error
 }
@@ -139,22 +136,6 @@ func New() (Instance, error) {
 	}
 
 	log.Logger.Infow("created custom DCGM group for isolated health monitoring")
-
-	// List existing policies for the group to preserve existing state
-	var existingPolicies *dcgm.PolicyStatus
-	policyStatus, err := dcgm.GetPolicyForGroup(groupHandle)
-	if err != nil {
-		// DCGM_ST_INSUFFICIENT_SIZE (-31) is returned when no policies are configured
-		// This is expected on newly created groups or when no policies have been set
-		if strings.Contains(err.Error(), "not large enough") || strings.Contains(err.Error(), "INSUFFICIENT_SIZE") {
-			log.Logger.Debugw("no policies configured on group (expected)", "group", groupHandle)
-		} else {
-			log.Logger.Warnw("failed to get existing policies", "error", err)
-		}
-	} else {
-		existingPolicies = policyStatus
-		log.Logger.Infow("retrieved and cached existing policy status", "policyStatus", policyStatus)
-	}
 
 	// Fetch and cache device information once during initialization
 	deviceIDs, err := dcgm.GetSupportedDevices()
@@ -181,11 +162,10 @@ func New() (Instance, error) {
 	}
 
 	inst := &instance{
-		dcgmExists:       true,
-		groupHandle:      groupHandle,
-		cleanup:          cleanup,
-		devices:          devices,
-		existingPolicies: existingPolicies,
+		dcgmExists:  true,
+		groupHandle: groupHandle,
+		cleanup:     cleanup,
+		devices:     devices,
 	}
 
 	return inst, nil
@@ -206,9 +186,6 @@ type instance struct {
 
 	// devices stores cached device information fetched once at initialization
 	devices []DeviceInfo
-
-	// existingPolicies stores the policy configuration that existed when the instance was created
-	existingPolicies *dcgm.PolicyStatus
 
 	// Health watch tracking
 	watchedSystemsMu sync.Mutex
@@ -236,10 +213,6 @@ func (inst *instance) GetGroupHandle() dcgm.GroupHandle {
 
 func (inst *instance) GetDevices() []DeviceInfo {
 	return inst.devices
-}
-
-func (inst *instance) GetExistingPolicies() *dcgm.PolicyStatus {
-	return inst.existingPolicies
 }
 
 func (inst *instance) AddHealthWatch(system dcgm.HealthSystem) error {
@@ -408,9 +381,6 @@ func (inst *noOpInstance) GetGroupHandle() dcgm.GroupHandle {
 	return dcgm.GroupHandle{}
 }
 func (inst *noOpInstance) GetDevices() []DeviceInfo { return nil }
-func (inst *noOpInstance) GetExistingPolicies() *dcgm.PolicyStatus {
-	return nil
-}
 func (inst *noOpInstance) AddHealthWatch(system dcgm.HealthSystem) error {
 	return nil
 }

@@ -71,10 +71,6 @@ func (m *mockDCGMInstance) GetDevices() []nvidiadcgm.DeviceInfo {
 	return []nvidiadcgm.DeviceInfo{{ID: 0}}
 }
 
-func (m *mockDCGMInstance) GetExistingPolicies() *dcgm.PolicyStatus {
-	return nil
-}
-
 func (m *mockDCGMInstance) Shutdown() error {
 	return nil
 }

@@ -35,11 +35,10 @@ type GPUdInstance struct {
 
 	KernelModulesToCheck []string
 
-	DCGMInstance             nvidiadcgm.Instance
-	DCGMHealthCache          *nvidiadcgm.HealthCache          // Shared cache for DCGM health check results
-	DCGMFieldValueCache      *nvidiadcgm.FieldValueCache      // Shared cache for DCGM field values (GPU devices only)
-	DCGMPolicyViolationCache *nvidiadcgm.PolicyViolationCache // Shared cache for DCGM policy violations
-	NVMLInstance             nvidianvml.Instance
+	DCGMInstance        nvidiadcgm.Instance
+	DCGMHealthCache     *nvidiadcgm.HealthCache     // Shared cache for DCGM health check results
+	DCGMFieldValueCache *nvidiadcgm.FieldValueCache // Shared cache for DCGM field values (GPU devices only)
+	NVMLInstance        nvidianvml.Instance
 	NVIDIAToolOverwrites     nvidiacommon.ToolOverwrites
 
 	DBRW *sql.DB
@@ -53,11 +52,6 @@ type GPUdInstance struct {
 
 	// HealthCheckInterval configures how often components perform health checks.
 	HealthCheckInterval time.Duration
-
-	// EnableDCGMPolicy enables DCGM policy violation monitoring.
-	// All policies (XID, PCIe, DBE, NVLink, Power, Thermal, Page Retirement) are disabled by default.
-	// PCIe, DBE, and NVLink have false-positive issues with monotonic counter checks.
-	EnableDCGMPolicy bool
 
 	FailureInjector *FailureInjector
 }

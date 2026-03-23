@@ -133,10 +133,6 @@ func App() *cli.App {
 					Value: "json",
 				},
 				&cli.BoolFlag{
-					Name:  "enable-dcgm-policy",
-					Usage: "enable DCGM policy violation monitoring for all policies (XID, PCIe, DBE, NVLink, Power, Thermal, Page Retirement) (default: false)",
-				},
-				&cli.BoolFlag{
 					Name:  "enable-fault-injection",
 					Usage: "enable fault injection endpoint for testing (only accessible from localhost, default: false)",
 				},

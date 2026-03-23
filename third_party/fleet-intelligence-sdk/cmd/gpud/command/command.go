@@ -240,11 +240,6 @@ sudo rm /etc/systemd/system/gpud.service
 					Usage: fmt.Sprintf("set the allowed reboot attempts for XID errors before escalation (defaults to %d)", componentsxid.DefaultRebootThreshold),
 					Value: componentsxid.DefaultRebootThreshold,
 				},
-				&cli.BoolFlag{
-					Name:  "enable-dcgm-policy",
-					Usage: "enable DCGM policy violation monitoring for all policies (XID, PCIe, DBE, NVLink, Power, Thermal, Page Retirement) (default: false)",
-				},
-
 				cli.StringFlag{
 					Name:  "infiniband-exclude-devices",
 					Usage: "comma-separated list of InfiniBand device names to exclude from monitoring (e.g., 'mlx5_0,mlx5_1'). Use this to skip devices with restricted Physical Functions (PFs) that cause kernel errors (mlx5_cmd_out_err ACCESS_REG). Common on NVIDIA DGX, Umbriel, and GB200 systems. See https://github.com/NVIDIA/fleet-intelligence-sdk/issues/1164",
