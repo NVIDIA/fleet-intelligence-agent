@@ -197,9 +197,9 @@ func (c *component) Check() components.CheckResult {
 	log.Logger.Infow("checking nvidia NVSwitch metrics via DCGM")
 
 	c.lastMu.RLock()
-	var prevIncidents []dcgmcommon.EnrichedIncident
+	var prevIncidents []apiv1.HealthStateIncident
 	if c.lastCheckResult != nil {
-		prevIncidents = c.lastCheckResult.enrichedIncidents
+		prevIncidents = c.lastCheckResult.incidents
 	}
 	c.lastMu.RUnlock()
 
@@ -307,7 +307,7 @@ func (c *component) Check() components.CheckResult {
 		cr.reason = "unknown NVSwitch health status"
 	}
 
-	dcgmcommon.EmitNewIncidentEvents(c.ctx, cr.ts, Name, EventNameIncident, c.eventBucket, prevIncidents, cr.enrichedIncidents)
+	dcgmcommon.EmitNewIncidentEvents(c.ctx, cr.ts, Name, EventNameIncident, c.eventBucket, prevIncidents, cr.incidents)
 
 	return cr
 }

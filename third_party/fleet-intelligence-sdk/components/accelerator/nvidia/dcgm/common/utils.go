@@ -30,13 +30,12 @@ import (
 
 // Extra-info key constants for DCGM health incident events.
 const (
-	EventKeyUUID      = "uuid"
+	EventKeyEntityID  = "entity_id"
 	EventKeyErrorCode = "error_code"
-	EventKeySystem    = "system"
 )
 
 // EmitNewIncidentEvents inserts an event into eventBucket for each incident in curr
-// that is not already present in prev (onset detection). It uses UUID+ErrorCode+System
+// that is not already present in prev (onset detection). It uses EntityID+Severity+Error
 // as the deduplication key to identify the same fault across check cycles.
 // eventName should be a component-specific constant (e.g. "dcgm_thermal_incident").
 // Errors are logged as warnings and do not propagate to the caller.
@@ -46,8 +45,8 @@ func EmitNewIncidentEvents(
 	componentName string,
 	eventName string,
 	eventBucket eventstore.Bucket,
-	prev []EnrichedIncident,
-	curr []EnrichedIncident,
+	prev []apiv1.HealthStateIncident,
+	curr []apiv1.HealthStateIncident,
 ) {
 	if eventBucket == nil || len(curr) == 0 {
 		return
@@ -56,11 +55,11 @@ func EmitNewIncidentEvents(
 	// Build dedup set from previous incidents.
 	prevKeys := make(map[string]struct{}, len(prev))
 	for _, inc := range prev {
-		prevKeys[inc.UUID+"/"+inc.ErrorCode+"/"+inc.System] = struct{}{}
+		prevKeys[inc.EntityID+"/"+string(inc.Severity)+"/"+inc.Error] = struct{}{}
 	}
 
 	for _, inc := range curr {
-		key := inc.UUID + "/" + inc.ErrorCode + "/" + inc.System
+		key := inc.EntityID + "/" + string(inc.Severity) + "/" + inc.Error
 		if _, seen := prevKeys[key]; seen {
 			continue
 		}
@@ -77,9 +76,8 @@ func EmitNewIncidentEvents(
 			Type:      string(eventType),
 			Message:   inc.Message,
 			ExtraInfo: map[string]string{
-				EventKeyUUID:      inc.UUID,
-				EventKeyErrorCode: inc.ErrorCode,
-				EventKeySystem:    inc.System,
+				EventKeyEntityID:  inc.EntityID,
+				EventKeyErrorCode: inc.Error,
 			},
 		}
 		if err := eventBucket.Insert(ctx, ev); err != nil {

@@ -181,25 +181,23 @@ func TestEmitNewIncidentEvents(t *testing.T) {
 	now := time.Now().UTC()
 	ctx := context.Background()
 
-	gpu0Thermal := EnrichedIncident{
-		UUID:      "GPU-0000",
-		ErrorCode: "DCGM_FR_TEMP_VIOLATION",
-		System:    "DCGM_HEALTH_WATCH_THERMAL",
-		Message:   "temp too high",
-		Severity:  apiv1.HealthStateTypeDegraded,
+	gpu0Thermal := apiv1.HealthStateIncident{
+		EntityID: "GPU-0",
+		Error:    "DCGM_FR_TEMP_VIOLATION",
+		Message:  "temp too high",
+		Severity: apiv1.HealthStateTypeDegraded,
 	}
-	gpu1Mem := EnrichedIncident{
-		UUID:      "GPU-0001",
-		ErrorCode: "DCGM_FR_VOLATILE_DBE_DETECTED",
-		System:    "DCGM_HEALTH_WATCH_MEM",
-		Message:   "memory error",
-		Severity:  apiv1.HealthStateTypeUnhealthy,
+	gpu1Mem := apiv1.HealthStateIncident{
+		EntityID: "GPU-1",
+		Error:    "DCGM_FR_VOLATILE_DBE_DETECTED",
+		Message:  "memory error",
+		Severity: apiv1.HealthStateTypeUnhealthy,
 	}
 
 	tests := []struct {
 		name          string
-		prev          []EnrichedIncident
-		curr          []EnrichedIncident
+		prev          []apiv1.HealthStateIncident
+		curr          []apiv1.HealthStateIncident
 		wantCount     int
 		wantEventType string // of first event, if any
 	}{
@@ -211,34 +209,34 @@ func TestEmitNewIncidentEvents(t *testing.T) {
 		},
 		{
 			name:      "same incident in prev and curr — no new event",
-			prev:      []EnrichedIncident{gpu0Thermal},
-			curr:      []EnrichedIncident{gpu0Thermal},
+			prev:      []apiv1.HealthStateIncident{gpu0Thermal},
+			curr:      []apiv1.HealthStateIncident{gpu0Thermal},
 			wantCount: 0,
 		},
 		{
 			name:          "new incident not in prev — event emitted",
 			prev:          nil,
-			curr:          []EnrichedIncident{gpu0Thermal},
+			curr:          []apiv1.HealthStateIncident{gpu0Thermal},
 			wantCount:     1,
 			wantEventType: string(apiv1.EventTypeWarning),
 		},
 		{
 			name:          "unhealthy severity maps to critical",
 			prev:          nil,
-			curr:          []EnrichedIncident{gpu1Mem},
+			curr:          []apiv1.HealthStateIncident{gpu1Mem},
 			wantCount:     1,
 			wantEventType: string(apiv1.EventTypeCritical),
 		},
 		{
 			name:      "multiple new incidents all emitted",
 			prev:      nil,
-			curr:      []EnrichedIncident{gpu0Thermal, gpu1Mem},
+			curr:      []apiv1.HealthStateIncident{gpu0Thermal, gpu1Mem},
 			wantCount: 2,
 		},
 		{
 			name:      "one existing one new — only new emitted",
-			prev:      []EnrichedIncident{gpu0Thermal},
-			curr:      []EnrichedIncident{gpu0Thermal, gpu1Mem},
+			prev:      []apiv1.HealthStateIncident{gpu0Thermal},
+			curr:      []apiv1.HealthStateIncident{gpu0Thermal, gpu1Mem},
 			wantCount: 1,
 		},
 	}
@@ -259,14 +257,11 @@ func TestEmitNewIncidentEvents(t *testing.T) {
 				if tt.wantEventType != "" && ev.Type != tt.wantEventType {
 					t.Errorf("event Type = %q, want %q", ev.Type, tt.wantEventType)
 				}
-				if ev.ExtraInfo[EventKeyUUID] == "" {
-					t.Errorf("event ExtraInfo[uuid] is empty")
+				if ev.ExtraInfo[EventKeyEntityID] == "" {
+					t.Errorf("event ExtraInfo[entity_id] is empty")
 				}
 				if ev.ExtraInfo[EventKeyErrorCode] == "" {
 					t.Errorf("event ExtraInfo[error_code] is empty")
-				}
-				if ev.ExtraInfo[EventKeySystem] == "" {
-					t.Errorf("event ExtraInfo[system] is empty")
 				}
 			}
 		})
