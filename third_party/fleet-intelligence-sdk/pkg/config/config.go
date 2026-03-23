@@ -65,11 +65,6 @@ type Config struct {
 	selectedComponents map[string]any `json:"-"`
 	disabledComponents map[string]any `json:"-"`
 
-	// EnableDCGMPolicy enables DCGM policy violation monitoring.
-	// All policies (XID, PCIe, DBE, NVLink, Power, Thermal, Page Retirement) are disabled by default.
-	// PCIe, DBE, and NVLink have false-positive issues with monotonic counter checks.
-	EnableDCGMPolicy bool `json:"enable_dcgm_policy"`
-
 	// FailureInjector is the failure injector.
 	FailureInjector *components.FailureInjector `json:"failure_injector,omitempty"`
 

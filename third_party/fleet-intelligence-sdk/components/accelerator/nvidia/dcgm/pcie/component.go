@@ -30,7 +30,6 @@ import (
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
 	dcgmcommon "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/dcgm/common"
-	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
 )
@@ -39,12 +38,6 @@ const Name = "accelerator-nvidia-dcgm-pcie"
 
 const (
 	defaultHealthCheckInterval = time.Minute
-
-	// Event names for PCIe policy violations
-	EventNamePCIePolicyViolation = "pcie_policy_violation"
-
-	// Default retention period for events
-	DefaultRetentionPeriod = 3 * 24 * time.Hour
 )
 
 var _ components.Component = &component{}
@@ -52,17 +45,11 @@ var _ components.Component = &component{}
 type component struct {
 	ctx    context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
 
-	healthCheckInterval      time.Duration
-	dcgmInstance             nvidiadcgm.Instance
-	dcgmHealthCache          *nvidiadcgm.HealthCache
-	dcgmFieldValueCache      *nvidiadcgm.FieldValueCache
-	dcgmPolicyViolationCache *nvidiadcgm.PolicyViolationCache
-	eventBucket              eventstore.Bucket
-
-	// Policy violation listener - receives violations from DCGM
-	policyViolationCh <-chan dcgm.PolicyViolation
+	healthCheckInterval time.Duration
+	dcgmInstance        nvidiadcgm.Instance
+	dcgmHealthCache     *nvidiadcgm.HealthCache
+	dcgmFieldValueCache *nvidiadcgm.FieldValueCache
 
 	lastMu          sync.RWMutex
 	lastCheckResult *checkResult
@@ -77,13 +64,12 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	}
 
 	c := &component{
-		ctx:                      cctx,
-		cancel:                   ccancel,
-		healthCheckInterval:      healthCheckInterval,
-		dcgmInstance:             gpudInstance.DCGMInstance,
-		dcgmHealthCache:          gpudInstance.DCGMHealthCache,
-		dcgmFieldValueCache:      gpudInstance.DCGMFieldValueCache,
-		dcgmPolicyViolationCache: gpudInstance.DCGMPolicyViolationCache,
+		ctx:                 cctx,
+		cancel:              ccancel,
+		healthCheckInterval: healthCheckInterval,
+		dcgmInstance:        gpudInstance.DCGMInstance,
+		dcgmHealthCache:     gpudInstance.DCGMHealthCache,
+		dcgmFieldValueCache: gpudInstance.DCGMFieldValueCache,
 	}
 
 	// Only initialize if DCGM is available
@@ -101,46 +87,6 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		} else {
 			log.Logger.Infow("registered PCIe fields for centralized watching",
 				"numFields", len(pcieFields))
-		}
-
-		// Setup event bucket and subscribe to PCIe policy violations
-		if gpudInstance.EventStore != nil && gpudInstance.DCGMPolicyViolationCache != nil && gpudInstance.EnableDCGMPolicy {
-			// Check existing policies and register PCIe policy if needed
-			existingPolicies := c.dcgmInstance.GetExistingPolicies()
-			shouldEnablePCIePolicy := false
-			hadExistingPolicies := existingPolicies != nil && existingPolicies.Conditions != nil && len(existingPolicies.Conditions) > 0
-
-			if !hadExistingPolicies {
-				log.Logger.Infow("no existing policies, registering PCIe policy")
-				policyConfig := dcgm.PolicyConfig{
-					Condition: dcgm.PCIePolicy,
-				}
-				gpudInstance.DCGMPolicyViolationCache.RegisterPolicyToSet(policyConfig)
-				shouldEnablePCIePolicy = true
-			} else {
-				// Check if PCIe policy is already configured
-				if _, hasPCIePolicy := existingPolicies.Conditions[dcgm.PCIePolicy]; hasPCIePolicy {
-					shouldEnablePCIePolicy = true
-				} else {
-					log.Logger.Infow("PCIe policy not configured, skipping violation monitoring")
-				}
-			}
-
-			// Only setup event bucket and subscribe if PCIe policy is enabled
-			if shouldEnablePCIePolicy {
-				var err error
-				c.eventBucket, err = gpudInstance.EventStore.Bucket(Name)
-				if err != nil {
-					log.Logger.Warnw("failed to create event bucket, policy violation logging disabled", "error", err)
-				} else {
-					// Subscribe to PCIe policy violations from centralized cache
-					c.policyViolationCh = gpudInstance.DCGMPolicyViolationCache.Subscribe("PCIePolicy")
-					// Start processing violations
-					c.wg.Add(1)
-					go c.processPolicyViolations()
-					log.Logger.Infow("PCIe policy violation monitoring enabled")
-				}
-			}
 		}
 	}
 
@@ -194,41 +140,7 @@ func (c *component) LastHealthStates() apiv1.HealthStates {
 }
 
 func (c *component) Events(ctx context.Context, since time.Time) (apiv1.Events, error) {
-	if c.eventBucket == nil {
-		return nil, nil
-	}
-
-	events, err := c.eventBucket.Get(ctx, since)
-	if err != nil {
-		return nil, err
-	}
-
-	// Enrich events with type and message
-	var ret apiv1.Events
-	for _, event := range events {
-		enriched := c.enrichPCIeEvent(event)
-		ret = append(ret, enriched.ToEvent())
-	}
-
-	return ret, nil
-}
-
-// enrichPCIeEvent adds type and message to PCIe policy violation events
-func (c *component) enrichPCIeEvent(event eventstore.Event) eventstore.Event {
-	ret := event
-
-	if event.Name == EventNamePCIePolicyViolation && event.ExtraInfo != nil {
-		errorType := event.ExtraInfo["error_type"]
-
-		// All PCIe policy violations are Fatal
-		ret.Type = string(apiv1.EventTypeCritical)
-
-		// Build human-readable message
-		ret.Message = fmt.Sprintf("PCIe policy violation (%s) detected at %s",
-			errorType, event.Time.Format(time.RFC3339))
-	}
-
-	return ret
+	return nil, nil
 }
 
 func (c *component) Close() error {
@@ -237,7 +149,6 @@ func (c *component) Close() error {
 	// Field watching is managed by centralized FieldValueCache, no cleanup needed here
 
 	c.cancel()
-	c.wg.Wait() // Wait for processPolicyViolations goroutine to complete
 	return nil
 }
 
@@ -414,57 +325,3 @@ func (cr *checkResult) HealthStates() apiv1.HealthStates {
 	return apiv1.HealthStates{state}
 }
 
-// processPolicyViolations runs in a goroutine to listen for policy violations
-func (c *component) processPolicyViolations() {
-	defer c.wg.Done()
-
-	if c.policyViolationCh == nil {
-		return
-	}
-
-	log.Logger.Debugw("PCIe policy violation processor started")
-	defer log.Logger.Debugw("PCIe policy violation processor stopped")
-
-	for {
-		select {
-		case <-c.ctx.Done():
-			return
-
-		case violation, ok := <-c.policyViolationCh:
-			if !ok {
-				log.Logger.Warnw("PCIe policy violation channel closed")
-				return
-			}
-
-			// Extract error information from PCI policy condition
-			var errorInfo string
-			if pciData, ok := violation.Data.(dcgm.PciPolicyCondition); ok {
-				errorInfo = fmt.Sprintf("replay_count=%d", pciData.ReplayCounter)
-			} else {
-				errorInfo = "unknown"
-			}
-
-			// Create event
-			event := eventstore.Event{
-				Component: Name,
-				Time:      violation.Timestamp.UTC(),
-				Name:      EventNamePCIePolicyViolation,
-				Type:      string(apiv1.EventTypeCritical), // All PCIe policy violations are Fatal
-				Message: fmt.Sprintf("PCIe policy violation (pcie_error) detected at %s",
-					violation.Timestamp.Format(time.RFC3339)),
-				ExtraInfo: map[string]string{
-					"error_type": "pcie_error",
-					"error_info": errorInfo,
-					"timestamp":  violation.Timestamp.Format(time.RFC3339),
-				},
-			}
-
-			// Insert the event
-			cctx, ccancel := context.WithTimeout(c.ctx, 15*time.Second)
-			defer ccancel()
-			if err := c.eventBucket.Insert(cctx, event); err != nil {
-				log.Logger.Errorw("failed to insert PCIe violation event", "error", err)
-			}
-		}
-	}
-}

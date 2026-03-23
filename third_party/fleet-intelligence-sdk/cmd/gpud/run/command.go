@@ -141,7 +141,6 @@ func Command(cliContext *cli.Context) error {
 	nvlinkExpectedLinkStates := cliContext.String("nvlink-expected-link-states")
 	nfsCheckerConfigs := cliContext.String("nfs-checker-configs")
 	xidRebootThreshold := cliContext.Int("xid-reboot-threshold")
-	enableDCGMPolicy := cliContext.Bool("enable-dcgm-policy")
 
 	if len(infinibandExpectedPortStates) > 0 {
 		var expectedPortStates componentsnvidiainfinibanditypes.ExpectedPortStates
@@ -272,13 +271,6 @@ func Command(cliContext *cli.Context) error {
 
 	if components != "" {
 		cfg.Components = strings.Split(components, ",")
-	}
-
-	cfg.EnableDCGMPolicy = enableDCGMPolicy
-	if enableDCGMPolicy {
-		log.Logger.Infow("DCGM policy violation monitoring enabled for all policies (XID, PCIe, DBE, NVLink, Power, Thermal, Page Retirement)")
-	} else {
-		log.Logger.Infow("DCGM policy violation monitoring disabled by default")
 	}
 
 	auditLogger := log.NewNopAuditLogger()

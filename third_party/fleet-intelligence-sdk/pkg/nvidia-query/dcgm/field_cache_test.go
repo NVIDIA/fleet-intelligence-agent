@@ -137,10 +137,6 @@ func (m *mockDCGMInstance) GetDevices() []DeviceInfo {
 	return nil
 }
 
-func (m *mockDCGMInstance) GetExistingPolicies() *dcgm.PolicyStatus {
-	return nil
-}
-
 func (m *mockDCGMInstance) Shutdown() error {
 	return nil
 }

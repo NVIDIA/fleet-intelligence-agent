@@ -30,25 +30,14 @@ import (
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
 	dcgmcommon "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/dcgm/common"
-	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
-	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 )
 
 const Name = "accelerator-nvidia-dcgm-power"
 
 const (
 	defaultHealthCheckInterval = time.Minute
-
-	// Event names for power policy violations
-	EventNamePowerPolicyViolation = "power_policy_violation"
-
-	// Legacy event name for power errors (kept for backward compatibility)
-	EventNamePowerError = "power_error"
-
-	// Default retention period for events
-	DefaultRetentionPeriod = 3 * 24 * time.Hour
 )
 
 var _ components.Component = &component{}
@@ -56,19 +45,12 @@ var _ components.Component = &component{}
 type component struct {
 	ctx    context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
 
 	healthCheckInterval time.Duration
 
-	dcgmInstance             nvidiadcgm.Instance
-	dcgmHealthCache          *nvidiadcgm.HealthCache
-	dcgmFieldValueCache      *nvidiadcgm.FieldValueCache
-	dcgmPolicyViolationCache *nvidiadcgm.PolicyViolationCache
-	nvmlInstance             nvidianvml.Instance
-	eventBucket              eventstore.Bucket
-
-	// Policy violation listener - receives violations from DCGM
-	policyViolationCh <-chan dcgm.PolicyViolation
+	dcgmInstance        nvidiadcgm.Instance
+	dcgmHealthCache     *nvidiadcgm.HealthCache
+	dcgmFieldValueCache *nvidiadcgm.FieldValueCache
 
 	lastMu          sync.RWMutex
 	lastCheckResult *checkResult
@@ -86,12 +68,10 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		ctx:    cctx,
 		cancel: ccancel,
 
-		healthCheckInterval:      healthCheckInterval,
-		dcgmInstance:             gpudInstance.DCGMInstance,
-		dcgmHealthCache:          gpudInstance.DCGMHealthCache,
-		dcgmFieldValueCache:      gpudInstance.DCGMFieldValueCache,
-		dcgmPolicyViolationCache: gpudInstance.DCGMPolicyViolationCache,
-		nvmlInstance:             gpudInstance.NVMLInstance,
+		healthCheckInterval: healthCheckInterval,
+		dcgmInstance:        gpudInstance.DCGMInstance,
+		dcgmHealthCache:     gpudInstance.DCGMHealthCache,
+		dcgmFieldValueCache: gpudInstance.DCGMFieldValueCache,
 	}
 
 	// Only initialize if DCGM is available
@@ -109,72 +89,6 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		} else {
 			log.Logger.Infow("registered power fields for centralized watching",
 				"numFields", len(powerFields))
-		}
-
-		// Setup event bucket and subscribe to power policy violations
-		if gpudInstance.EventStore != nil && gpudInstance.DCGMPolicyViolationCache != nil && gpudInstance.EnableDCGMPolicy {
-			// Check existing policies and register power policy if needed
-			existingPolicies := c.dcgmInstance.GetExistingPolicies()
-			shouldEnablePowerPolicy := false
-			hadExistingPolicies := existingPolicies != nil && existingPolicies.Conditions != nil && len(existingPolicies.Conditions) > 0
-
-			if !hadExistingPolicies {
-				log.Logger.Infow("no existing policies, registering power policy")
-
-				// Query GPU power limit using NVML
-				var maxPower *uint32
-				if c.nvmlInstance != nil && c.nvmlInstance.NVMLExists() {
-					devices := c.nvmlInstance.Devices()
-					if len(devices) > 0 {
-						// Get the first device
-						for _, dev := range devices {
-							powerLimit, ret := dev.GetPowerManagementLimit()
-							if ret == 0 { // nvml.SUCCESS
-								// Convert from milliwatts to watts
-								powerLimitWatts := uint32(powerLimit / 1000)
-								maxPower = &powerLimitWatts
-								log.Logger.Infow("using GPU power limit from NVML as threshold", "powerLimitWatts", powerLimitWatts)
-								break
-							}
-						}
-						if maxPower == nil {
-							log.Logger.Warnw("failed to query GPU power limit from NVML, using default")
-						}
-					}
-				} else {
-					log.Logger.Warnw("NVML not available, using default power limit")
-				}
-
-				policyConfig := dcgm.PolicyConfig{
-					Condition: dcgm.PowerPolicy,
-					MaxPower:  maxPower,
-				}
-				gpudInstance.DCGMPolicyViolationCache.RegisterPolicyToSet(policyConfig)
-				shouldEnablePowerPolicy = true
-			} else {
-				// Check if power policy is already configured
-				if _, hasPowerPolicy := existingPolicies.Conditions[dcgm.PowerPolicy]; hasPowerPolicy {
-					shouldEnablePowerPolicy = true
-				} else {
-					log.Logger.Infow("power policy not configured, skipping violation monitoring")
-				}
-			}
-
-			// Only setup event bucket and subscribe if power policy is enabled
-			if shouldEnablePowerPolicy {
-				var err error
-				c.eventBucket, err = gpudInstance.EventStore.Bucket(Name)
-				if err != nil {
-					log.Logger.Warnw("failed to create event bucket, policy violation logging disabled", "error", err)
-				} else {
-					// Subscribe to power policy violations from centralized cache
-					c.policyViolationCh = gpudInstance.DCGMPolicyViolationCache.Subscribe("PowerPolicy")
-					// Start processing violations
-					c.wg.Add(1)
-					go c.processPolicyViolations()
-					log.Logger.Infow("power policy violation monitoring enabled")
-				}
-			}
 		}
 	}
 
@@ -234,59 +148,7 @@ func (c *component) LastHealthStates() apiv1.HealthStates {
 }
 
 func (c *component) Events(ctx context.Context, since time.Time) (apiv1.Events, error) {
-	if c.eventBucket == nil {
-		return nil, nil
-	}
-
-	events, err := c.eventBucket.Get(ctx, since)
-	if err != nil {
-		return nil, err
-	}
-
-	// Enrich events with type and message
-	var ret apiv1.Events
-	for _, event := range events {
-		enriched := c.enrichPowerEvent(event)
-		ret = append(ret, enriched.ToEvent())
-	}
-
-	return ret, nil
-}
-
-// enrichPowerEvent adds type and message to power events and policy violations
-func (c *component) enrichPowerEvent(event eventstore.Event) eventstore.Event {
-	ret := event
-
-	// Handle Power policy violations
-	if event.Name == EventNamePowerPolicyViolation && event.ExtraInfo != nil {
-		ret.Type = string(apiv1.EventTypeWarning) // Performance severity per DCGM spec
-		powerViolation := event.ExtraInfo["power_violation"]
-		ret.Message = fmt.Sprintf("Power excursion policy violation at %s (violation level: %s)",
-			event.Time.Format(time.RFC3339), powerViolation)
-		return ret
-	}
-
-	if event.Name == EventNamePowerError && event.ExtraInfo != nil {
-		errorType := event.ExtraInfo["error_type"]
-
-		// Determine severity based on error type
-		switch errorType {
-		case "power_violation", "power_limit_exceeded":
-			ret.Type = string(apiv1.EventTypeCritical)
-			ret.Message = fmt.Sprintf("Critical power issue (%s) detected at %s",
-				errorType, event.Time.Format(time.RFC3339))
-		case "power_warning":
-			ret.Type = string(apiv1.EventTypeWarning)
-			ret.Message = fmt.Sprintf("Power warning (%s) detected at %s",
-				errorType, event.Time.Format(time.RFC3339))
-		default:
-			ret.Type = string(apiv1.EventTypeInfo)
-			ret.Message = fmt.Sprintf("Power event (%s) detected at %s",
-				errorType, event.Time.Format(time.RFC3339))
-		}
-	}
-
-	return ret
+	return nil, nil
 }
 
 func (c *component) Close() error {
@@ -295,7 +157,6 @@ func (c *component) Close() error {
 	// Field watching is managed by centralized FieldValueCache, no cleanup needed here
 
 	c.cancel()
-	c.wg.Wait() // Wait for processPolicyViolations goroutine to complete
 	return nil
 }
 
@@ -490,56 +351,3 @@ func (cr *checkResult) HealthStates() apiv1.HealthStates {
 	return apiv1.HealthStates{state}
 }
 
-// processPolicyViolations runs in a goroutine to listen for power policy violations
-func (c *component) processPolicyViolations() {
-	defer c.wg.Done()
-
-	if c.policyViolationCh == nil {
-		return
-	}
-
-	log.Logger.Debugw("power policy violation processor started")
-	defer log.Logger.Debugw("power policy violation processor stopped")
-
-	for {
-		select {
-		case <-c.ctx.Done():
-			return
-
-		case violation, ok := <-c.policyViolationCh:
-			if !ok {
-				log.Logger.Warnw("Power policy violation channel closed")
-				return
-			}
-
-			// Extract power violation information
-			var powerViolation uint
-			if powerData, ok := violation.Data.(dcgm.PowerPolicyCondition); ok {
-				powerViolation = powerData.PowerViolation
-			} else {
-				powerViolation = 0
-			}
-
-			// Create event
-			event := eventstore.Event{
-				Component: Name,
-				Time:      violation.Timestamp.UTC(),
-				Name:      EventNamePowerPolicyViolation,
-				Type:      string(apiv1.EventTypeWarning), // Performance severity per DCGM spec
-				Message: fmt.Sprintf("Power excursion policy violation at %s (violation level: %d)",
-					violation.Timestamp.Format(time.RFC3339), powerViolation),
-				ExtraInfo: map[string]string{
-					"power_violation": fmt.Sprintf("%d", powerViolation),
-					"timestamp":       violation.Timestamp.Format(time.RFC3339),
-				},
-			}
-
-			// Insert the event
-			cctx, ccancel := context.WithTimeout(c.ctx, 15*time.Second)
-			defer ccancel()
-			if err := c.eventBucket.Insert(cctx, event); err != nil {
-				log.Logger.Errorw("failed to insert power violation event", "error", err)
-			}
-		}
-	}
-}

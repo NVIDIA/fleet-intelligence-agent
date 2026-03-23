@@ -30,7 +30,6 @@ import (
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
 	dcgmcommon "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/dcgm/common"
-	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
 )
@@ -39,12 +38,6 @@ const Name = "accelerator-nvidia-dcgm-thermal"
 
 const (
 	defaultHealthCheckInterval = time.Minute
-
-	// Event names for thermal policy violations
-	EventNameThermalPolicyViolation = "thermal_policy_violation"
-
-	// Default retention period for events (similar to SXID)
-	DefaultRetentionPeriod = 3 * 24 * time.Hour
 )
 
 var _ components.Component = &component{}
@@ -52,18 +45,12 @@ var _ components.Component = &component{}
 type component struct {
 	ctx    context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
 
 	healthCheckInterval time.Duration
 
-	dcgmInstance             nvidiadcgm.Instance
-	dcgmHealthCache          *nvidiadcgm.HealthCache
-	dcgmFieldValueCache      *nvidiadcgm.FieldValueCache
-	dcgmPolicyViolationCache *nvidiadcgm.PolicyViolationCache
-	eventBucket              eventstore.Bucket
-
-	// Policy violation listener - receives violations from DCGM
-	policyViolationCh <-chan dcgm.PolicyViolation
+	dcgmInstance        nvidiadcgm.Instance
+	dcgmHealthCache     *nvidiadcgm.HealthCache
+	dcgmFieldValueCache *nvidiadcgm.FieldValueCache
 
 	lastMu          sync.RWMutex
 	lastCheckResult *checkResult
@@ -81,11 +68,10 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		ctx:    cctx,
 		cancel: ccancel,
 
-		healthCheckInterval:      healthCheckInterval,
-		dcgmInstance:             gpudInstance.DCGMInstance,
-		dcgmHealthCache:          gpudInstance.DCGMHealthCache,
-		dcgmFieldValueCache:      gpudInstance.DCGMFieldValueCache,
-		dcgmPolicyViolationCache: gpudInstance.DCGMPolicyViolationCache,
+		healthCheckInterval: healthCheckInterval,
+		dcgmInstance:        gpudInstance.DCGMInstance,
+		dcgmHealthCache:     gpudInstance.DCGMHealthCache,
+		dcgmFieldValueCache: gpudInstance.DCGMFieldValueCache,
 	}
 
 	// Only initialize if DCGM is available
@@ -103,50 +89,6 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		} else {
 			log.Logger.Infow("registered temperature fields for centralized watching",
 				"numFields", len(temperatureFields))
-		}
-
-		// Setup event bucket and subscribe to thermal policy violations
-		if gpudInstance.EventStore != nil && gpudInstance.DCGMPolicyViolationCache != nil && gpudInstance.EnableDCGMPolicy {
-			// Check existing policies and register thermal policy if needed
-			existingPolicies := c.dcgmInstance.GetExistingPolicies()
-			shouldEnableThermalPolicy := false
-			hadExistingPolicies := existingPolicies != nil && existingPolicies.Conditions != nil && len(existingPolicies.Conditions) > 0
-
-			log.Logger.Infow("checking existing policies for thermal",
-				"existingPolicies", existingPolicies,
-				"hadExistingPolicies", hadExistingPolicies)
-
-			if !hadExistingPolicies {
-				log.Logger.Infow("no existing policies, registering thermal policy")
-				policyConfig := dcgm.PolicyConfig{
-					Condition: dcgm.ThermalPolicy,
-				}
-				gpudInstance.DCGMPolicyViolationCache.RegisterPolicyToSet(policyConfig)
-				shouldEnableThermalPolicy = true
-			} else {
-				// Check if thermal policy is already configured
-				if _, hasThermalPolicy := existingPolicies.Conditions[dcgm.ThermalPolicy]; hasThermalPolicy {
-					shouldEnableThermalPolicy = true
-				} else {
-					log.Logger.Infow("thermal policy not configured, skipping violation monitoring")
-				}
-			}
-
-			// Only setup event bucket and subscribe if thermal policy is enabled
-			if shouldEnableThermalPolicy {
-				var err error
-				c.eventBucket, err = gpudInstance.EventStore.Bucket(Name)
-				if err != nil {
-					log.Logger.Warnw("failed to create event bucket, policy violation logging disabled", "error", err)
-				} else {
-					// Subscribe to thermal policy violations from centralized cache
-					c.policyViolationCh = gpudInstance.DCGMPolicyViolationCache.Subscribe("ThermalPolicy")
-					// Start processing violations
-					c.wg.Add(1)
-					go c.processPolicyViolations()
-					log.Logger.Infow("thermal policy violation monitoring enabled")
-				}
-			}
 		}
 	}
 
@@ -206,55 +148,7 @@ func (c *component) LastHealthStates() apiv1.HealthStates {
 }
 
 func (c *component) Events(ctx context.Context, since time.Time) (apiv1.Events, error) {
-	if c.eventBucket == nil {
-		return nil, nil
-	}
-
-	events, err := c.eventBucket.Get(ctx, since)
-	if err != nil {
-		return nil, err
-	}
-
-	// Enrich events with type and message (similar to SXID's resolveSXIDEvent)
-	var ret apiv1.Events
-	for _, event := range events {
-		enriched := c.enrichThermalEvent(event)
-		ret = append(ret, enriched.ToEvent())
-	}
-
-	return ret, nil
-}
-
-// enrichThermalEvent adds type and message to thermal policy violation events
-// Similar to SXID's resolveSXIDEvent pattern
-func (c *component) enrichThermalEvent(event eventstore.Event) eventstore.Event {
-	ret := event
-
-	if event.Name == EventNameThermalPolicyViolation && event.ExtraInfo != nil {
-		severityStr := event.ExtraInfo["severity"]
-
-		// Determine event type based on severity
-		// Severity thresholds: >=3 critical, >=1 warning, else info
-		severity := 0
-		if _, err := fmt.Sscanf(severityStr, "%d", &severity); err != nil {
-			log.Logger.Warnw("failed to parse thermal violation severity, using default",
-				"severity", severityStr, "error", err)
-		}
-
-		if severity >= 3 {
-			ret.Type = string(apiv1.EventTypeCritical)
-		} else if severity >= 1 {
-			ret.Type = string(apiv1.EventTypeWarning)
-		} else {
-			ret.Type = string(apiv1.EventTypeInfo)
-		}
-
-		// Build human-readable message
-		ret.Message = fmt.Sprintf("Thermal policy violation (severity: %s) detected at %s",
-			severityStr, event.Time.Format(time.RFC3339))
-	}
-
-	return ret
+	return nil, nil
 }
 
 func (c *component) Close() error {
@@ -263,7 +157,6 @@ func (c *component) Close() error {
 	// Field watching is managed by centralized FieldValueCache, no cleanup needed here
 
 	c.cancel()
-	c.wg.Wait() // Wait for processPolicyViolations goroutine to complete
 	return nil
 }
 
@@ -380,68 +273,6 @@ func (c *component) Check() components.CheckResult {
 	}
 
 	return cr
-}
-
-// processPolicyViolations runs in a goroutine to listen for policy violations
-func (c *component) processPolicyViolations() {
-	defer c.wg.Done()
-
-	if c.policyViolationCh == nil {
-		return
-	}
-
-	log.Logger.Debugw("thermal policy violation processor started")
-	defer log.Logger.Debugw("thermal policy violation processor stopped")
-
-	for {
-		select {
-		case <-c.ctx.Done():
-			return
-
-		case violation, ok := <-c.policyViolationCh:
-			if !ok {
-				log.Logger.Warnw("policy violation channel closed")
-				return
-			}
-
-			// Extract severity from thermal policy condition
-			var severity uint
-			if thermalData, ok := violation.Data.(dcgm.ThermalPolicyCondition); ok {
-				severity = thermalData.ThermalViolation
-			}
-
-			// Determine event type based on severity (same logic as enrichThermalEvent)
-			var eventType string
-			if severity >= 3 {
-				eventType = string(apiv1.EventTypeCritical)
-			} else if severity >= 1 {
-				eventType = string(apiv1.EventTypeWarning)
-			} else {
-				eventType = string(apiv1.EventTypeInfo)
-			}
-
-			// Create event
-			event := eventstore.Event{
-				Component: Name,
-				Time:      violation.Timestamp.UTC(),
-				Name:      EventNameThermalPolicyViolation,
-				Type:      eventType,
-				Message: fmt.Sprintf("Thermal policy violation (severity: %d) detected at %s",
-					severity, violation.Timestamp.Format(time.RFC3339)),
-				ExtraInfo: map[string]string{
-					"severity":  fmt.Sprintf("%d", severity),
-					"timestamp": violation.Timestamp.Format(time.RFC3339),
-				},
-			}
-
-			// Insert the event
-			cctx, ccancel := context.WithTimeout(c.ctx, 15*time.Second)
-			defer ccancel()
-			if err := c.eventBucket.Insert(cctx, event); err != nil {
-				log.Logger.Errorw("failed to insert thermal violation event", "error", err)
-			}
-		}
-	}
 }
 
 var _ components.CheckResult = &checkResult{}

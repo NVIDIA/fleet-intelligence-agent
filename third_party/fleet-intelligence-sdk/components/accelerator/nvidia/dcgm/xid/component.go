@@ -39,14 +39,8 @@ const Name = "accelerator-nvidia-dcgm-xid"
 const (
 	defaultHealthCheckInterval = time.Minute
 
-	// Event names for XID policy violations
-	EventNameXIDPolicyViolation = "xid_policy_violation"
-
 	// Legacy event name for XID errors (kept for backward compatibility)
 	EventNameXIDError = "xid_error"
-
-	// Default retention period for events
-	DefaultRetentionPeriod = 3 * 24 * time.Hour
 )
 
 var _ components.Component = &component{}
@@ -54,16 +48,11 @@ var _ components.Component = &component{}
 type component struct {
 	ctx    context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
 
-	healthCheckInterval      time.Duration
-	dcgmInstance             nvidiadcgm.Instance
-	dcgmFieldValueCache      *nvidiadcgm.FieldValueCache
-	dcgmPolicyViolationCache *nvidiadcgm.PolicyViolationCache
-	eventBucket              eventstore.Bucket
-
-	// Policy violation listener - receives violations from DCGM
-	policyViolationCh <-chan dcgm.PolicyViolation
+	healthCheckInterval time.Duration
+	dcgmInstance        nvidiadcgm.Instance
+	dcgmFieldValueCache *nvidiadcgm.FieldValueCache
+	eventBucket         eventstore.Bucket
 
 	// XID-specific field group and watching
 	fieldGroupID    dcgm.FieldHandle
@@ -88,12 +77,11 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	}
 
 	c := &component{
-		ctx:                      cctx,
-		cancel:                   ccancel,
-		healthCheckInterval:      healthCheckInterval,
-		dcgmInstance:             gpudInstance.DCGMInstance,
-		dcgmFieldValueCache:      gpudInstance.DCGMFieldValueCache,
-		dcgmPolicyViolationCache: gpudInstance.DCGMPolicyViolationCache,
+		ctx:                 cctx,
+		cancel:              ccancel,
+		healthCheckInterval: healthCheckInterval,
+		dcgmInstance:        gpudInstance.DCGMInstance,
+		dcgmFieldValueCache: gpudInstance.DCGMFieldValueCache,
 	}
 
 	// Only initialize if DCGM is available
@@ -131,46 +119,6 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 
 		// Initialize lastCheckTime to current time to start tracking from now
 		c.lastCheckTime = time.Now().UTC()
-
-		// Setup event bucket and subscribe to XID policy violations.
-		// policy monitoring is enabled only when the flag is explicitly set.
-		if gpudInstance.EventStore != nil && gpudInstance.DCGMPolicyViolationCache != nil && gpudInstance.EnableDCGMPolicy {
-			// Check existing policies and register XID policy if needed
-			existingPolicies := c.dcgmInstance.GetExistingPolicies()
-			shouldEnableXidPolicy := false
-			hadExistingPolicies := existingPolicies != nil && existingPolicies.Conditions != nil && len(existingPolicies.Conditions) > 0
-
-			if !hadExistingPolicies {
-				log.Logger.Infow("no existing policies, registering XID policy")
-				policyConfig := dcgm.PolicyConfig{
-					Condition: dcgm.XidPolicy,
-				}
-				gpudInstance.DCGMPolicyViolationCache.RegisterPolicyToSet(policyConfig)
-				shouldEnableXidPolicy = true
-			} else {
-				// Check if XID policy is already configured
-				if _, hasXidPolicy := existingPolicies.Conditions[dcgm.XidPolicy]; hasXidPolicy {
-					shouldEnableXidPolicy = true
-				} else {
-					log.Logger.Infow("XID policy not configured, skipping violation monitoring")
-				}
-			}
-
-			// Only setup event bucket and subscribe if XID policy is enabled
-			if shouldEnableXidPolicy {
-				c.eventBucket, err = gpudInstance.EventStore.Bucket(Name)
-				if err != nil {
-					log.Logger.Warnw("failed to create event bucket, policy violation logging disabled", "error", err)
-				} else {
-					// Subscribe to XID policy violations from centralized cache
-					c.policyViolationCh = gpudInstance.DCGMPolicyViolationCache.Subscribe("XidPolicy")
-					// Start processing violations
-					c.wg.Add(1)
-					go c.processPolicyViolations()
-					log.Logger.Infow("XID policy violation monitoring enabled")
-				}
-			}
-		}
 	}
 
 	return c, nil
@@ -242,18 +190,9 @@ func (c *component) Events(ctx context.Context, since time.Time) (apiv1.Events, 
 	return ret, nil
 }
 
-// enrichXIDEvent adds type and message to XID events and policy violations
+// enrichXIDEvent adds type and message to XID events
 func (c *component) enrichXIDEvent(event eventstore.Event) eventstore.Event {
 	ret := event
-
-	// Handle XID policy violations
-	if event.Name == EventNameXIDPolicyViolation && event.ExtraInfo != nil {
-		ret.Type = string(apiv1.EventTypeCritical) // Fatal/Critical severity - XIDs are serious
-		xidErrNum := event.ExtraInfo["xid_err_num"]
-		ret.Message = fmt.Sprintf("XID policy violation at %s (XID error number: %s)",
-			event.Time.Format(time.RFC3339), xidErrNum)
-		return ret
-	}
 
 	if event.Name == EventNameXIDError && event.ExtraInfo != nil {
 		xidCode := event.ExtraInfo["xid_code"]
@@ -280,7 +219,6 @@ func (c *component) Close() error {
 	}
 
 	c.cancel()
-	c.wg.Wait() // Wait for processPolicyViolations goroutine to complete
 	return nil
 }
 
@@ -513,56 +451,3 @@ func (cr *checkResult) HealthStates() apiv1.HealthStates {
 	}}
 }
 
-// processPolicyViolations runs in a goroutine to listen for XID policy violations
-func (c *component) processPolicyViolations() {
-	defer c.wg.Done()
-
-	if c.policyViolationCh == nil {
-		return
-	}
-
-	log.Logger.Debugw("XID policy violation processor started")
-	defer log.Logger.Debugw("XID policy violation processor stopped")
-
-	for {
-		select {
-		case <-c.ctx.Done():
-			return
-
-		case violation, ok := <-c.policyViolationCh:
-			if !ok {
-				log.Logger.Warnw("XID policy violation channel closed")
-				return
-			}
-
-			// Extract XID error information
-			var xidErrNum uint
-			if xidData, ok := violation.Data.(dcgm.XidPolicyCondition); ok {
-				xidErrNum = xidData.ErrNum
-			} else {
-				xidErrNum = 0
-			}
-
-			// Create event
-			event := eventstore.Event{
-				Component: Name,
-				Time:      violation.Timestamp.UTC(),
-				Name:      EventNameXIDPolicyViolation,
-				Type:      string(apiv1.EventTypeCritical), // Fatal/Critical severity - XIDs are serious
-				Message: fmt.Sprintf("XID policy violation at %s (XID error number: %d)",
-					violation.Timestamp.Format(time.RFC3339), xidErrNum),
-				ExtraInfo: map[string]string{
-					"xid_err_num": fmt.Sprintf("%d", xidErrNum),
-					"timestamp":   violation.Timestamp.Format(time.RFC3339),
-				},
-			}
-
-			// Insert the event
-			cctx, ccancel := context.WithTimeout(c.ctx, 15*time.Second)
-			defer ccancel()
-			if err := c.eventBucket.Insert(cctx, event); err != nil {
-				log.Logger.Errorw("failed to insert XID violation event", "error", err)
-			}
-		}
-	}
-}
