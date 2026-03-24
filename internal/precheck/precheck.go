@@ -18,15 +18,14 @@ package precheck
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
 
 	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
-	godcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/dcgmversion"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
@@ -36,12 +35,10 @@ const minimumDCGMVersion = "4.2.3"
 const minimumDriverMajorVersion = 510
 
 var (
-	newNVML              = nvidianvml.New
-	getMachineInfo       = machineinfo.GetMachineInfo
-	lookPath             = exec.LookPath
-	dcgmInit             = initDCGMStandalone
-	getHostengineVersion = getDCGMHostengineVersion
-	getenv               = os.Getenv
+	newNVML           = nvidianvml.New
+	getMachineInfo    = machineinfo.GetMachineInfo
+	lookPath          = exec.LookPath
+	detectDCGMVersion = dcgmversion.DetectHostengineVersion
 )
 
 type nvmlInstance = nvidianvml.Instance
@@ -331,67 +328,10 @@ func detectNVAttest() bool {
 }
 
 func detectDCGM() (bool, string) {
-	cleanup, err := dcgmInit()
+	version, err := detectDCGMVersion()
 	if err != nil {
 		return false, ""
 	}
-	defer cleanup()
-
-	version, err := getHostengineVersion()
-	if err != nil {
-		return true, ""
-	}
 
 	return true, version
-}
-
-func extractVersion(raw string) string {
-	for _, pair := range strings.Split(raw, ";") {
-		key, value, ok := strings.Cut(pair, ":")
-		if !ok {
-			continue
-		}
-		if strings.TrimSpace(key) == "version" {
-			return strings.TrimSpace(value)
-		}
-	}
-
-	return ""
-}
-
-func initDCGMStandalone() (func(), error) {
-	initParams := resolveDCGMInitFromEnv()
-	return godcgm.Init(godcgm.Standalone, initParams.address, initParams.isUnixSocket)
-}
-
-func getDCGMHostengineVersion() (string, error) {
-	versionInfo, err := godcgm.GetHostengineVersionInfo()
-	if err != nil {
-		return "", err
-	}
-
-	return extractVersion(versionInfo.RawBuildInfoString), nil
-}
-
-type dcgmInitParams struct {
-	address      string
-	isUnixSocket string
-}
-
-func resolveDCGMInitFromEnv() dcgmInitParams {
-	address := strings.TrimSpace(getenv("DCGM_URL"))
-	isUnixSocket := "0"
-
-	if truthy, err := strconv.ParseBool(strings.TrimSpace(getenv("DCGM_URL_IS_UNIX_SOCKET"))); err == nil && truthy {
-		isUnixSocket = "1"
-	}
-
-	if address == "" {
-		address = "localhost"
-	}
-
-	return dcgmInitParams{
-		address:      address,
-		isUnixSocket: isUnixSocket,
-	}
 }

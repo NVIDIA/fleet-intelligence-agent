@@ -178,6 +178,7 @@ func TestCSVConverter_Convert_MachineInfo(t *testing.T) {
 
 	machineInfo := &machineinfo.MachineInfo{
 		FleetintVersion: "0.1.5",
+		DCGMVersion:     "4.2.3",
 		OSImage:         "Ubuntu 22.04",
 		KernelVersion:   "5.15.0",
 		CPUInfo: &apiv1.MachineCPUInfo{
@@ -223,6 +224,7 @@ func TestCSVConverter_Convert_MachineInfo(t *testing.T) {
 	// Should have multiple rows for machine info attributes
 	assert.Greater(t, len(records), 5)
 	assert.Equal(t, []string{"attribute_name", "attribute_value"}, records[0])
+	assert.Contains(t, records, []string{"DCGM Version", "4.2.3"})
 }
 
 func TestCSVConverter_Convert_EmptyData(t *testing.T) {

@@ -304,15 +304,11 @@ func TestCollectInputCallsDCGMInit(t *testing.T) {
 
 	originalNewNVML := newNVML
 	originalLookPath := lookPath
-	originalDCGMInit := dcgmInit
-	originalGetHostengineVersion := getHostengineVersion
-	originalGetenv := getenv
+	originalDetectDCGMVersion := detectDCGMVersion
 	t.Cleanup(func() {
 		newNVML = originalNewNVML
 		lookPath = originalLookPath
-		dcgmInit = originalDCGMInit
-		getHostengineVersion = originalGetHostengineVersion
-		getenv = originalGetenv
+		detectDCGMVersion = originalDetectDCGMVersion
 	})
 
 	newNVML = func() (nvmlInstance, error) {
@@ -321,16 +317,10 @@ func TestCollectInputCallsDCGMInit(t *testing.T) {
 	lookPath = func(file string) (string, error) {
 		return "/usr/bin/" + file, nil
 	}
-	getenv = func(string) string {
-		return ""
-	}
 
-	dcgmInitCalled := false
-	dcgmInit = func() (func(), error) {
-		dcgmInitCalled = true
-		return func() {}, nil
-	}
-	getHostengineVersion = func() (string, error) {
+	detectDCGMCalled := false
+	detectDCGMVersion = func() (string, error) {
+		detectDCGMCalled = true
 		return "4.2.3", nil
 	}
 
@@ -340,7 +330,7 @@ func TestCollectInputCallsDCGMInit(t *testing.T) {
 	require.NotNil(t, input.DCGMReachable)
 	assert.True(t, *input.DCGMReachable)
 	assert.Equal(t, "4.2.3", input.DCGMVersion)
-	assert.True(t, dcgmInitCalled)
+	assert.True(t, detectDCGMCalled)
 }
 
 func machineInfoWithGPU(architecture, driverVersion string) *machineinfo.MachineInfo {
