@@ -16,11 +16,14 @@
 package common
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 )
 
 func TestFormatEnrichedIncidents(t *testing.T) {
@@ -151,6 +154,160 @@ func TestHealthResultToSeverity(t *testing.T) {
 	}
 	if got := healthResultToSeverity(dcgm.DCGM_HEALTH_RESULT_FAIL); got != apiv1.HealthStateTypeUnhealthy {
 		t.Fatalf("healthResultToSeverity(FAIL) = %q", got)
+	}
+}
+
+// fakeEventBucket is a minimal in-memory eventstore.Bucket for testing.
+type fakeEventBucket struct {
+	inserted []eventstore.Event
+}
+
+func (f *fakeEventBucket) Name() string { return "fake" }
+func (f *fakeEventBucket) Insert(_ context.Context, ev eventstore.Event) error {
+	f.inserted = append(f.inserted, ev)
+	return nil
+}
+func (f *fakeEventBucket) Find(_ context.Context, _ eventstore.Event) (*eventstore.Event, error) {
+	return nil, nil
+}
+func (f *fakeEventBucket) Get(_ context.Context, _ time.Time) (eventstore.Events, error) {
+	return nil, nil
+}
+func (f *fakeEventBucket) Latest(_ context.Context) (*eventstore.Event, error) { return nil, nil }
+func (f *fakeEventBucket) Purge(_ context.Context, _ int64) (int, error)       { return 0, nil }
+func (f *fakeEventBucket) Close()                                               {}
+
+func TestEmitNewIncidentEvents(t *testing.T) {
+	now := time.Now().UTC()
+	ctx := context.Background()
+
+	gpu0Thermal := apiv1.HealthStateIncident{
+		EntityID: "GPU-0",
+		Error:    "DCGM_FR_TEMP_VIOLATION",
+		Message:  "temp too high",
+		Severity: apiv1.HealthStateTypeDegraded,
+	}
+	gpu1Mem := apiv1.HealthStateIncident{
+		EntityID: "GPU-1",
+		Error:    "DCGM_FR_VOLATILE_DBE_DETECTED",
+		Message:  "memory error",
+		Severity: apiv1.HealthStateTypeUnhealthy,
+	}
+	// Same EntityID as gpu0Thermal but different Severity — distinct key.
+	gpu0ThermalEscalated := apiv1.HealthStateIncident{
+		EntityID: "GPU-0",
+		Error:    "DCGM_FR_TEMP_VIOLATION",
+		Message:  "temp critical",
+		Severity: apiv1.HealthStateTypeUnhealthy,
+	}
+	// Same EntityID as gpu0Thermal but different Error — distinct key.
+	gpu0Power := apiv1.HealthStateIncident{
+		EntityID: "GPU-0",
+		Error:    "DCGM_FR_POWER_VIOLATION",
+		Message:  "power too high",
+		Severity: apiv1.HealthStateTypeDegraded,
+	}
+
+	tests := []struct {
+		name          string
+		prev          []apiv1.HealthStateIncident
+		curr          []apiv1.HealthStateIncident
+		wantCount     int
+		wantEventType string // of first event, if any
+	}{
+		{
+			name:      "no incidents",
+			prev:      nil,
+			curr:      nil,
+			wantCount: 0,
+		},
+		{
+			name:      "same incident in prev and curr — no new event",
+			prev:      []apiv1.HealthStateIncident{gpu0Thermal},
+			curr:      []apiv1.HealthStateIncident{gpu0Thermal},
+			wantCount: 0,
+		},
+		{
+			name:          "new incident not in prev — event emitted",
+			prev:          nil,
+			curr:          []apiv1.HealthStateIncident{gpu0Thermal},
+			wantCount:     1,
+			wantEventType: string(apiv1.EventTypeWarning),
+		},
+		{
+			name:          "unhealthy severity maps to critical",
+			prev:          nil,
+			curr:          []apiv1.HealthStateIncident{gpu1Mem},
+			wantCount:     1,
+			wantEventType: string(apiv1.EventTypeCritical),
+		},
+		{
+			name:      "multiple new incidents all emitted",
+			prev:      nil,
+			curr:      []apiv1.HealthStateIncident{gpu0Thermal, gpu1Mem},
+			wantCount: 2,
+		},
+		{
+			name:      "one existing one new — only new emitted",
+			prev:      []apiv1.HealthStateIncident{gpu0Thermal},
+			curr:      []apiv1.HealthStateIncident{gpu0Thermal, gpu1Mem},
+			wantCount: 1,
+		},
+		{
+			// Same EntityID + Error, different Severity → different key → new event.
+			name:          "same entityID and error but escalated severity — new event emitted",
+			prev:          []apiv1.HealthStateIncident{gpu0Thermal},
+			curr:          []apiv1.HealthStateIncident{gpu0ThermalEscalated},
+			wantCount:     1,
+			wantEventType: string(apiv1.EventTypeCritical),
+		},
+		{
+			// Same EntityID + Severity, different Error → different key → new event.
+			name:      "same entityID and severity but different error — new event emitted",
+			prev:      []apiv1.HealthStateIncident{gpu0Thermal},
+			curr:      []apiv1.HealthStateIncident{gpu0Power},
+			wantCount: 1,
+		},
+		{
+			// Both old and new incidents for the same GPU co-exist in curr.
+			name:      "same entityID two distinct errors — both emitted when neither in prev",
+			prev:      nil,
+			curr:      []apiv1.HealthStateIncident{gpu0Thermal, gpu0Power},
+			wantCount: 2,
+		},
+		{
+			// gpu0Thermal already seen; gpu0Power is new — only gpu0Power emitted.
+			name:      "same entityID two errors — existing suppressed new emitted",
+			prev:      []apiv1.HealthStateIncident{gpu0Thermal},
+			curr:      []apiv1.HealthStateIncident{gpu0Thermal, gpu0Power},
+			wantCount: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bucket := &fakeEventBucket{}
+			EmitNewIncidentEvents(ctx, now, "test-component", "test_incident", bucket, tt.prev, tt.curr)
+
+			if len(bucket.inserted) != tt.wantCount {
+				t.Fatalf("inserted %d events, want %d", len(bucket.inserted), tt.wantCount)
+			}
+			if tt.wantCount > 0 {
+				ev := bucket.inserted[0]
+				if ev.Name != "test_incident" {
+					t.Errorf("event Name = %q, want %q", ev.Name, "test_incident")
+				}
+				if tt.wantEventType != "" && ev.Type != tt.wantEventType {
+					t.Errorf("event Type = %q, want %q", ev.Type, tt.wantEventType)
+				}
+				if ev.ExtraInfo[EventKeyEntityID] == "" {
+					t.Errorf("event ExtraInfo[entity_id] is empty")
+				}
+				if ev.ExtraInfo[EventKeyErrorCode] == "" {
+					t.Errorf("event ExtraInfo[error_code] is empty")
+				}
+			}
+		})
 	}
 }
 

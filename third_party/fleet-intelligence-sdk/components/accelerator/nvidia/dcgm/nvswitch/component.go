@@ -29,11 +29,14 @@ import (
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
 	dcgmcommon "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/dcgm/common"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
 )
 
 const Name = "accelerator-nvidia-dcgm-nvswitch"
+
+const EventNameIncident = "dcgm_nvswitch_incident"
 
 const (
 	defaultHealthCheckInterval = time.Minute
@@ -48,6 +51,8 @@ type component struct {
 	healthCheckInterval time.Duration
 	dcgmInstance        nvidiadcgm.Instance
 	dcgmHealthCache     *nvidiadcgm.HealthCache
+
+	eventBucket eventstore.Bucket
 
 	lastMu          sync.RWMutex
 	lastCheckResult *checkResult
@@ -106,6 +111,15 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		}
 	}
 
+	if gpudInstance.EventStore != nil {
+		var err error
+		c.eventBucket, err = gpudInstance.EventStore.Bucket(Name)
+		if err != nil {
+			ccancel()
+			return nil, err
+		}
+	}
+
 	return c, nil
 }
 
@@ -156,17 +170,38 @@ func (c *component) LastHealthStates() apiv1.HealthStates {
 }
 
 func (c *component) Events(ctx context.Context, since time.Time) (apiv1.Events, error) {
-	return nil, nil
+	if c.eventBucket == nil {
+		return nil, nil
+	}
+	events, err := c.eventBucket.Get(ctx, since)
+	if err != nil {
+		return nil, err
+	}
+	var ret apiv1.Events
+	for _, ev := range events {
+		ret = append(ret, ev.ToEvent())
+	}
+	return ret, nil
 }
 
 func (c *component) Close() error {
 	log.Logger.Debugw("closing component")
 	c.cancel()
+	if c.eventBucket != nil {
+		c.eventBucket.Close()
+	}
 	return nil
 }
 
 func (c *component) Check() components.CheckResult {
 	log.Logger.Infow("checking nvidia NVSwitch metrics via DCGM")
+
+	c.lastMu.RLock()
+	var prevIncidents []apiv1.HealthStateIncident
+	if c.lastCheckResult != nil {
+		prevIncidents = c.lastCheckResult.incidents
+	}
+	c.lastMu.RUnlock()
 
 	cr := &checkResult{ts: time.Now().UTC()}
 	defer func() {
@@ -271,6 +306,8 @@ func (c *component) Check() components.CheckResult {
 		cr.health = apiv1.HealthStateTypeDegraded
 		cr.reason = "unknown NVSwitch health status"
 	}
+
+	dcgmcommon.EmitNewIncidentEvents(c.ctx, cr.ts, Name, EventNameIncident, c.eventBucket, prevIncidents, cr.incidents)
 
 	return cr
 }

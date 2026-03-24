@@ -17,12 +17,75 @@
 package common
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 )
+
+// Extra-info key constants for DCGM health incident events.
+const (
+	EventKeyEntityID  = "entity_id"
+	EventKeyErrorCode = "error_code"
+)
+
+// EmitNewIncidentEvents inserts an event into eventBucket for each incident in curr
+// that is not already present in prev (onset detection). It uses EntityID+Severity+Error
+// as the deduplication key to identify the same fault across check cycles.
+// eventName should be a component-specific constant (e.g. "dcgm_thermal_incident").
+// Errors are logged as warnings and do not propagate to the caller.
+func EmitNewIncidentEvents(
+	ctx context.Context,
+	now time.Time,
+	componentName string,
+	eventName string,
+	eventBucket eventstore.Bucket,
+	prev []apiv1.HealthStateIncident,
+	curr []apiv1.HealthStateIncident,
+) {
+	if eventBucket == nil || len(curr) == 0 {
+		return
+	}
+
+	// Build dedup set from previous incidents.
+	prevKeys := make(map[string]struct{}, len(prev))
+	for _, inc := range prev {
+		prevKeys[inc.EntityID+"/"+string(inc.Severity)+"/"+inc.Error] = struct{}{}
+	}
+
+	for _, inc := range curr {
+		key := inc.EntityID + "/" + string(inc.Severity) + "/" + inc.Error
+		if _, seen := prevKeys[key]; seen {
+			continue
+		}
+
+		eventType := apiv1.EventTypeWarning
+		if inc.Severity == apiv1.HealthStateTypeUnhealthy {
+			eventType = apiv1.EventTypeCritical
+		}
+
+		ev := eventstore.Event{
+			Component: componentName,
+			Time:      now,
+			Name:      eventName,
+			Type:      string(eventType),
+			Message:   inc.Message,
+			ExtraInfo: map[string]string{
+				EventKeyEntityID:  inc.EntityID,
+				EventKeyErrorCode: inc.Error,
+			},
+		}
+		if err := eventBucket.Insert(ctx, ev); err != nil {
+			log.Logger.Warnw("failed to insert DCGM incident event", "component", componentName, "error", err)
+		}
+		prevKeys[key] = struct{}{} // suppress in-curr duplicates
+	}
+}
 
 var healthCheckErrorCodeNames = map[dcgm.HealthCheckErrorCode]string{
 	dcgm.DCGM_FR_OK:                              "DCGM_FR_OK",
