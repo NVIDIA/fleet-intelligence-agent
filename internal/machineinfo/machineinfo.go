@@ -31,8 +31,11 @@ import (
 	"github.com/olekukonko/tablewriter"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/dcgmversion"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/version"
 )
+
+var getDCGMVersion = dcgmversion.DetectHostengineVersion
 
 // MachineInfo is a custom struct that replaces GPUdVersion with FleetintVersion
 type MachineInfo struct {
@@ -42,6 +45,8 @@ type MachineInfo struct {
 	GPUDriverVersion string `json:"gpuDriverVersion,omitempty"`
 	// CUDAVersion represents the current version of cuda library.
 	CUDAVersion string `json:"cudaVersion,omitempty"`
+	// DCGMVersion represents the current version of the DCGM HostEngine when reachable.
+	DCGMVersion string `json:"dcgmVersion,omitempty"`
 	// ContainerRuntime Version reported by the node through runtime remote API (e.g. containerd://1.4.2).
 	ContainerRuntimeVersion string `json:"containerRuntimeVersion,omitempty"`
 	// Kernel Version reported by the node from 'uname -r' (e.g. 3.16.0-0.bpo.4-amd64).
@@ -117,11 +122,14 @@ func GetMachineInfo(nvmlInstance nvidianvml.Instance, opts ...MachineInfoOption)
 		}
 	}
 
+	dcgmVersion, _ := getDCGMVersion()
+
 	// Convert to our custom MachineInfo struct with Fleet Intelligence version
 	return &MachineInfo{
 		FleetintVersion:         version.Version,
 		GPUDriverVersion:        gpudInfo.GPUDriverVersion,
 		CUDAVersion:             gpudInfo.CUDAVersion,
+		DCGMVersion:             dcgmVersion,
 		ContainerRuntimeVersion: gpudInfo.ContainerRuntimeVersion,
 		KernelVersion:           gpudInfo.KernelVersion,
 		OSImage:                 gpudInfo.OSImage,
@@ -165,6 +173,7 @@ func (i *MachineInfo) RenderTable(wr io.Writer) {
 	}
 
 	table.Append([]string{"CUDA Version", i.CUDAVersion})
+	table.Append([]string{"DCGM Version", i.DCGMVersion})
 	if i.GPUInfo != nil {
 		table.Append([]string{"GPU Driver Version", i.GPUDriverVersion})
 		table.Append([]string{"GPU Product", i.GPUInfo.Product})

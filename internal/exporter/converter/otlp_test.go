@@ -313,6 +313,7 @@ func TestOTLPConverter_Convert_WithMachineInfo(t *testing.T) {
 		MachineID: "test-machine",
 		MachineInfo: &machineinfo.MachineInfo{
 			FleetintVersion: "0.1.5",
+			DCGMVersion:     "4.2.3",
 			OSImage:         "Ubuntu 22.04",
 			KernelVersion:   "5.15.0",
 			CPUInfo: &apiv1.MachineCPUInfo{
@@ -354,6 +355,7 @@ func TestOTLPConverter_Convert_WithMachineInfo(t *testing.T) {
 		}
 	}
 	assert.True(t, hasServiceName, "Should have service.name attribute")
+	assert.Equal(t, "4.2.3", findAttribute(t, rm.Resource.Attributes, "dcgmVersion").GetStringValue())
 }
 
 func TestOTLPConverter_Convert_WithAttestationData(t *testing.T) {

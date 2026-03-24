@@ -34,6 +34,15 @@ import (
 
 // TestGetMachineInfo tests the GetMachineInfo function
 func TestGetMachineInfo(t *testing.T) {
+	originalGetDCGMVersion := getDCGMVersion
+	t.Cleanup(func() {
+		getDCGMVersion = originalGetDCGMVersion
+	})
+
+	getDCGMVersion = func() (string, error) {
+		return "4.2.3", nil
+	}
+
 	tests := []struct {
 		name     string
 		wantErr  bool
@@ -46,6 +55,7 @@ func TestGetMachineInfo(t *testing.T) {
 				assert.NotNil(t, info)
 				// The version should be set from the version package
 				assert.Equal(t, version.Version, info.FleetintVersion)
+				assert.Equal(t, "4.2.3", info.DCGMVersion)
 				// Other fields should be populated by the underlying GetMachineInfo
 				assert.NotEmpty(t, info.Hostname)
 			},
@@ -78,6 +88,7 @@ func TestMachineInfoStruct(t *testing.T) {
 		FleetintVersion:         "1.0.0-test",
 		GPUDriverVersion:        "550.54.15",
 		CUDAVersion:             "12.4",
+		DCGMVersion:             "4.2.3",
 		ContainerRuntimeVersion: "containerd://1.7.13",
 		KernelVersion:           "6.5.0-28-generic",
 		OSImage:                 "Ubuntu 22.04.4 LTS",
@@ -120,6 +131,7 @@ func TestMachineInfoStruct(t *testing.T) {
 	assert.Equal(t, "1.0.0-test", testInfo.FleetintVersion)
 	assert.Equal(t, "550.54.15", testInfo.GPUDriverVersion)
 	assert.Equal(t, "12.4", testInfo.CUDAVersion)
+	assert.Equal(t, "4.2.3", testInfo.DCGMVersion)
 	assert.Equal(t, "containerd://1.7.13", testInfo.ContainerRuntimeVersion)
 	assert.Equal(t, "6.5.0-28-generic", testInfo.KernelVersion)
 	assert.Equal(t, "Ubuntu 22.04.4 LTS", testInfo.OSImage)
@@ -192,6 +204,7 @@ func TestRenderTable_BasicFields(t *testing.T) {
 		OSImage:                 "Ubuntu 22.04.4 LTS",
 		KernelVersion:           "6.5.0-28-generic",
 		CUDAVersion:             "12.4",
+		DCGMVersion:             "4.2.3",
 	}
 	var buf bytes.Buffer
 
@@ -206,6 +219,7 @@ func TestRenderTable_BasicFields(t *testing.T) {
 	assert.Contains(t, output, "Ubuntu 22.04.4 LTS")
 	assert.Contains(t, output, "6.5.0-28-generic")
 	assert.Contains(t, output, "12.4")
+	assert.Contains(t, output, "4.2.3")
 
 	// Verify labels are present
 	assert.Contains(t, output, "Fleetint Version")
@@ -213,6 +227,7 @@ func TestRenderTable_BasicFields(t *testing.T) {
 	assert.Contains(t, output, "OS Image")
 	assert.Contains(t, output, "Kernel Version")
 	assert.Contains(t, output, "CUDA Version")
+	assert.Contains(t, output, "DCGM Version")
 }
 
 // TestRenderTable_WithCPUInfo tests RenderTable with CPU information
@@ -454,6 +469,7 @@ func TestMachineInfo_JSONMarshaling(t *testing.T) {
 		FleetintVersion:         "1.0.0",
 		GPUDriverVersion:        "550.54.15",
 		CUDAVersion:             "12.4",
+		DCGMVersion:             "4.2.3",
 		ContainerRuntimeVersion: "containerd://1.7.13",
 		KernelVersion:           "6.5.0-28-generic",
 		OSImage:                 "Ubuntu 22.04.4 LTS",
@@ -469,6 +485,22 @@ func TestMachineInfo_JSONMarshaling(t *testing.T) {
 	assert.NotEmpty(t, info.FleetintVersion)
 	assert.NotEmpty(t, info.GPUDriverVersion)
 	assert.NotEmpty(t, info.CUDAVersion)
+	assert.NotEmpty(t, info.DCGMVersion)
+}
+
+func TestGetMachineInfo_DCGMVersionBestEffort(t *testing.T) {
+	originalGetDCGMVersion := getDCGMVersion
+	t.Cleanup(func() {
+		getDCGMVersion = originalGetDCGMVersion
+	})
+
+	getDCGMVersion = func() (string, error) {
+		return "", assert.AnError
+	}
+
+	info, err := GetMachineInfo(nvidianvml.NewNoOp())
+	require.NoError(t, err)
+	assert.Empty(t, info.DCGMVersion)
 }
 
 // TestRenderTable_WithNilSubStructs tests that RenderTable handles nil sub-structs gracefully
