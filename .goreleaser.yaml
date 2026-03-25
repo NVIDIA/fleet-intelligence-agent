@@ -187,19 +187,19 @@ changelog:
   use: github
   groups:
     - title: 'New Features'
-      regexp: "^(\\[.*?\\]\\s+)?feat(\\(\\w+\\))?:"
+      regexp: '.*\bfeat(?:\([^)]+\))?!?:'
       order: 0
     - title: 'Bug Fixes'
-      regexp: "^(\\[.*?\\]\\s+)?fix(\\(\\w+\\))?:"
+      regexp: '.*\bfix(?:\([^)]+\))?!?:'
       order: 1
     - title: 'Performance Improvements'
-      regexp: "^(\\[.*?\\]\\s+)?perf(\\(\\w+\\))?:"
+      regexp: '.*\bperf(?:\([^)]+\))?!?:'
       order: 2
     - title: 'Documentation Updates'
-      regexp: "^(\\[.*?\\]\\s+)?docs(\\(\\w+\\))?:"
+      regexp: '.*\bdocs(?:\([^)]+\))?!?:'
       order: 3
     - title: 'Refactors'
-      regexp: "^(\\[.*?\\]\\s+)?refactor(\\(\\w+\\))?:"
+      regexp: '.*\brefactor(?:\([^)]+\))?!?:'
       order: 4
     - title: 'Other Changes'
       order: 999
