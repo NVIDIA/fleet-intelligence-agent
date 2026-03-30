@@ -118,7 +118,6 @@ These are the `fleetint run` flags supported by the CLI.
 | `--listen-address` | HTTP listen address for the agent API server. | CLI default `127.0.0.1:15133` | `FLEETINT_FLAGS="--listen-address=..."` | `listenAddress` |
 | `--retention-period` | Retention period for stored metrics and events. Minimum `1m`. | `24h` | `FLEETINT_FLAGS="--retention-period=..."` | `retentionPeriod` |
 | `--components` | Comma-separated component selection. Use `all`, `*`, explicit names, and `-name` exclusions. | empty flag value, which means enable all components by default | `FLEETINT_FLAGS="--components=..."` | `components` |
-| `--gpu-count` | Override expected GPU count. Useful for testing. | `0` | `FLEETINT_FLAGS="--gpu-count=..."` | not exposed by chart by default |
 | `--offline-mode` | Disable the HTTP API server and write telemetry to files instead. | `false` | `FLEETINT_FLAGS="--offline-mode ..."` | not exposed by chart by default |
 | `--path` | Output directory for offline mode. Required with `--offline-mode`. | empty | `FLEETINT_FLAGS="--path=/path ..."` | not exposed by chart by default |
 | `--duration` | Offline-mode collection duration in `HH:MM:SS` format. Required with `--offline-mode`. | empty | `FLEETINT_FLAGS="--duration=00:05:00 ..."` | not exposed by chart by default |

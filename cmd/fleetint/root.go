@@ -52,11 +52,6 @@ func App() *cli.App {
 					Name:  "log-level,l",
 					Usage: "set the logging level [debug, info, warn, error]",
 				},
-				&cli.IntFlag{
-					Name:  "gpu-count",
-					Usage: "specifies the expected GPU count",
-					Value: 0,
-				},
 				&cli.StringFlag{
 					Name:   "infiniband-expected-port-states",
 					Usage:  "set the infiniband expected port states in JSON (leave empty for default, useful for testing)",
