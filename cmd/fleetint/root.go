@@ -94,11 +94,6 @@ func App() *cli.App {
 					Usage: "sets the components to enable (comma-separated, leave empty for default to enable all components, set 'none' or any other non-matching value to disable all components, prefix component name with '-' to disable it)",
 					Value: "",
 				},
-				&cli.IntFlag{
-					Name:  "gpu-count",
-					Usage: "specifies the expected GPU count",
-					Value: 0,
-				},
 				&cli.StringFlag{
 					Name:   "infiniband-expected-port-states",
 					Usage:  "set the infiniband expected port states in JSON (leave empty for default, useful for testing)",
