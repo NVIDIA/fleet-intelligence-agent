@@ -101,7 +101,7 @@ Apply with:
 
 ```bash
 helm upgrade --install fleet-intelligence-agent \
-  oci://ghcr.io/nvidia/fleet-intelligence-agent/chart \
+  oci://ghcr.io/nvidia/charts/fleet-intelligence-agent \
   -n <namespace> \
   -f values.yaml
 ```
