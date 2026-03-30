@@ -86,6 +86,7 @@ sudo systemctl restart fleetintd
 ```yaml
 logLevel: info
 listenAddress: 0.0.0.0:15133
+retentionPeriod: 24h
 components: all,-accelerator-nvidia-dcgm-prof
 
 env:
@@ -115,7 +116,7 @@ These are the `fleetint run` flags supported by the CLI.
 | `--log-level` | Log level: `debug`, `info`, `warn`, `error`. | unset by CLI; packaged bare-metal default is `warn` via `FLEETINT_FLAGS` | `FLEETINT_FLAGS="--log-level=..."` | `logLevel` |
 | `--log-file` | Log file path. Leave empty to log to stdout/stderr. | empty | `FLEETINT_FLAGS="--log-file=..."` | not exposed by chart by default |
 | `--listen-address` | HTTP listen address for the agent API server. | CLI default `127.0.0.1:15133` | `FLEETINT_FLAGS="--listen-address=..."` | `listenAddress` |
-| `--retention-period` | Retention period for stored metrics and events. Minimum `1m`. | `24h` | `FLEETINT_FLAGS="--retention-period=..."` | not exposed by chart by default |
+| `--retention-period` | Retention period for stored metrics and events. Minimum `1m`. | `24h` | `FLEETINT_FLAGS="--retention-period=..."` | `retentionPeriod` |
 | `--components` | Comma-separated component selection. Use `all`, `*`, explicit names, and `-name` exclusions. | empty flag value, which means enable all components by default | `FLEETINT_FLAGS="--components=..."` | `components` |
 | `--gpu-count` | Override expected GPU count. Useful for testing. | `0` | `FLEETINT_FLAGS="--gpu-count=..."` | not exposed by chart by default |
 | `--offline-mode` | Disable the HTTP API server and write telemetry to files instead. | `false` | `FLEETINT_FLAGS="--offline-mode ..."` | not exposed by chart by default |
@@ -191,14 +192,6 @@ Available component names:
 - `network-ethernet`
 - `os`
 - `library`
-
-## Settings Not Configured Directly Through `fleetint run`
-
-Some runtime values exist in the internal config, but they are not intended to be set directly by users through `fleetint run` flags or the documented environment variables:
-
-- `state`: defaults to `/var/lib/fleetint/fleetint.state` when running as root, or `~/.fleetint/fleetint.state` otherwise
-- `metrics_endpoint`, `logs_endpoint`, and `auth_token`: normally populated by `fleetint enroll` and stored in metadata
-- `timeout`: defaults to `30s` and is not exposed as a public flag or documented env var
 
 ## Verify Effective Configuration
 
