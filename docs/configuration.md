@@ -124,15 +124,6 @@ These are the `fleetint run` flags supported by the CLI.
 | `--format` | Offline-mode output format: `json` or `csv`. | `json` | `FLEETINT_FLAGS="--format=csv ..."` | not exposed by chart by default |
 | `--enable-fault-injection` | Enable the local fault-injection endpoint for testing. | `false` | `FLEETINT_FLAGS="--enable-fault-injection"` | not exposed by chart by default |
 
-### Hidden Test-Only Flags
-
-These flags exist in the CLI for testing and debugging, but they are hidden from normal help output and are not intended for standard deployment configuration.
-
-| Flag | Description |
-| --- | --- |
-| `--infiniband-expected-port-states` | Override expected InfiniBand port states using JSON input. |
-| `--infiniband-class-root-dir` | Override the InfiniBand class root directory. |
-
 ## Component Selection
 
 Use `--components` to control which monitoring components are enabled.
