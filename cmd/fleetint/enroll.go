@@ -116,9 +116,6 @@ func storeConfigInMetadata(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceE
 		return fmt.Errorf("failed to open state database: %w", err)
 	}
 	defer dbRW.Close()
-	if err := config.SecureStateFilePermissions(stateFile); err != nil {
-		return fmt.Errorf("failed to secure state database permissions: %w", err)
-	}
 
 	if err := pkgmetadata.CreateTableMetadata(context.Background(), dbRW); err != nil {
 		return fmt.Errorf("failed to create metadata table: %w", err)
