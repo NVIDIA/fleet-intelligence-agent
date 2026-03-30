@@ -145,22 +145,27 @@ func DefaultStateFile() (string, error) {
 	return filepath.Join(dir, "fleetint.state"), nil
 }
 
-// SecureStateFilePermissions ensures the state database file is owner-readable and owner-writable only.
+// SecureStateFilePermissions ensures the state database file and SQLite sidecars are owner-readable and owner-writable only.
 func SecureStateFilePermissions(path string) error {
 	if path == "" || path == ":memory:" {
 		return nil
 	}
 
-	info, err := osStat(path)
-	if err != nil {
-		if stdos.IsNotExist(err) {
-			return nil
+	for _, candidate := range []string{path, path + "-wal", path + "-shm"} {
+		info, err := osStat(candidate)
+		if err != nil {
+			if stdos.IsNotExist(err) {
+				continue
+			}
+			return err
 		}
-		return err
-	}
-	if info.IsDir() {
-		return fmt.Errorf("state file path %q is a directory", path)
+		if info.IsDir() {
+			return fmt.Errorf("state file path %q is a directory", candidate)
+		}
+		if err := osChmod(candidate, defaultStateFileMode); err != nil {
+			return err
+		}
 	}
 
-	return osChmod(path, defaultStateFileMode)
+	return nil
 }

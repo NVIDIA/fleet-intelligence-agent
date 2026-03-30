@@ -211,14 +211,20 @@ func TestDefaultStateFileRepairsExistingDirectoryPermissions(t *testing.T) {
 func TestSecureStateFilePermissions(t *testing.T) {
 	stateFile := filepath.Join(t.TempDir(), "fleetint.state")
 	require.NoError(t, os.WriteFile(stateFile, []byte("test"), 0o644))
+	require.NoError(t, os.WriteFile(stateFile+"-wal", []byte("wal"), 0o644))
+	require.NoError(t, os.WriteFile(stateFile+"-shm", []byte("shm"), 0o644))
 	require.NoError(t, os.Chmod(stateFile, 0o644))
+	require.NoError(t, os.Chmod(stateFile+"-wal", 0o644))
+	require.NoError(t, os.Chmod(stateFile+"-shm", 0o644))
 
 	err := SecureStateFilePermissions(stateFile)
 	require.NoError(t, err)
 
-	info, err := os.Stat(stateFile)
-	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	for _, candidate := range []string{stateFile, stateFile + "-wal", stateFile + "-shm"} {
+		info, err := os.Stat(candidate)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
 }
 
 func TestValidateHealthExporter(t *testing.T) {
