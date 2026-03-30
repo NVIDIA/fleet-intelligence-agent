@@ -83,12 +83,6 @@ sudo apt install ./fleetint_VERSION_arm64.deb
 
 The service will automatically restart with the new version.
 
-If `/var/lib/fleetint` already existed from an older installation, verify it is owner-only:
-
-```bash
-sudo chmod 700 /var/lib/fleetint
-```
-
 ## Uninstall
 
 ```bash
