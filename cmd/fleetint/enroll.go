@@ -143,6 +143,9 @@ func storeConfigInMetadata(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceE
 	if err := pkgmetadata.SetMetadata(context.Background(), dbRW, "nonce_endpoint", nonceEndpoint); err != nil {
 		return fmt.Errorf("failed to set nonce endpoint: %w", err)
 	}
+	if err := config.SecureStateFilePermissions(stateFile); err != nil {
+		return fmt.Errorf("failed to secure state database permissions: %w", err)
+	}
 
 	return nil
 }

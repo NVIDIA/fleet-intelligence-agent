@@ -18,6 +18,8 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -117,4 +119,36 @@ func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, enrollmentCalled)
+}
+
+func TestStoreConfigInMetadataSecuresFreshStateFile(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("test expects non-root default state path resolution")
+	}
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	err := storeConfigInMetadata(
+		"https://example.com/api/v1/health/enroll",
+		"https://example.com/api/v1/health/metrics",
+		"https://example.com/api/v1/health/logs",
+		"https://example.com/api/v1/health/nonce",
+		"jwt-token",
+		"sak-token",
+	)
+	require.NoError(t, err)
+
+	stateFile := filepath.Join(tmpHome, ".fleetint", "fleetint.state")
+	for _, candidate := range []string{stateFile, stateFile + "-wal", stateFile + "-shm"} {
+		info, err := os.Stat(candidate)
+		if os.IsNotExist(err) {
+			if candidate == stateFile {
+				require.NoError(t, err)
+			}
+			continue
+		}
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
 }

@@ -43,9 +43,6 @@ func unenrollCommand(c *cli.Context) error {
 		return fmt.Errorf("failed to open state database: %w", err)
 	}
 	defer dbRW.Close()
-	if err := config.SecureStateFilePermissions(stateFile); err != nil {
-		return fmt.Errorf("failed to secure state database permissions: %w", err)
-	}
 
 	// Ensure metadata table exists so unenroll is idempotent even on fresh nodes.
 	if err := pkgmetadata.CreateTableMetadata(context.Background(), dbRW); err != nil {
@@ -55,6 +52,9 @@ func unenrollCommand(c *cli.Context) error {
 	// Remove enrollment metadata entries
 	if err := removeEnrollmentMetadata(context.Background(), dbRW); err != nil {
 		return fmt.Errorf("failed to remove enrollment metadata: %w", err)
+	}
+	if err := config.SecureStateFilePermissions(stateFile); err != nil {
+		return fmt.Errorf("failed to secure state database permissions: %w", err)
 	}
 
 	log.Logger.Infow("Successfully un-enrolled from Fleet Intelligence backend")
