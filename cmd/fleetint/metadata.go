@@ -100,6 +100,9 @@ func metadataCommand(cliContext *cli.Context) error {
 		return fmt.Errorf("failed to open state file: %w", err)
 	}
 	defer dbRW.Close()
+	if err := config.SecureStateFilePermissions(stateFile); err != nil {
+		return fmt.Errorf("failed to secure state file permissions: %w", err)
+	}
 	log.Logger.Debugw("successfully opened state file for writing")
 
 	log.Logger.Debugw("deleting metadata data")

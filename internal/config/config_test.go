@@ -18,6 +18,8 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -161,10 +163,62 @@ func TestComponentSelection(t *testing.T) {
 }
 
 func TestDefaultStateFile(t *testing.T) {
+	origGeteuid := osGeteuid
+	origHomeDirFn := homeDirFn
+	t.Cleanup(func() {
+		osGeteuid = origGeteuid
+		homeDirFn = origHomeDirFn
+	})
+
+	tmpHome := t.TempDir()
+	osGeteuid = func() int { return 1000 }
+	homeDirFn = func() (string, error) { return tmpHome, nil }
+
 	path, err := DefaultStateFile()
 	require.NoError(t, err)
-	assert.NotEmpty(t, path)
+	assert.Equal(t, filepath.Join(tmpHome, ".fleetint", "fleetint.state"), path)
 	assert.Contains(t, path, "fleetint.state")
+
+	info, err := os.Stat(filepath.Dir(path))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm())
+}
+
+func TestDefaultStateFileRepairsExistingDirectoryPermissions(t *testing.T) {
+	origGeteuid := osGeteuid
+	origHomeDirFn := homeDirFn
+	t.Cleanup(func() {
+		osGeteuid = origGeteuid
+		homeDirFn = origHomeDirFn
+	})
+
+	tmpHome := t.TempDir()
+	stateDir := filepath.Join(tmpHome, ".fleetint")
+	require.NoError(t, os.MkdirAll(stateDir, 0o755))
+	require.NoError(t, os.Chmod(stateDir, 0o755))
+
+	osGeteuid = func() int { return 1000 }
+	homeDirFn = func() (string, error) { return tmpHome, nil }
+
+	_, err := DefaultStateFile()
+	require.NoError(t, err)
+
+	info, err := os.Stat(stateDir)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm())
+}
+
+func TestSecureStateFilePermissions(t *testing.T) {
+	stateFile := filepath.Join(t.TempDir(), "fleetint.state")
+	require.NoError(t, os.WriteFile(stateFile, []byte("test"), 0o644))
+	require.NoError(t, os.Chmod(stateFile, 0o644))
+
+	err := SecureStateFilePermissions(stateFile)
+	require.NoError(t, err)
+
+	info, err := os.Stat(stateFile)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 }
 
 func TestValidateHealthExporter(t *testing.T) {

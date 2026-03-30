@@ -108,6 +108,12 @@ sudo dnf install ./fleetint-VERSION-1.aarch64.rpm
 
 The service will automatically restart with the new version.
 
+If `/var/lib/fleetint` already existed from an older installation, verify it is owner-only:
+
+```bash
+sudo chmod 700 /var/lib/fleetint
+```
+
 ## Uninstall
 
 ```bash
