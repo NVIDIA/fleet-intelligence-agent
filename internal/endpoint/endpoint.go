@@ -44,8 +44,8 @@ func ValidateLocalServerURL(raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
-// ValidateEnrollEndpoint validates a trusted backend HTTPS endpoint.
-func ValidateEnrollEndpoint(raw string) (*url.URL, error) {
+// ValidateBackendEndpoint validates a trusted backend HTTPS endpoint.
+func ValidateBackendEndpoint(raw string) (*url.URL, error) {
 	parsed, err := parseURL(raw)
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func ValidateEnrollEndpoint(raw string) (*url.URL, error) {
 
 // BuildNonceEndpointFromEnroll derives the nonce endpoint from an enroll endpoint.
 func BuildNonceEndpointFromEnroll(raw string) (string, error) {
-	enrollURL, err := ValidateEnrollEndpoint(raw)
+	enrollURL, err := ValidateBackendEndpoint(raw)
 	if err != nil {
 		return "", fmt.Errorf("invalid enroll endpoint: %w", err)
 	}

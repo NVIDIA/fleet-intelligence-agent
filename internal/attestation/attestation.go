@@ -359,7 +359,7 @@ func (m *Manager) getValidatedNonceEndpoint(ctx context.Context) (string, error)
 		return "", fmt.Errorf("nonce endpoint not found in metadata")
 	}
 
-	validated, err := endpoint.ValidateEnrollEndpoint(nonceEndpoint)
+	validated, err := endpoint.ValidateBackendEndpoint(nonceEndpoint)
 	if err != nil {
 		return "", fmt.Errorf("invalid nonce endpoint: %w", err)
 	}

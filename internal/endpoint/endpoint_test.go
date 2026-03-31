@@ -65,13 +65,13 @@ func TestBuildNonceEndpointFromEnroll(t *testing.T) {
 	assert.Equal(t, "https://example.com/api/v1/health/nonce", got)
 }
 
-func TestValidateEnrollEndpoint(t *testing.T) {
+func TestValidateBackendEndpoint(t *testing.T) {
 	t.Parallel()
 
-	_, err := ValidateEnrollEndpoint("https://example.com/base")
+	_, err := ValidateBackendEndpoint("https://example.com/base")
 	require.NoError(t, err)
 
-	_, err = ValidateEnrollEndpoint("http://example.com/base")
+	_, err = ValidateBackendEndpoint("http://example.com/base")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "https")
 }

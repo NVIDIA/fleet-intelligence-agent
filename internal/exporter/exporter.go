@@ -268,7 +268,7 @@ func (e *healthExporter) refreshConfigFromMetadata(ctx context.Context) {
 	// Load metrics endpoint (update even if empty to handle un-enrollment)
 	if metricsEndpoint, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "metrics_endpoint"); err == nil {
 		if metricsEndpoint != "" {
-			validated, validateErr := endpoint.ValidateEnrollEndpoint(metricsEndpoint)
+			validated, validateErr := endpoint.ValidateBackendEndpoint(metricsEndpoint)
 			if validateErr != nil {
 				log.Logger.Errorw("ignoring invalid metrics endpoint from metadata", "error", validateErr)
 				metricsEndpoint = ""
@@ -291,7 +291,7 @@ func (e *healthExporter) refreshConfigFromMetadata(ctx context.Context) {
 	// Load logs endpoint (update even if empty to handle un-enrollment)
 	if logsEndpoint, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "logs_endpoint"); err == nil {
 		if logsEndpoint != "" {
-			validated, validateErr := endpoint.ValidateEnrollEndpoint(logsEndpoint)
+			validated, validateErr := endpoint.ValidateBackendEndpoint(logsEndpoint)
 			if validateErr != nil {
 				log.Logger.Errorw("ignoring invalid logs endpoint from metadata", "error", validateErr)
 				logsEndpoint = ""

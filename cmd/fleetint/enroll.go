@@ -53,7 +53,7 @@ func enrollCommand(cliContext *cli.Context) error {
 		fmt.Fprintln(writerFromContext(cliContext), "Proceeding with enrollment because --force was provided")
 	}
 
-	baseURL, err := endpoint.ValidateEnrollEndpoint(baseEndpoint)
+	baseURL, err := endpoint.ValidateBackendEndpoint(baseEndpoint)
 	if err != nil {
 		return fmt.Errorf("invalid enrollment endpoint: %w", err)
 	}
