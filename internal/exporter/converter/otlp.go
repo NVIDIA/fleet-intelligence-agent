@@ -440,7 +440,7 @@ func incidentsToOTLPArrayValue(incidents []apiv1.HealthStateIncident) *commonv1.
 		kvs := []*commonv1.KeyValue{
 			{Key: "entity_id", Value: stringAnyValue(inc.EntityID)},
 			{Key: "message", Value: stringAnyValue(inc.Message)},
-			{Key: "severity", Value: stringAnyValue(string(inc.Severity))},
+			{Key: "severity", Value: stringAnyValue(string(inc.Health))},
 			{Key: "error", Value: stringAnyValue(inc.Error)},
 		}
 		values = append(values, &commonv1.AnyValue{

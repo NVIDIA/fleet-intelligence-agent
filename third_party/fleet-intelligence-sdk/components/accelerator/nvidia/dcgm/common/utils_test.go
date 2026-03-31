@@ -17,6 +17,7 @@ package common
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -52,7 +53,7 @@ func TestFormatEnrichedIncidents(t *testing.T) {
 				{
 					UUID:      "GPU-46a3bbe2-3e87-3dde-b464-a03eba0c21d7",
 					Message:   "Temperature above threshold",
-					ErrorCode: "DCGM_FR_TEMP_VIOLATION",
+					ErrorCode: dcgm.DCGM_FR_TEMP_VIOLATION,
 				},
 			},
 			want: "thermal warning: 1 incident(s) across 1 device(s)",
@@ -64,12 +65,12 @@ func TestFormatEnrichedIncidents(t *testing.T) {
 				{
 					UUID:      "GPU-46a3bbe2-3e87-3dde-b464-a03eba0c21d7",
 					Message:   "DBE detected",
-					ErrorCode: "DCGM_FR_VOLATILE_DBE_DETECTED",
+					ErrorCode: dcgm.DCGM_FR_VOLATILE_DBE_DETECTED,
 				},
 				{
 					UUID:      "GPU-7b4f2c1a-8d6e-4c5b-9a1f-2e3d4c5a6b7c",
 					Message:   "Row remap failure",
-					ErrorCode: "DCGM_FR_ROW_REMAP_FAILURE",
+					ErrorCode: dcgm.DCGM_FR_ROW_REMAP_FAILURE,
 				},
 			},
 			want: "memory failure: 2 incident(s) across 2 device(s)",
@@ -92,8 +93,8 @@ func TestToHealthStateIncidents(t *testing.T) {
 			UUID:      "GPU-1234",
 			EntityID:  "GPU-0",
 			Message:   "Power violation",
-			ErrorCode: "DCGM_FR_POWER_VIOLATION",
-			Severity:  apiv1.HealthStateTypeUnhealthy,
+			ErrorCode: dcgm.DCGM_FR_CLOCK_THROTTLE_POWER,
+			Health:    dcgm.DCGM_HEALTH_RESULT_FAIL,
 		},
 	})
 
@@ -104,8 +105,8 @@ func TestToHealthStateIncidents(t *testing.T) {
 	want := apiv1.HealthStateIncident{
 		EntityID: "GPU-0",
 		Message:  "Power violation",
-		Severity: apiv1.HealthStateTypeUnhealthy,
-		Error:    "DCGM_FR_POWER_VIOLATION",
+		Health: apiv1.HealthStateTypeUnhealthy,
+		Error:    "DCGM_FR_CLOCK_THROTTLE_POWER",
 	}
 	if got[0] != want {
 		t.Fatalf("ToHealthStateIncidents()[0] = %#v, want %#v", got[0], want)
@@ -185,27 +186,27 @@ func TestEmitNewIncidentEvents(t *testing.T) {
 		EntityID: "GPU-0",
 		Error:    "DCGM_FR_TEMP_VIOLATION",
 		Message:  "temp too high",
-		Severity: apiv1.HealthStateTypeDegraded,
+		Health: apiv1.HealthStateTypeDegraded,
 	}
 	gpu1Mem := apiv1.HealthStateIncident{
 		EntityID: "GPU-1",
 		Error:    "DCGM_FR_VOLATILE_DBE_DETECTED",
 		Message:  "memory error",
-		Severity: apiv1.HealthStateTypeUnhealthy,
+		Health: apiv1.HealthStateTypeUnhealthy,
 	}
 	// Same EntityID as gpu0Thermal but different Severity — distinct key.
 	gpu0ThermalEscalated := apiv1.HealthStateIncident{
 		EntityID: "GPU-0",
 		Error:    "DCGM_FR_TEMP_VIOLATION",
 		Message:  "temp critical",
-		Severity: apiv1.HealthStateTypeUnhealthy,
+		Health: apiv1.HealthStateTypeUnhealthy,
 	}
 	// Same EntityID as gpu0Thermal but different Error — distinct key.
 	gpu0Power := apiv1.HealthStateIncident{
 		EntityID: "GPU-0",
 		Error:    "DCGM_FR_POWER_VIOLATION",
 		Message:  "power too high",
-		Severity: apiv1.HealthStateTypeDegraded,
+		Health: apiv1.HealthStateTypeDegraded,
 	}
 
 	tests := []struct {
@@ -333,5 +334,49 @@ func TestEnrichSwitchIncidents_UsesSwitchIdentifiers(t *testing.T) {
 	}
 	if got[0].UUID != "nvswitch-7" {
 		t.Fatalf("EnrichSwitchIncidents()[0].UUID = %q, want nvswitch-7", got[0].UUID)
+	}
+}
+
+// TestEnrichedIncidentJSON_SerializesIntegers verifies that the dcgm_incidents JSON
+// uses integer values for code/system/health so the backend can unmarshal them correctly.
+func TestEnrichedIncidentJSON_SerializesIntegers(t *testing.T) {
+	incident := EnrichedIncident{
+		UUID:      "GPU-1234",
+		Message:   "SBE detected",
+		ErrorCode: dcgm.DCGM_FR_VOLATILE_SBE_DETECTED_TS,
+		System:    dcgm.DCGM_HEALTH_WATCH_MEM,
+		Health:    dcgm.DCGM_HEALTH_RESULT_WARN,
+	}
+
+	data, err := json.Marshal(incident)
+	if err != nil {
+		t.Fatalf("json.Marshal error = %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("json.Unmarshal error = %v", err)
+	}
+
+	code, ok := parsed["code"].(float64)
+	if !ok {
+		t.Fatalf("code should be numeric, got %T: %v", parsed["code"], parsed["code"])
+	}
+	system, ok := parsed["system"].(float64)
+	if !ok {
+		t.Fatalf("system should be numeric, got %T: %v", parsed["system"], parsed["system"])
+	}
+	health, ok := parsed["health"].(float64)
+	if !ok {
+		t.Fatalf("health should be numeric, got %T: %v", parsed["health"], parsed["health"])
+	}
+	if code != float64(dcgm.DCGM_FR_VOLATILE_SBE_DETECTED_TS) {
+		t.Errorf("code = %v, want %v", code, float64(dcgm.DCGM_FR_VOLATILE_SBE_DETECTED_TS))
+	}
+	if system != float64(dcgm.DCGM_HEALTH_WATCH_MEM) {
+		t.Errorf("system = %v, want %v", system, float64(dcgm.DCGM_HEALTH_WATCH_MEM))
+	}
+	if health != float64(dcgm.DCGM_HEALTH_RESULT_WARN) {
+		t.Errorf("health = %v, want %v", health, float64(dcgm.DCGM_HEALTH_RESULT_WARN))
 	}
 }

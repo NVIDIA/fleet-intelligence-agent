@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
+
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
 	dcgmcommon "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/dcgm/common"
@@ -180,9 +182,9 @@ func TestCheckResultHealthStates_PreservesLegacyIncidentsAndAddsTypedIncidents(t
 			UUID:      "GPU-1234",
 			EntityID:  "GPU-0",
 			Message:   "Clock throttled",
-			ErrorCode: "DCGM_FR_CLOCK_THROTTLE_POWER",
-			System:    "DCGM_HEALTH_WATCH_POWER",
-			Severity:  apiv1.HealthStateTypeDegraded,
+			ErrorCode: dcgm.DCGM_FR_CLOCK_THROTTLE_POWER,
+			System:    dcgm.DCGM_HEALTH_WATCH_POWER,
+			Health:    dcgm.DCGM_HEALTH_RESULT_WARN,
 		},
 	}
 
@@ -222,8 +224,8 @@ func TestCheckResultHealthStates_PreservesLegacyIncidentsAndAddsTypedIncidents(t
 	if got := legacy[0]["uuid"]; got != "GPU-1234" {
 		t.Fatalf("legacy uuid = %v", got)
 	}
-	if got := legacy[0]["code"]; got != "DCGM_FR_CLOCK_THROTTLE_POWER" {
-		t.Fatalf("legacy code = %v", got)
+	if got := legacy[0]["code"]; got != float64(dcgm.DCGM_FR_CLOCK_THROTTLE_POWER) {
+		t.Fatalf("legacy code = %v, want %v", got, float64(dcgm.DCGM_FR_CLOCK_THROTTLE_POWER))
 	}
 }
 
