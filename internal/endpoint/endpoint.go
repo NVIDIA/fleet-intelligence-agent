@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"path"
 	"strings"
 )
 
@@ -54,25 +53,6 @@ func ValidateBackendEndpoint(raw string) (*url.URL, error) {
 		return nil, err
 	}
 	return parsed, nil
-}
-
-// BuildNonceEndpointFromEnroll derives the nonce endpoint from an enroll endpoint.
-func BuildNonceEndpointFromEnroll(raw string) (string, error) {
-	enrollURL, err := ValidateBackendEndpoint(raw)
-	if err != nil {
-		return "", fmt.Errorf("invalid enroll endpoint: %w", err)
-	}
-	if !strings.HasSuffix(enrollURL.Path, "/enroll") {
-		return "", fmt.Errorf("enroll endpoint path must end with /enroll, got %q", enrollURL.Path)
-	}
-
-	nonceURL := *enrollURL
-	nonceURL.Path = path.Clean(strings.TrimSuffix(enrollURL.Path, "/enroll") + "/nonce")
-	nonceURL.RawPath = ""
-	nonceURL.RawQuery = ""
-	nonceURL.Fragment = ""
-
-	return nonceURL.String(), nil
 }
 
 // JoinPath appends path elements to a validated base URL.

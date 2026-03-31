@@ -57,14 +57,6 @@ func TestValidateLocalServerURL(t *testing.T) {
 	}
 }
 
-func TestBuildNonceEndpointFromEnroll(t *testing.T) {
-	t.Parallel()
-
-	got, err := BuildNonceEndpointFromEnroll("https://example.com/api/v1/health/enroll")
-	require.NoError(t, err)
-	assert.Equal(t, "https://example.com/api/v1/health/nonce", got)
-}
-
 func TestValidateBackendEndpoint(t *testing.T) {
 	t.Parallel()
 

@@ -292,11 +292,10 @@ func TestManager_GetNonce_ServerError(t *testing.T) {
 	assert.True(t, response.NonceRefreshTimestamp.IsZero())
 }
 
-func TestManager_GetValidatedNonceEndpoint_DerivesFromEnrollEndpoint(t *testing.T) {
+func TestManager_GetValidatedNonceEndpoint_UsesStoredNonceEndpoint(t *testing.T) {
 	manager := newTestManager(t)
 	stateFile := setupAttestationMetadataDB(t, map[string]string{
-		"enroll_endpoint": "https://backend.example.com/api/v1/health/enroll",
-		"nonce_endpoint":  "https://evil.example.com/api/v1/health/nonce",
+		"nonce_endpoint": "https://backend.example.com/api/v1/health/nonce",
 	})
 	useTestStateFile(t, stateFile)
 

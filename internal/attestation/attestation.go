@@ -350,10 +350,6 @@ func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time
 }
 
 func (m *Manager) getValidatedNonceEndpoint(ctx context.Context) (string, error) {
-	if enrollEndpoint := m.getEnrollEndpointFromMetadata(ctx); enrollEndpoint != "" {
-		return endpoint.BuildNonceEndpointFromEnroll(enrollEndpoint)
-	}
-
 	nonceEndpoint := m.getNonceEndpointFromMetadata(ctx)
 	if nonceEndpoint == "" {
 		return "", fmt.Errorf("nonce endpoint not found in metadata")
@@ -411,28 +407,6 @@ func (m *Manager) getEndpointFromMetadata(ctx context.Context) string {
 	}
 
 	log.Logger.Debugw("backend endpoint not found in metadata")
-	return ""
-}
-
-func (m *Manager) getEnrollEndpointFromMetadata(ctx context.Context) string {
-	stateFile, err := defaultStateFileFn()
-	if err != nil {
-		log.Logger.Debugw("failed to get state file path", "error", err)
-		return ""
-	}
-
-	dbRO, err := sqlite.Open(stateFile)
-	if err != nil {
-		log.Logger.Debugw("failed to open state database", "error", err)
-		return ""
-	}
-	defer dbRO.Close()
-
-	if endpoint, err := pkgmetadata.ReadMetadata(ctx, dbRO, "enroll_endpoint"); err == nil && endpoint != "" {
-		return endpoint
-	}
-
-	log.Logger.Debugw("enroll endpoint not found in metadata")
 	return ""
 }
 
