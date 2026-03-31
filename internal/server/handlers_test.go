@@ -630,12 +630,12 @@ func TestInstallMiddlewares(t *testing.T) {
 		expectedStatus int
 	}{
 		{
-			name:   "GET_request_with_CORS",
+			name:   "GET_request_without_CORS",
 			method: "GET",
 			checkHeaders: func(t *testing.T, w *httptest.ResponseRecorder) {
-				assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
-				assert.Equal(t, "GET, OPTIONS", w.Header().Get("Access-Control-Allow-Methods"))
-				assert.Equal(t, "Content-Type", w.Header().Get("Access-Control-Allow-Headers"))
+				assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
+				assert.Empty(t, w.Header().Get("Access-Control-Allow-Methods"))
+				assert.Empty(t, w.Header().Get("Access-Control-Allow-Headers"))
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -643,7 +643,7 @@ func TestInstallMiddlewares(t *testing.T) {
 			name:           "OPTIONS_request",
 			method:         "OPTIONS",
 			checkHeaders:   nil,
-			expectedStatus: http.StatusNoContent,
+			expectedStatus: http.StatusNotFound,
 		},
 	}
 
