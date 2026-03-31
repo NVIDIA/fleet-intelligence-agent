@@ -358,22 +358,25 @@ func TestEnrichedIncidentJSON_SerializesIntegers(t *testing.T) {
 		t.Fatalf("json.Unmarshal error = %v", err)
 	}
 
-	if _, ok := parsed["code"].(float64); !ok {
-		t.Errorf("code should be numeric, got %T: %v", parsed["code"], parsed["code"])
+	code, ok := parsed["code"].(float64)
+	if !ok {
+		t.Fatalf("code should be numeric, got %T: %v", parsed["code"], parsed["code"])
 	}
-	if _, ok := parsed["system"].(float64); !ok {
-		t.Errorf("system should be numeric, got %T: %v", parsed["system"], parsed["system"])
+	system, ok := parsed["system"].(float64)
+	if !ok {
+		t.Fatalf("system should be numeric, got %T: %v", parsed["system"], parsed["system"])
 	}
-	if _, ok := parsed["health"].(float64); !ok {
-		t.Errorf("health should be numeric, got %T: %v", parsed["health"], parsed["health"])
+	health, ok := parsed["health"].(float64)
+	if !ok {
+		t.Fatalf("health should be numeric, got %T: %v", parsed["health"], parsed["health"])
 	}
-	if got := parsed["code"].(float64); got != float64(dcgm.DCGM_FR_VOLATILE_SBE_DETECTED_TS) {
-		t.Errorf("code = %v, want %v", got, float64(dcgm.DCGM_FR_VOLATILE_SBE_DETECTED_TS))
+	if code != float64(dcgm.DCGM_FR_VOLATILE_SBE_DETECTED_TS) {
+		t.Errorf("code = %v, want %v", code, float64(dcgm.DCGM_FR_VOLATILE_SBE_DETECTED_TS))
 	}
-	if got := parsed["system"].(float64); got != float64(dcgm.DCGM_HEALTH_WATCH_MEM) {
-		t.Errorf("system = %v, want %v", got, float64(dcgm.DCGM_HEALTH_WATCH_MEM))
+	if system != float64(dcgm.DCGM_HEALTH_WATCH_MEM) {
+		t.Errorf("system = %v, want %v", system, float64(dcgm.DCGM_HEALTH_WATCH_MEM))
 	}
-	if got := parsed["health"].(float64); got != float64(dcgm.DCGM_HEALTH_RESULT_WARN) {
-		t.Errorf("health = %v, want %v", got, float64(dcgm.DCGM_HEALTH_RESULT_WARN))
+	if health != float64(dcgm.DCGM_HEALTH_RESULT_WARN) {
+		t.Errorf("health = %v, want %v", health, float64(dcgm.DCGM_HEALTH_RESULT_WARN))
 	}
 }
