@@ -651,7 +651,7 @@ func TestCollector_CollectComponentData_WithComponents(t *testing.T) {
 					{
 						EntityID: "GPU-1234",
 						Message:  "Clock throttled",
-						Health: apiv1.HealthStateTypeDegraded,
+						Health:   apiv1.HealthStateTypeDegraded,
 						Error:    "DCGM_FR_CLOCK_THROTTLE_POWER",
 					},
 				},
