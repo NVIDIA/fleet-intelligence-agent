@@ -105,7 +105,7 @@ func TestToHealthStateIncidents(t *testing.T) {
 	want := apiv1.HealthStateIncident{
 		EntityID: "GPU-0",
 		Message:  "Power violation",
-		Severity: apiv1.HealthStateTypeUnhealthy,
+		Health: apiv1.HealthStateTypeUnhealthy,
 		Error:    "DCGM_FR_CLOCK_THROTTLE_POWER",
 	}
 	if got[0] != want {
@@ -186,27 +186,27 @@ func TestEmitNewIncidentEvents(t *testing.T) {
 		EntityID: "GPU-0",
 		Error:    "DCGM_FR_TEMP_VIOLATION",
 		Message:  "temp too high",
-		Severity: apiv1.HealthStateTypeDegraded,
+		Health: apiv1.HealthStateTypeDegraded,
 	}
 	gpu1Mem := apiv1.HealthStateIncident{
 		EntityID: "GPU-1",
 		Error:    "DCGM_FR_VOLATILE_DBE_DETECTED",
 		Message:  "memory error",
-		Severity: apiv1.HealthStateTypeUnhealthy,
+		Health: apiv1.HealthStateTypeUnhealthy,
 	}
 	// Same EntityID as gpu0Thermal but different Severity — distinct key.
 	gpu0ThermalEscalated := apiv1.HealthStateIncident{
 		EntityID: "GPU-0",
 		Error:    "DCGM_FR_TEMP_VIOLATION",
 		Message:  "temp critical",
-		Severity: apiv1.HealthStateTypeUnhealthy,
+		Health: apiv1.HealthStateTypeUnhealthy,
 	}
 	// Same EntityID as gpu0Thermal but different Error — distinct key.
 	gpu0Power := apiv1.HealthStateIncident{
 		EntityID: "GPU-0",
 		Error:    "DCGM_FR_POWER_VIOLATION",
 		Message:  "power too high",
-		Severity: apiv1.HealthStateTypeDegraded,
+		Health: apiv1.HealthStateTypeDegraded,
 	}
 
 	tests := []struct {

@@ -55,17 +55,17 @@ func EmitNewIncidentEvents(
 	// Build dedup set from previous incidents.
 	prevKeys := make(map[string]struct{}, len(prev))
 	for _, inc := range prev {
-		prevKeys[inc.EntityID+"/"+string(inc.Severity)+"/"+inc.Error] = struct{}{}
+		prevKeys[inc.EntityID+"/"+string(inc.Health)+"/"+inc.Error] = struct{}{}
 	}
 
 	for _, inc := range curr {
-		key := inc.EntityID + "/" + string(inc.Severity) + "/" + inc.Error
+		key := inc.EntityID + "/" + string(inc.Health) + "/" + inc.Error
 		if _, seen := prevKeys[key]; seen {
 			continue
 		}
 
 		eventType := apiv1.EventTypeWarning
-		if inc.Severity == apiv1.HealthStateTypeUnhealthy {
+		if inc.Health == apiv1.HealthStateTypeUnhealthy {
 			eventType = apiv1.EventTypeCritical
 		}
 
@@ -294,7 +294,7 @@ func (e EnrichedIncident) ToHealthStateIncident() apiv1.HealthStateIncident {
 	return apiv1.HealthStateIncident{
 		EntityID: e.EntityID,
 		Message:  e.Message,
-		Severity: healthResultToSeverity(e.Health),
+		Health: healthResultToSeverity(e.Health),
 		Error:    healthCheckErrorCodeString(e.ErrorCode),
 	}
 }
