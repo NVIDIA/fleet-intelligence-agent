@@ -23,7 +23,6 @@ import (
 	"github.com/urfave/cli"
 	"go.uber.org/zap"
 
-	componentsnvidiagpucounts "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/gpu-counts"
 	nvidiainfiniband "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband"
 	infinibandtypes "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband/types"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
@@ -35,14 +34,13 @@ func scanCreateCommand() func(*cli.Context) error {
 	return func(cliContext *cli.Context) error {
 		return cmdScan(
 			cliContext.String("log-level"),
-			cliContext.Int("gpu-count"),
 			cliContext.String("infiniband-expected-port-states"),
 			cliContext.String("infiniband-class-root-dir"),
 		)
 	}
 }
 
-func cmdScan(logLevel string, gpuCount int, infinibandExpectedPortStates string, ibClassRootDir string) error {
+func cmdScan(logLevel string, infinibandExpectedPortStates string, ibClassRootDir string) error {
 	zapLvl, err := log.ParseLogLevel(logLevel)
 	if err != nil {
 		return err
@@ -50,14 +48,6 @@ func cmdScan(logLevel string, gpuCount int, infinibandExpectedPortStates string,
 	log.Logger = log.CreateLogger(zapLvl, "")
 
 	log.Logger.Debugw("starting scan command")
-
-	if gpuCount > 0 {
-		componentsnvidiagpucounts.SetDefaultExpectedGPUCounts(componentsnvidiagpucounts.ExpectedGPUCounts{
-			Count: gpuCount,
-		})
-
-		log.Logger.Infow("set gpu count", "gpuCount", gpuCount)
-	}
 
 	if len(infinibandExpectedPortStates) > 0 {
 		var expectedPortStates infinibandtypes.ExpectedPortStates

@@ -47,6 +47,7 @@ env:
 
 logLevel: warn
 listenAddress: 0.0.0.0:15133
+retentionPeriod: 24h
 components: all
 
 enroll:

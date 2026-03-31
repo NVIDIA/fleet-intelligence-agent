@@ -122,6 +122,7 @@ spec:
             - run
             - {{ printf "--log-level=%s" .Values.logLevel | quote }}
             - {{ printf "--listen-address=%s" .Values.listenAddress | quote }}
+            - {{ printf "--retention-period=%s" .Values.retentionPeriod | quote }}
             - {{ printf "--components=%s" .Values.components | quote }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
