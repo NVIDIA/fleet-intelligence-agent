@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/NVIDIA/fleet-intelligence-sdk v0.0.0-00010101000000-000000000000
+	github.com/NVIDIA/go-dcgm v0.0.0-20260214140307-ad5d86fe3d32
 	github.com/dustin/go-humanize v1.0.1
 	github.com/gin-contrib/gzip v1.2.5
 	github.com/gin-gonic/gin v1.11.0
@@ -21,7 +22,6 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.1 // indirect
-	github.com/NVIDIA/go-dcgm v0.0.0-20260214140307-ad5d86fe3d32 // indirect
 	github.com/NVIDIA/go-nvlib v0.9.0 // indirect
 	github.com/NVIDIA/go-nvml v0.13.0-1 // indirect
 	github.com/akutz/memconn v0.1.0 // indirect
