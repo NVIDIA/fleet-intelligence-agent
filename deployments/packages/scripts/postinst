@@ -5,7 +5,8 @@ echo "Configuring Fleet Intelligence Agent..."
 
 # Setup directories and permissions
 mkdir -p /var/lib/fleetint
-chmod 755 /var/lib/fleetint /usr/bin/fleetint
+chmod 700 /var/lib/fleetint
+chmod 755 /usr/bin/fleetint
 
 echo "Setting up Fleet Intelligence Agent service..."
 
