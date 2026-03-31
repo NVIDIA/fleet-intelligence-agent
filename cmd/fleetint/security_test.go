@@ -44,3 +44,14 @@ func TestInjectCommandRejectsNonLocalServerURL(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid server URL")
 	assert.Contains(t, err.Error(), "user info")
 }
+
+func TestStatusCommandRejectsServerURLWithPath(t *testing.T) {
+	app := App()
+	app.Writer = &bytes.Buffer{}
+
+	err := app.Run([]string{"fleetint", "status", "--server-url", "http://localhost:15133/api"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid server URL")
+	assert.Contains(t, err.Error(), "must not include a path")
+}

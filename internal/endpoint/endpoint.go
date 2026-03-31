@@ -31,6 +31,9 @@ func ValidateLocalServerURL(raw string) (*url.URL, error) {
 	if err := requireScheme(parsed, "http", "https"); err != nil {
 		return nil, err
 	}
+	if parsed.Path != "" && parsed.Path != "/" {
+		return nil, fmt.Errorf("server URL must not include a path, got %q", parsed.Path)
+	}
 
 	host := parsed.Hostname()
 	if host == "" {

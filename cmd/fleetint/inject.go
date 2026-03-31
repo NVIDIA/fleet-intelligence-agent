@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/urfave/cli"
 
@@ -111,7 +112,8 @@ func injectCommand(c *cli.Context) error {
 	}
 	fmt.Printf("Injecting fault into %s component at %s...\n", component, url)
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to make request to %s: %w", url, err)
 	}
@@ -184,7 +186,8 @@ func clearComponentFault(component string, serverURL *url.URL) error {
 	}
 	fmt.Printf("Clearing fault from %s component at %s...\n", component, url)
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to make request to %s: %w", url, err)
 	}
