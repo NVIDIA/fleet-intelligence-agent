@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -288,6 +290,76 @@ func TestManager_GetNonce_ServerError(t *testing.T) {
 	assert.Equal(t, "Invalid token", response.Error)
 	assert.Empty(t, response.Nonce)
 	assert.True(t, response.NonceRefreshTimestamp.IsZero())
+}
+
+func TestManager_GetValidatedNonceEndpoint_DerivesFromEnrollEndpoint(t *testing.T) {
+	manager := newTestManager(t)
+	stateFile := setupAttestationMetadataDB(t, map[string]string{
+		"enroll_endpoint": "https://backend.example.com/api/v1/health/enroll",
+		"nonce_endpoint":  "https://evil.example.com/api/v1/health/nonce",
+	})
+	useTestStateFile(t, stateFile)
+
+	got, err := manager.getValidatedNonceEndpoint(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "https://backend.example.com/api/v1/health/nonce", got)
+}
+
+func TestManager_GetValidatedNonceEndpoint_RejectsTamperedStoredNonceEndpoint(t *testing.T) {
+	manager := newTestManager(t)
+	stateFile := setupAttestationMetadataDB(t, map[string]string{
+		"nonce_endpoint": "http://evil.example.com/api/v1/health/nonce",
+	})
+	useTestStateFile(t, stateFile)
+
+	_, err := manager.getValidatedNonceEndpoint(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid nonce endpoint")
+	assert.Contains(t, err.Error(), "https")
+}
+
+func newTestManager(t *testing.T) *Manager {
+	t.Helper()
+
+	ctx := context.Background()
+	cfg := &config.AttestationConfig{
+		Interval:      metav1.Duration{Duration: 20 * time.Second},
+		JitterEnabled: false,
+	}
+	return NewManager(ctx, nil, cfg)
+}
+
+func setupAttestationMetadataDB(t *testing.T, entries map[string]string) string {
+	t.Helper()
+
+	stateFile := filepath.Join(t.TempDir(), "fleetint.state")
+	db, err := sqlite.Open(stateFile)
+	require.NoError(t, err)
+
+	err = pkgmetadata.CreateTableMetadata(context.Background(), db)
+	require.NoError(t, err)
+
+	for key, value := range entries {
+		err = pkgmetadata.SetMetadata(context.Background(), db, key, value)
+		require.NoError(t, err)
+	}
+
+	err = db.Close()
+	require.NoError(t, err)
+
+	return stateFile
+}
+
+func useTestStateFile(t *testing.T, stateFile string) {
+	t.Helper()
+
+	orig := defaultStateFileFn
+	defaultStateFileFn = func() (string, error) {
+		return stateFile, nil
+	}
+	t.Cleanup(func() {
+		defaultStateFileFn = orig
+	})
 }
 
 func TestManager_GetEvidences(t *testing.T) {

@@ -34,6 +34,7 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
 )
 
 var defaultStateFileFn = config.DefaultStateFile
@@ -288,11 +289,9 @@ func (m *Manager) runAttestation() bool {
 }
 
 func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time, error) {
-	// Load nonce endpoint from metadata database
-	url := m.getNonceEndpointFromMetadata(m.ctx)
-	if url == "" {
-		// Return error if nonce endpoint not found in metadata
-		return "", time.Time{}, fmt.Errorf("nonce endpoint not found in metadata")
+	endpointURL, err := m.getValidatedNonceEndpoint(m.ctx)
+	if err != nil {
+		return "", time.Time{}, err
 	}
 
 	// Request payload (only include machine ID, JWT token goes in header)
@@ -305,7 +304,7 @@ func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time
 	}
 
 	// Create HTTP request with proper Bearer authorization
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequest("POST", endpointURL, bytes.NewBuffer(requestBody))
 	if err != nil {
 		log.Logger.Debugw("failed to create HTTP request in nonce endpoint request", "error", err)
 		return "", time.Time{}, err
@@ -348,6 +347,24 @@ func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time
 	}
 
 	return response.Nonce, response.NonceRefreshTimestamp, nil
+}
+
+func (m *Manager) getValidatedNonceEndpoint(ctx context.Context) (string, error) {
+	if enrollEndpoint := m.getEnrollEndpointFromMetadata(ctx); enrollEndpoint != "" {
+		return endpoint.BuildNonceEndpointFromEnroll(enrollEndpoint)
+	}
+
+	nonceEndpoint := m.getNonceEndpointFromMetadata(ctx)
+	if nonceEndpoint == "" {
+		return "", fmt.Errorf("nonce endpoint not found in metadata")
+	}
+
+	validated, err := endpoint.ValidateEnrollEndpoint(nonceEndpoint)
+	if err != nil {
+		return "", fmt.Errorf("invalid nonce endpoint: %w", err)
+	}
+
+	return validated.String(), nil
 }
 
 // getJWTTokenFromMetadata retrieves the JWT token from the metadata database
@@ -394,6 +411,28 @@ func (m *Manager) getEndpointFromMetadata(ctx context.Context) string {
 	}
 
 	log.Logger.Debugw("backend endpoint not found in metadata")
+	return ""
+}
+
+func (m *Manager) getEnrollEndpointFromMetadata(ctx context.Context) string {
+	stateFile, err := defaultStateFileFn()
+	if err != nil {
+		log.Logger.Debugw("failed to get state file path", "error", err)
+		return ""
+	}
+
+	dbRO, err := sqlite.Open(stateFile)
+	if err != nil {
+		log.Logger.Debugw("failed to open state database", "error", err)
+		return ""
+	}
+	defer dbRO.Close()
+
+	if endpoint, err := pkgmetadata.ReadMetadata(ctx, dbRO, "enroll_endpoint"); err == nil && endpoint != "" {
+		return endpoint
+	}
+
+	log.Logger.Debugw("enroll endpoint not found in metadata")
 	return ""
 }
 

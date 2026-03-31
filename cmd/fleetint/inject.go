@@ -20,8 +20,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/urfave/cli"
+
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
 )
 
 func injectCommand(c *cli.Context) error {
@@ -32,11 +35,15 @@ func injectCommand(c *cli.Context) error {
 
 	// Get the server URL from flag
 	address := c.String("server-url")
+	serverURL, err := endpoint.ValidateLocalServerURL(address)
+	if err != nil {
+		return fmt.Errorf("invalid server URL: %w", err)
+	}
 
 	// Check if clear flag is set
 	clearFault := c.Bool("clear")
 	if clearFault {
-		return clearComponentFault(component, address)
+		return clearComponentFault(component, serverURL)
 	}
 
 	faultType := c.String("fault-type")
@@ -98,7 +105,10 @@ func injectCommand(c *cli.Context) error {
 	}
 
 	// Make the POST request to the inject-fault endpoint
-	url := fmt.Sprintf("%s/inject-fault", address)
+	url, err := endpoint.JoinPath(serverURL, "inject-fault")
+	if err != nil {
+		return fmt.Errorf("failed to construct inject-fault URL: %w", err)
+	}
 	fmt.Printf("Injecting fault into %s component at %s...\n", component, url)
 
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
@@ -153,7 +163,7 @@ func getKernelMessageForComponent(component, faultMessage string) (string, error
 }
 
 // clearComponentFault sends a request to clear injected faults from a component
-func clearComponentFault(component, address string) error {
+func clearComponentFault(component string, serverURL *url.URL) error {
 	// Create the clear request
 	requestBody := map[string]interface{}{
 		"component_clear": map[string]string{
@@ -168,7 +178,10 @@ func clearComponentFault(component, address string) error {
 	}
 
 	// Make the POST request to the inject-fault endpoint with clear action
-	url := fmt.Sprintf("%s/inject-fault", address)
+	url, err := endpoint.JoinPath(serverURL, "inject-fault")
+	if err != nil {
+		return fmt.Errorf("failed to construct inject-fault URL: %w", err)
+	}
 	fmt.Printf("Clearing fault from %s component at %s...\n", component, url)
 
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))

@@ -18,13 +18,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/url"
 
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 	"github.com/urfave/cli"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/enrollment"
 )
 
@@ -53,25 +53,13 @@ func enrollCommand(cliContext *cli.Context) error {
 		fmt.Fprintln(writerFromContext(cliContext), "Proceeding with enrollment because --force was provided")
 	}
 
-	// Validate base endpoint
-	baseURL, err := url.Parse(baseEndpoint)
+	baseURL, err := endpoint.ValidateEnrollEndpoint(baseEndpoint)
 	if err != nil {
-		return fmt.Errorf("invalid endpoint URL: %w", err)
-	}
-
-	// Enforce HTTPS for security
-	if baseURL.Scheme != "https" {
-		return fmt.Errorf("enrollment endpoint must use HTTPS, got %s", baseURL.Scheme)
-	}
-
-	// Append /api/v1/health to base endpoint
-	healthEndpoint, err := url.JoinPath(baseURL.String(), "api", "v1", "health")
-	if err != nil {
-		return fmt.Errorf("failed to construct health endpoint: %w", err)
+		return fmt.Errorf("invalid enrollment endpoint: %w", err)
 	}
 
 	// Construct enroll endpoint
-	enrollEndpoint, err := url.JoinPath(healthEndpoint, "enroll")
+	enrollEndpoint, err := endpoint.JoinPath(baseURL, "api", "v1", "health", "enroll")
 	if err != nil {
 		return fmt.Errorf("failed to construct enroll endpoint: %w", err)
 	}
@@ -84,15 +72,15 @@ func enrollCommand(cliContext *cli.Context) error {
 	}
 
 	// Construct other endpoints using url.JoinPath for proper URL handling
-	metricsEndpoint, err := url.JoinPath(healthEndpoint, "metrics")
+	metricsEndpoint, err := endpoint.JoinPath(baseURL, "api", "v1", "health", "metrics")
 	if err != nil {
 		return fmt.Errorf("failed to construct metrics endpoint: %w", err)
 	}
-	logsEndpoint, err := url.JoinPath(healthEndpoint, "logs")
+	logsEndpoint, err := endpoint.JoinPath(baseURL, "api", "v1", "health", "logs")
 	if err != nil {
 		return fmt.Errorf("failed to construct logs endpoint: %w", err)
 	}
-	nonceEndpoint, err := url.JoinPath(healthEndpoint, "nonce")
+	nonceEndpoint, err := endpoint.JoinPath(baseURL, "api", "v1", "health", "nonce")
 	if err != nil {
 		return fmt.Errorf("failed to construct nonce endpoint: %w", err)
 	}
