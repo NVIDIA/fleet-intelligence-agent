@@ -105,8 +105,8 @@ type HealthStateIncident struct {
 	EntityID string `json:"entity_id,omitempty"`
 	// Message is the human-readable description of the fault.
 	Message string `json:"message"`
-	// Severity mirrors HealthState health levels.
-	Severity HealthStateType `json:"severity,omitempty"`
+	// Health mirrors HealthState health levels.
+	Health HealthStateType `json:"health,omitempty"`
 	// Error is a symbolic error identifier when available.
 	Error string `json:"error,omitempty"`
 }
