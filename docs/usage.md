@@ -61,6 +61,27 @@ sudo fleetint metadata --set-key="key" --set-value="value"
 
 Used to view or update the agent's metadata store, including remote export configuration.
 
+### Compact State Database
+
+```bash
+sudo fleetint compact
+```
+
+Compacts the local Fleet Intelligence state database to reduce disk usage.
+
+Requirements:
+- `fleetintd` must be stopped before running `compact`
+- nothing else can be listening on fleetint port `15133`
+- the command needs write access to the state database, so package installs typically require `sudo`
+
+Typical workflow:
+
+```bash
+sudo systemctl stop fleetintd
+sudo fleetint compact
+sudo systemctl start fleetintd
+```
+
 ### Validate Prerequisites
 
 ```bash

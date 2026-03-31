@@ -28,7 +28,6 @@ import (
 	"syscall"
 	"time"
 
-	componentsnvidiagpucounts "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/gpu-counts"
 	nvidiainfiniband "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband"
 	infinibandtypes "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband/types"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
@@ -206,7 +205,6 @@ func runCommand(cliContext *cli.Context) error {
 	ibClassRootDir := cliContext.String("infiniband-class-root-dir")
 	components := cliContext.String("components")
 
-	gpuCount := cliContext.Int("gpu-count")
 	infinibandExpectedPortStates := cliContext.String("infiniband-expected-port-states")
 	enableFaultInjection := cliContext.Bool("enable-fault-injection")
 
@@ -231,14 +229,6 @@ func runCommand(cliContext *cli.Context) error {
 			}
 			offlineModeDuration = parsedDuration
 		}
-	}
-
-	if gpuCount > 0 {
-		componentsnvidiagpucounts.SetDefaultExpectedGPUCounts(componentsnvidiagpucounts.ExpectedGPUCounts{
-			Count: gpuCount,
-		})
-
-		log.Logger.Infow("set gpu count", "gpuCount", gpuCount)
 	}
 
 	if len(infinibandExpectedPortStates) > 0 {
