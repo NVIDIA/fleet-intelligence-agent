@@ -36,6 +36,8 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
 
+var defaultStateFileFn = config.DefaultStateFile
+
 // EvidenceItem represents a single evidence item from the attestation SDK
 type EvidenceItem struct {
 	Arch          string `json:"arch"`
@@ -350,7 +352,7 @@ func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time
 
 // getJWTTokenFromMetadata retrieves the JWT token from the metadata database
 func (m *Manager) getJWTTokenFromMetadata(ctx context.Context) string {
-	stateFile, err := config.DefaultStateFile()
+	stateFile, err := defaultStateFileFn()
 	if err != nil {
 		log.Logger.Debugw("failed to get state file path", "error", err)
 		return ""
@@ -373,7 +375,7 @@ func (m *Manager) getJWTTokenFromMetadata(ctx context.Context) string {
 }
 
 func (m *Manager) getEndpointFromMetadata(ctx context.Context) string {
-	stateFile, err := config.DefaultStateFile()
+	stateFile, err := defaultStateFileFn()
 	if err != nil {
 		log.Logger.Debugw("failed to get state file path", "error", err)
 		return ""
@@ -397,7 +399,7 @@ func (m *Manager) getEndpointFromMetadata(ctx context.Context) string {
 
 // getNonceEndpointFromMetadata retrieves the nonce endpoint from the metadata database
 func (m *Manager) getNonceEndpointFromMetadata(ctx context.Context) string {
-	stateFile, err := config.DefaultStateFile()
+	stateFile, err := defaultStateFileFn()
 	if err != nil {
 		log.Logger.Debugw("failed to get state file path", "error", err)
 		return ""
@@ -420,7 +422,7 @@ func (m *Manager) getNonceEndpointFromMetadata(ctx context.Context) string {
 }
 
 func (m *Manager) getMachineId() (string, error) {
-	stateFile, err := config.DefaultStateFile()
+	stateFile, err := defaultStateFileFn()
 	if err != nil {
 		return "", fmt.Errorf("failed to get state file path: %w", err)
 	}

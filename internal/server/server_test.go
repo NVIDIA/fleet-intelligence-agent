@@ -17,6 +17,8 @@ package server
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -206,6 +208,22 @@ func TestInitializeDatabases(t *testing.T) {
 				dbRO.Close()
 			}
 		})
+	}
+}
+
+func TestInitializeDatabasesSecuresFreshStateFile(t *testing.T) {
+	ctx := context.Background()
+	stateFile := filepath.Join(t.TempDir(), "fleetint.state")
+
+	dbRW, dbRO, err := initializeDatabases(ctx, &config.Config{State: stateFile})
+	require.NoError(t, err)
+	defer dbRW.Close()
+	defer dbRO.Close()
+
+	for _, candidate := range []string{stateFile, stateFile + "-wal", stateFile + "-shm"} {
+		info, err := os.Stat(candidate)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 	}
 }
 

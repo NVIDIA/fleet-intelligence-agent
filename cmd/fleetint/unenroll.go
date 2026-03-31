@@ -53,6 +53,9 @@ func unenrollCommand(c *cli.Context) error {
 	if err := removeEnrollmentMetadata(context.Background(), dbRW); err != nil {
 		return fmt.Errorf("failed to remove enrollment metadata: %w", err)
 	}
+	if err := config.SecureStateFilePermissions(stateFile); err != nil {
+		return fmt.Errorf("failed to secure state database permissions: %w", err)
+	}
 
 	log.Logger.Infow("Successfully un-enrolled from Fleet Intelligence backend")
 	return nil

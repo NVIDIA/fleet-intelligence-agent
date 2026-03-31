@@ -97,6 +97,9 @@ func compactCommand(cliContext *cli.Context) error {
 	if err := sqlite.Compact(rootCtx, dbRW); err != nil {
 		return fmt.Errorf("failed to compact state file: %w", err)
 	}
+	if err := config.SecureStateFilePermissions(stateFile); err != nil {
+		return fmt.Errorf("failed to secure state file permissions: %w", err)
+	}
 
 	dbSize, err = sqlite.ReadDBSize(rootCtx, dbRO)
 	if err != nil {

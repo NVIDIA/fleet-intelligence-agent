@@ -75,10 +75,10 @@ type Server struct {
 }
 
 // initializeDatabases opens and initializes database connections
-func initializeDatabases(ctx context.Context, config *config.Config) (*sql.DB, *sql.DB, error) {
+func initializeDatabases(ctx context.Context, cfg *config.Config) (*sql.DB, *sql.DB, error) {
 	stateFile := ":memory:"
-	if config.State != "" {
-		stateFile = config.State
+	if cfg.State != "" {
+		stateFile = cfg.State
 	}
 
 	dbRW, err := sqlite.Open(stateFile)
@@ -88,11 +88,19 @@ func initializeDatabases(ctx context.Context, config *config.Config) (*sql.DB, *
 
 	dbRO, err := sqlite.Open(stateFile, sqlite.WithReadOnly(true))
 	if err != nil {
+		dbRW.Close()
 		return nil, nil, fmt.Errorf("failed to open state file (for read-only): %w", err)
 	}
 
 	if err := pkgmetadata.CreateTableMetadata(ctx, dbRW); err != nil {
+		dbRO.Close()
+		dbRW.Close()
 		return nil, nil, fmt.Errorf("failed to create metadata table: %w", err)
+	}
+	if err := config.SecureStateFilePermissions(stateFile); err != nil {
+		dbRO.Close()
+		dbRW.Close()
+		return nil, nil, fmt.Errorf("failed to secure state file permissions: %w", err)
 	}
 
 	return dbRW, dbRO, nil

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +33,18 @@ import (
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
+
+func useMissingStateFile(t *testing.T) {
+	t.Helper()
+
+	orig := defaultStateFileFn
+	defaultStateFileFn = func() (string, error) {
+		return filepath.Join(t.TempDir(), "missing", "fleetint.state"), nil
+	}
+	t.Cleanup(func() {
+		defaultStateFileFn = orig
+	})
+}
 
 func TestManager_NewManager(t *testing.T) {
 	ctx := context.Background()
@@ -154,6 +167,8 @@ func TestManager_IsAttestationDataUpdated(t *testing.T) {
 }
 
 func TestManager_GetMachineId_NoDatabase(t *testing.T) {
+	useMissingStateFile(t)
+
 	ctx := context.Background()
 	cfg := &config.AttestationConfig{
 		Interval:      metav1.Duration{Duration: 20 * time.Second},
@@ -509,6 +524,8 @@ func TestManager_CalculateJitter(t *testing.T) {
 }
 
 func TestManager_RunAttestation_ReturnsRetrySoon(t *testing.T) {
+	useMissingStateFile(t)
+
 	// This test verifies that runAttestation returns the correct retry hint
 	// When agent is not enrolled, it should return true (retry soon)
 	// When there's a real failure, it should return false (normal interval)

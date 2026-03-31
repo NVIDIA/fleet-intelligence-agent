@@ -48,6 +48,12 @@ var (
 
 	// DefaultRetentionPeriod - keep health data for 24 hours by default
 	DefaultRetentionPeriod = metav1.Duration{Duration: 24 * time.Hour}
+
+	osGeteuid  = stdos.Geteuid
+	osStat     = stdos.Stat
+	osMkdirAll = stdos.MkdirAll
+	osChmod    = stdos.Chmod
+	homeDirFn  = homedir.Dir
 )
 
 // Default creates a default health configuration
@@ -99,26 +105,33 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 	return cfg, nil
 }
 
-const defaultVarLibDir = "/var/lib/fleetint"
+const (
+	defaultVarLibDir     = "/var/lib/fleetint"
+	defaultStateDirMode  = 0o700
+	defaultStateFileMode = 0o600
+)
 
 // setupDefaultDir creates the default directory for health data
 func setupDefaultDir() (string, error) {
-	asRoot := stdos.Geteuid() == 0 // running as root
+	asRoot := osGeteuid() == 0 // running as root
 
 	d := defaultVarLibDir
-	_, err := stdos.Stat("/var/lib")
+	_, err := osStat("/var/lib")
 	if !asRoot || stdos.IsNotExist(err) {
-		homeDir, err := homedir.Dir()
+		homeDir, err := homeDirFn()
 		if err != nil {
 			return "", err
 		}
 		d = filepath.Join(homeDir, ".fleetint")
 	}
 
-	if _, err := stdos.Stat(d); stdos.IsNotExist(err) {
-		if err = stdos.MkdirAll(d, 0755); err != nil {
+	if _, err := osStat(d); stdos.IsNotExist(err) {
+		if err = osMkdirAll(d, defaultStateDirMode); err != nil {
 			return "", err
 		}
+	}
+	if err := osChmod(d, defaultStateDirMode); err != nil {
+		return "", err
 	}
 	return d, nil
 }
@@ -130,4 +143,29 @@ func DefaultStateFile() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "fleetint.state"), nil
+}
+
+// SecureStateFilePermissions ensures the state database file and SQLite sidecars are owner-readable and owner-writable only.
+func SecureStateFilePermissions(path string) error {
+	if path == "" || path == ":memory:" {
+		return nil
+	}
+
+	for _, candidate := range []string{path, path + "-wal", path + "-shm"} {
+		info, err := osStat(candidate)
+		if err != nil {
+			if stdos.IsNotExist(err) {
+				continue
+			}
+			return err
+		}
+		if info.IsDir() {
+			return fmt.Errorf("state file path %q is a directory", candidate)
+		}
+		if err := osChmod(candidate, defaultStateFileMode); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
