@@ -1,53 +1,130 @@
 # Configuration
 
-This page is a quick reference for runtime configuration shared by:
-- bare metal installs (`fleetintd` via systemd)
-- Kubernetes installs (Helm chart)
+This page documents the runtime configuration for `fleetint run`:
+- configurable environment variables
+- configurable `fleetint run` flags
+- how to set them on bare metal and in Kubernetes
 
 ## Where to configure
 
-- **Bare metal**: edit `/etc/default/fleetint`, then restart:
-  ```bash
-  sudo systemctl restart fleetintd
-  ```
-- **Helm**: set values in `values.yaml` or with `--set`.
-  - Env vars live under `env.*`
-  - Main run flags map to chart values like `logLevel`, `listenAddress`, and `components`
+### Bare Metal
 
-## Configurable environment variables
+Package installs run `fleetint` through the `fleetintd` systemd service:
 
-| Environment variable | Description | Default |
-|---|---|---|
-| `FLEETINT_COLLECT_INTERVAL` | Data collection interval (1s to 24h) | `1m` |
-| `FLEETINT_INCLUDE_METRICS` | Include metrics in export | `true` |
-| `FLEETINT_INCLUDE_EVENTS` | Include events in export | `true` |
-| `FLEETINT_INCLUDE_MACHINEINFO` | Include machine info in export | `true` |
-| `FLEETINT_INCLUDE_HEALTHCHECKS` | Include component health data in export | `true` |
-| `FLEETINT_METRICS_LOOKBACK` | Metrics lookback window | `1m` |
-| `FLEETINT_EVENTS_LOOKBACK` | Events lookback window | `1m` |
-| `FLEETINT_CHECK_INTERVAL` | Component health check interval (1s to 24h) | `1m` |
-| `FLEETINT_RETRY_MAX_ATTEMPTS` | Max retry attempts for failed exports | `3` |
-| `FLEETINT_ATTESTATION_JITTER_ENABLED` | Enable/disable attestation startup jitter | `true` |
-| `FLEETINT_ATTESTATION_INTERVAL` | Attestation interval override | `24h` |
-| `HTTP_PROXY` | HTTP proxy URL | empty |
-| `HTTPS_PROXY` | HTTPS proxy URL | empty |
+```ini
+ExecStart=/usr/bin/fleetint run $FLEETINT_FLAGS
+```
 
-## Configurable CLI flags
+Configure runtime settings in `/etc/default/fleetint`, then restart the service:
 
-These are `fleetint run` flags.
+```bash
+sudo systemctl restart fleetintd
+```
 
-- **Bare metal**: set via `FLEETINT_FLAGS="..."` in `/etc/default/fleetint`
-- **Helm**: use dedicated chart values when available
+- Set environment variables directly in `/etc/default/fleetint`
+- Set `fleetint run` flags through `FLEETINT_FLAGS="..."`
 
-| CLI flag | Description | Default | Helm value |
-|---|---|---|---|
-| `--log-level` | Log level (`debug`, `info`, `warn`, `error`) | `warn` | `logLevel` |
-| `--listen-address` | API bind address | bare metal: `127.0.0.1:15133` | `listenAddress` (chart default `0.0.0.0:15133`) |
-| `--components` | Comma-separated enabled components (`all` or explicit list; use `all,-name` to exclude components) | `all` | `components` |
-| `--enable-dcgm-policy` | Enable DCGM non-XID policy monitoring | `false` | not exposed directly |
-| `--enable-fault-injection` | Enable local fault-injection endpoint (testing only) | `false` | not exposed directly |
+### Kubernetes
 
-## Component selection
+The Helm chart configures the container entrypoint as `fleetint run` and exposes:
+
+- environment variables under `env.*`
+- common `run` flags through dedicated chart values such as `logLevel`, `listenAddress`, and `components`
+
+Apply changes by updating `values.yaml` or using `helm upgrade --set ...`.
+
+## Configurable Environment Variables
+
+These environment variables are read by `fleetint run` at startup.
+
+| Environment variable | Description | Default | Bare metal | Kubernetes |
+| --- | --- | --- | --- | --- |
+| `DCGM_URL` | DCGM HostEngine address used by the agent for DCGM-backed components. | bare metal: `localhost`, Helm chart: `nvidia-dcgm.gpu-operator.svc:5555` | `/etc/default/fleetint` | `env.DCGM_URL` |
+| `DCGM_URL_IS_UNIX_SOCKET` | Treat `DCGM_URL` as a Unix socket path instead of a network address. | `false` | `/etc/default/fleetint` | `env.DCGM_URL_IS_UNIX_SOCKET` |
+| `FLEETINT_COLLECT_INTERVAL` | Export interval for health data. Valid range: `1s` to `24h`. | `1m` | `/etc/default/fleetint` | `env.FLEETINT_COLLECT_INTERVAL` |
+| `FLEETINT_INCLUDE_METRICS` | Include metrics data in export payloads. | `true` | `/etc/default/fleetint` | `env.FLEETINT_INCLUDE_METRICS` |
+| `FLEETINT_INCLUDE_EVENTS` | Include event data in export payloads. | `true` | `/etc/default/fleetint` | `env.FLEETINT_INCLUDE_EVENTS` |
+| `FLEETINT_INCLUDE_MACHINEINFO` | Include machine information in export payloads. | `true` | `/etc/default/fleetint` | `env.FLEETINT_INCLUDE_MACHINEINFO` |
+| `FLEETINT_INCLUDE_HEALTHCHECKS` | Include component data and health details in export payloads. | `true` | `/etc/default/fleetint` | `env.FLEETINT_INCLUDE_HEALTHCHECKS` |
+| `FLEETINT_METRICS_LOOKBACK` | Lookback window for metrics included in each export. | `1m` | `/etc/default/fleetint` | `env.FLEETINT_METRICS_LOOKBACK` |
+| `FLEETINT_EVENTS_LOOKBACK` | Lookback window for events included in each export. | `1m` | `/etc/default/fleetint` | `env.FLEETINT_EVENTS_LOOKBACK` |
+| `FLEETINT_CHECK_INTERVAL` | Health check interval for monitored components. Valid range: `1s` to `24h`. | `1m` | `/etc/default/fleetint` | `env.FLEETINT_CHECK_INTERVAL` |
+| `FLEETINT_RETRY_MAX_ATTEMPTS` | Maximum retry attempts for failed exports. Minimum: `0`. | `3` | `/etc/default/fleetint` | `env.FLEETINT_RETRY_MAX_ATTEMPTS` |
+| `FLEETINT_ATTESTATION_JITTER_ENABLED` | Enable random startup jitter for attestation scheduling. | `true` | `/etc/default/fleetint` | `env.FLEETINT_ATTESTATION_JITTER_ENABLED` |
+| `FLEETINT_ATTESTATION_INTERVAL` | Attestation interval override. | `24h` | `/etc/default/fleetint` | `env.FLEETINT_ATTESTATION_INTERVAL` |
+| `HTTP_PROXY` | Proxy URL for outbound HTTP requests. | empty | `/etc/default/fleetint` | `env.HTTP_PROXY` |
+| `HTTPS_PROXY` | Proxy URL for outbound HTTPS requests. | empty | `/etc/default/fleetint` | `env.HTTPS_PROXY` |
+
+Notes:
+
+- Duration-valued environment variables use Go duration syntax such as `30s`, `1m`, `10m`, or `24h`.
+- These environment variables modify the health exporter configuration used by `fleetint run`.
+- `DCGM_URL` and `DCGM_URL_IS_UNIX_SOCKET` configure connectivity to DCGM HostEngine for DCGM-backed components.
+
+### Bare Metal Example
+
+```bash
+sudoedit /etc/default/fleetint
+```
+
+```bash
+FLEETINT_FLAGS="--log-level=info --listen-address=127.0.0.1:15133 --components=all,-accelerator-nvidia-dcgm-prof"
+DCGM_URL="localhost"
+DCGM_URL_IS_UNIX_SOCKET="false"
+FLEETINT_COLLECT_INTERVAL="2m"
+FLEETINT_INCLUDE_EVENTS="false"
+FLEETINT_CHECK_INTERVAL="30s"
+HTTPS_PROXY="http://proxy.example.com:3128"
+```
+
+```bash
+sudo systemctl restart fleetintd
+```
+
+### Kubernetes Example
+
+```yaml
+logLevel: info
+listenAddress: 0.0.0.0:15133
+retentionPeriod: 24h
+components: all,-accelerator-nvidia-dcgm-prof
+
+env:
+  DCGM_URL: "nvidia-dcgm.gpu-operator.svc:5555"
+  DCGM_URL_IS_UNIX_SOCKET: "false"
+  FLEETINT_COLLECT_INTERVAL: "2m"
+  FLEETINT_INCLUDE_EVENTS: "false"
+  FLEETINT_CHECK_INTERVAL: "30s"
+  HTTPS_PROXY: "http://proxy.example.com:3128"
+```
+
+Apply with:
+
+```bash
+helm upgrade --install fleet-intelligence-agent \
+  oci://ghcr.io/nvidia/charts/fleet-intelligence-agent \
+  -n <namespace> \
+  -f values.yaml
+```
+
+## Configurable `fleetint run` Flags
+
+These are the `fleetint run` flags supported by the CLI.
+
+| Flag | Description | Default | Bare metal | Kubernetes |
+| --- | --- | --- | --- | --- |
+| `--log-level` | Log level: `debug`, `info`, `warn`, `error`. | unset by CLI; packaged bare-metal default is `warn` via `FLEETINT_FLAGS` | `FLEETINT_FLAGS="--log-level=..."` | `logLevel` |
+| `--log-file` | Log file path. Leave empty to log to stdout/stderr. | empty | `FLEETINT_FLAGS="--log-file=..."` | not exposed by chart by default |
+| `--listen-address` | HTTP listen address for the agent API server. | CLI default `127.0.0.1:15133` | `FLEETINT_FLAGS="--listen-address=..."` | `listenAddress` |
+| `--retention-period` | Retention period for stored metrics and events. Minimum `1m`. | `24h` | `FLEETINT_FLAGS="--retention-period=..."` | `retentionPeriod` |
+| `--components` | Comma-separated component selection. Use `all`, `*`, explicit names, and `-name` exclusions. | empty flag value, which means enable all components by default | `FLEETINT_FLAGS="--components=..."` | `components` |
+| `--offline-mode` | Disable the HTTP API server and write telemetry to files instead. | `false` | `FLEETINT_FLAGS="--offline-mode ..."` | not exposed by chart by default |
+| `--path` | Output directory for offline mode. Required with `--offline-mode`. | empty | `FLEETINT_FLAGS="--path=/path ..."` | not exposed by chart by default |
+| `--duration` | Offline-mode collection duration in `HH:MM:SS` format. Required with `--offline-mode`. | empty | `FLEETINT_FLAGS="--duration=00:05:00 ..."` | not exposed by chart by default |
+| `--format` | Offline-mode output format: `json` or `csv`. | `json` | `FLEETINT_FLAGS="--format=csv ..."` | not exposed by chart by default |
+| `--enable-fault-injection` | Enable the local fault-injection endpoint for testing. | `false` | `FLEETINT_FLAGS="--enable-fault-injection"` | not exposed by chart by default |
+
+## Component Selection
 
 Use `--components` to control which monitoring components are enabled.
 
@@ -64,11 +141,12 @@ fleetint run --components=accelerator-nvidia-dcgm-thermal,accelerator-nvidia-dcg
 fleetint run --components=all,-accelerator-nvidia-dcgm-prof
 ```
 
-Notes:
+Rules:
 
-- `all` (or `*`) enables the default component set.
-- Use `all,-<component-name>` to start from the default set and exclude specific components.
-- A plain explicit list enables only the listed components.
+- `all`, `*`, or an empty component list enables all components.
+- `all,-<component-name>` starts with all components, then disables specific ones.
+- An explicit comma-separated list enables only the named components.
+- A non-matching explicit value effectively disables all components.
 
 Available component names:
 
@@ -105,15 +183,20 @@ Available component names:
 - `os`
 - `library`
 
-## Verify effective config
+## Verify Effective Configuration
 
-- **Bare metal**:
-  ```bash
-  sudo fleetint metadata
-  sudo journalctl -u fleetintd -f
-  ```
-- **Helm**:
-  ```bash
-  helm get values fleet-intelligence-agent -n <namespace>
-  kubectl logs -n <namespace> -l app.kubernetes.io/name=fleet-intelligence-agent --tail=100
-  ```
+### Bare Metal
+
+```bash
+sudo cat /etc/default/fleetint
+sudo systemctl status fleetintd
+sudo journalctl -u fleetintd -f
+```
+
+### Kubernetes
+
+```bash
+helm get values fleet-intelligence-agent -n <namespace>
+kubectl get daemonset fleet-intelligence-agent -n <namespace> -o yaml
+kubectl logs -n <namespace> -l app.kubernetes.io/name=fleet-intelligence-agent --tail=100
+```
