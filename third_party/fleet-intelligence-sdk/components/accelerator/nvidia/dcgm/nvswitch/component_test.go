@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
+
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
 	dcgmcommon "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/dcgm/common"
@@ -121,9 +123,9 @@ func TestCheckResultHealthStates_UsesNVSwitchIdentifiers(t *testing.T) {
 			UUID:      "nvswitch-3",
 			EntityID:  "NvSwitch-3",
 			Message:   "Fatal NVSwitch error",
-			ErrorCode: "DCGM_FR_NVSWITCH_FATAL_ERROR",
-			System:    "DCGM_HEALTH_WATCH_NVSWITCH_FATAL",
-			Severity:  apiv1.HealthStateTypeUnhealthy,
+			ErrorCode: dcgm.DCGM_FR_NVSWITCH_FATAL_ERROR,
+			System:    dcgm.DCGM_HEALTH_WATCH_NVSWITCH_FATAL,
+			Health:    dcgm.DCGM_HEALTH_RESULT_FAIL,
 		},
 	}
 

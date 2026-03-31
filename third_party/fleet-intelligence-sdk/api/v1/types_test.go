@@ -17,7 +17,7 @@ func TestHealthState_JSONIncludesIncidents(t *testing.T) {
 			{
 				EntityID: "GPU-0",
 				Message:  "Clock throttled",
-				Severity: HealthStateTypeDegraded,
+				Health: HealthStateTypeDegraded,
 				Error:    "DCGM_FR_CLOCK_THROTTLE_POWER",
 			},
 		},
@@ -33,7 +33,7 @@ func TestHealthState_JSONIncludesIncidents(t *testing.T) {
 		`"incidents":[`,
 		`"entity_id":"GPU-0"`,
 		`"message":"Clock throttled"`,
-		`"severity":"Degraded"`,
+		`"health":"Degraded"`,
 		`"error":"DCGM_FR_CLOCK_THROTTLE_POWER"`,
 	} {
 		if !bytes.Contains(data, []byte(want)) {
