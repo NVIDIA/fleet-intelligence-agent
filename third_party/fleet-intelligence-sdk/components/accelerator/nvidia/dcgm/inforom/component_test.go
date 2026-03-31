@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
+
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
 	dcgmcommon "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/dcgm/common"
@@ -160,9 +162,9 @@ func TestCheckResultHealthStates_PreservesLegacyIncidentsAndAddsTypedIncidents(t
 			UUID:      "GPU-1234",
 			EntityID:  "GPU-0",
 			Message:   "Inforom corruption detected",
-			ErrorCode: "DCGM_FR_CORRUPT_INFOROM",
-			System:    "DCGM_HEALTH_WATCH_INFOROM",
-			Severity:  apiv1.HealthStateTypeDegraded,
+			ErrorCode: dcgm.DCGM_FR_CORRUPT_INFOROM,
+			System:    dcgm.DCGM_HEALTH_WATCH_INFOROM,
+			Health:    dcgm.DCGM_HEALTH_RESULT_WARN,
 		},
 	}
 

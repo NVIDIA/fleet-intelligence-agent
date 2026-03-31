@@ -232,12 +232,12 @@ type EnrichedIncident struct {
 	EntityID string `json:"-"`
 	// error message from the incident
 	Message string `json:"message"`
-	// symbolic DCGM_FR_* error code
-	ErrorCode string `json:"code"`
-	// symbolic DCGM_HEALTH_WATCH_* system name
-	System string `json:"system"`
-	// health result level mapped to API severity
-	Severity apiv1.HealthStateType `json:"health"`
+	// DCGM_FR_* error code as integer (backend-compatible)
+	ErrorCode dcgm.HealthCheckErrorCode `json:"code"`
+	// DCGM_HEALTH_WATCH_* system as integer (backend-compatible)
+	System dcgm.HealthSystem `json:"system"`
+	// health result level as integer (backend-compatible)
+	Health dcgm.HealthResult `json:"health"`
 }
 
 // EnrichIncidents transforms DCGM incidents by mapping entity IDs to UUIDs.
@@ -260,9 +260,9 @@ func EnrichIncidents(incidents []dcgm.Incident, deviceMapping map[uint]string) [
 			UUID:      uuid,
 			EntityID:  dcgmEntityID(incident.EntityInfo),
 			Message:   incident.Error.Message,
-			ErrorCode: healthCheckErrorCodeString(incident.Error.Code),
-			System:    healthSystemString(incident.System),
-			Severity:  healthResultToSeverity(incident.Health),
+			ErrorCode: incident.Error.Code,
+			System:    incident.System,
+			Health:    incident.Health,
 		})
 	}
 
@@ -281,9 +281,9 @@ func EnrichSwitchIncidents(incidents []dcgm.Incident) []EnrichedIncident {
 			UUID:      fmt.Sprintf("nvswitch-%d", incident.EntityInfo.EntityId),
 			EntityID:  dcgmEntityID(incident.EntityInfo),
 			Message:   incident.Error.Message,
-			ErrorCode: healthCheckErrorCodeString(incident.Error.Code),
-			System:    healthSystemString(incident.System),
-			Severity:  healthResultToSeverity(incident.Health),
+			ErrorCode: incident.Error.Code,
+			System:    incident.System,
+			Health:    incident.Health,
 		})
 	}
 
@@ -294,8 +294,8 @@ func (e EnrichedIncident) ToHealthStateIncident() apiv1.HealthStateIncident {
 	return apiv1.HealthStateIncident{
 		EntityID: e.EntityID,
 		Message:  e.Message,
-		Severity: e.Severity,
-		Error:    e.ErrorCode,
+		Severity: healthResultToSeverity(e.Health),
+		Error:    healthCheckErrorCodeString(e.ErrorCode),
 	}
 }
 
