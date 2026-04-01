@@ -31,6 +31,7 @@ import (
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/enrollment"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/converter"
@@ -266,6 +267,15 @@ func (e *healthExporter) refreshConfigFromMetadata(ctx context.Context) {
 
 	// Load metrics endpoint (update even if empty to handle un-enrollment)
 	if metricsEndpoint, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "metrics_endpoint"); err == nil {
+		if metricsEndpoint != "" {
+			validated, validateErr := endpoint.ValidateBackendEndpoint(metricsEndpoint)
+			if validateErr != nil {
+				log.Logger.Errorw("ignoring invalid metrics endpoint from metadata", "error", validateErr)
+				metricsEndpoint = ""
+			} else {
+				metricsEndpoint = validated.String()
+			}
+		}
 		if e.options.config.MetricsEndpoint != metricsEndpoint {
 			e.options.config.MetricsEndpoint = metricsEndpoint
 			if metricsEndpoint == "" {
@@ -280,6 +290,15 @@ func (e *healthExporter) refreshConfigFromMetadata(ctx context.Context) {
 
 	// Load logs endpoint (update even if empty to handle un-enrollment)
 	if logsEndpoint, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "logs_endpoint"); err == nil {
+		if logsEndpoint != "" {
+			validated, validateErr := endpoint.ValidateBackendEndpoint(logsEndpoint)
+			if validateErr != nil {
+				log.Logger.Errorw("ignoring invalid logs endpoint from metadata", "error", validateErr)
+				logsEndpoint = ""
+			} else {
+				logsEndpoint = validated.String()
+			}
+		}
 		if e.options.config.LogsEndpoint != logsEndpoint {
 			e.options.config.LogsEndpoint = logsEndpoint
 			if logsEndpoint == "" {
