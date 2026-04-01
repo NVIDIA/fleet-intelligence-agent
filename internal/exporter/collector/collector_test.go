@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,12 +27,14 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
+	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
 func TestCollector_AttestationDataCollection(t *testing.T) {
@@ -378,6 +381,60 @@ func TestNew(t *testing.T) {
 	var _ = c
 }
 
+func TestCollectReturnsPartialDataWhenEventCollectionTimesOut(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	firstEvent := apiv1.Event{
+		Component: "cpu",
+		Time:      metav1.NewTime(time.Now().UTC()),
+		Name:      "test_event",
+		Type:      apiv1.EventTypeWarning,
+		Message:   "first event",
+	}
+
+	registry := &mockRegistry{
+		components: []components.Component{
+			&mockComponent{
+				name:   "cpu",
+				events: []apiv1.Event{firstEvent},
+			},
+			&mockComponent{
+				name: "memory",
+				eventFunc: func(ctx context.Context, since time.Time) (apiv1.Events, error) {
+					cancel()
+					<-ctx.Done()
+					return nil, ctx.Err()
+				},
+			},
+		},
+	}
+
+	c := New(
+		&config.HealthExporterConfig{
+			IncludeEvents: true,
+			EventsLookback: metav1.Duration{
+				Duration: time.Minute,
+			},
+		},
+		nil,
+		nil,
+		nil,
+		&mockEventStore{},
+		registry,
+		nil,
+		nil,
+		"test-machine-id",
+		nil,
+	)
+
+	data, err := c.Collect(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, data)
+	require.Len(t, data.Events, 1)
+	assert.Equal(t, "cpu", data.Events[0].Component)
+	assert.Equal(t, "test_event", data.Events[0].Name)
+}
+
 func TestCollector_Collect_BasicFlow(t *testing.T) {
 	ctx := context.Background()
 	cfg := &config.HealthExporterConfig{
@@ -423,6 +480,116 @@ func TestCollector_CollectMachineInfo_NoNVML(t *testing.T) {
 
 	// MachineInfo should be nil because NVML is not available
 	assert.Nil(t, data.MachineInfo, "MachineInfo should be nil without NVML")
+}
+
+func TestCollector_CollectMachineInfoHangDoesNotBlockOtherData(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	machineInfoFetcher := func(nvmlInstance nvidianvml.Instance, opts ...machineinfo.MachineInfoOption) (*machineinfo.MachineInfo, error) {
+		started <- struct{}{}
+		<-release
+		return &machineinfo.MachineInfo{MachineID: "machine-info-id"}, nil
+	}
+
+	cfg := &config.HealthExporterConfig{
+		IncludeMachineInfo: true,
+		IncludeMetrics:     true,
+		IncludeEvents:      true,
+		MetricsLookback:    metav1.Duration{Duration: 5 * time.Minute},
+		EventsLookback:     metav1.Duration{Duration: 5 * time.Minute},
+	}
+
+	mockStore := &mockMetricsStore{
+		metrics: pkgmetrics.Metrics{
+			{Component: "gpu", Name: "temperature", Value: 75.0},
+		},
+	}
+	mockComp := &mockComponent{
+		name: "test-component",
+		events: []apiv1.Event{
+			{
+				Time:      metav1.Time{Time: time.Now()},
+				Component: "test-component",
+				Name:      "test-event",
+				Type:      apiv1.EventTypeWarning,
+				Message:   "Test warning",
+			},
+		},
+	}
+	mockRegistry := &mockRegistry{components: []components.Component{mockComp}}
+
+	collector := New(cfg, nil, nil, mockStore, &mockEventStore{}, mockRegistry, nvidianvml.NewNoOp(), nil, "test-machine-id", nil).(*collector)
+	collector.machineInfoFetcher = machineInfoFetcher
+
+	done := make(chan struct{})
+	var (
+		data *HealthData
+		err  error
+	)
+	go func() {
+		data, err = collector.Collect(context.Background())
+		close(done)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("machine info collection did not start")
+	}
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("collection blocked on machine info")
+	}
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+	assert.Nil(t, data.MachineInfo, "MachineInfo should be absent while background refresh is still running")
+	assert.Len(t, data.Metrics, 1, "metrics collection should still complete")
+	assert.Len(t, data.Events, 1, "event collection should still complete")
+
+	close(release)
+}
+
+func TestCollector_CollectMachineInfoUsesCachedRefreshResult(t *testing.T) {
+	var callCount atomic.Int32
+	refreshed := make(chan struct{}, 1)
+	machineInfoFetcher := func(nvmlInstance nvidianvml.Instance, opts ...machineinfo.MachineInfoOption) (*machineinfo.MachineInfo, error) {
+		callCount.Add(1)
+		info := &machineinfo.MachineInfo{
+			MachineID:               "machine-info-id",
+			FleetintVersion:         "test-version",
+			ContainerRuntimeVersion: "containerd://1.0.0",
+		}
+		refreshed <- struct{}{}
+		return info, nil
+	}
+
+	cfg := &config.HealthExporterConfig{
+		IncludeMachineInfo: true,
+	}
+
+	collector := New(cfg, nil, nil, nil, nil, nil, nvidianvml.NewNoOp(), nil, "test-machine-id", nil).(*collector)
+	collector.machineInfoFetcher = machineInfoFetcher
+
+	data1, err := collector.Collect(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, data1)
+	assert.Nil(t, data1.MachineInfo, "first collection should not block waiting for machine info refresh")
+
+	select {
+	case <-refreshed:
+	case <-time.After(time.Second):
+		t.Fatal("machine info refresh did not complete")
+	}
+
+	data2, err := collector.Collect(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, data2)
+	require.NotNil(t, data2.MachineInfo)
+	assert.Equal(t, "machine-info-id", data2.MachineInfo.MachineID)
+	assert.EqualValues(t, 1, callCount.Load())
 }
 
 func TestCollector_CollectMetrics_NoStore(t *testing.T) {
@@ -711,6 +878,54 @@ func TestCollector_CollectComponentData_NoHealthStates(t *testing.T) {
 	assert.Equal(t, "No health data", compData["reason"])
 }
 
+func TestCollectReturnsPartialDataWhenComponentDataCollectionTimesOut(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	registry := &mockRegistry{
+		components: []components.Component{
+			&mockComponent{
+				name: "cpu",
+				healthStates: []apiv1.HealthState{
+					{
+						Component: "cpu",
+						Health:    "Healthy",
+						Reason:    "OK",
+						Time:      metav1.NewTime(time.Now().UTC()),
+					},
+				},
+			},
+			&cancelingHealthStateComponent{
+				name:   "memory",
+				cancel: cancel,
+			},
+		},
+	}
+
+	c := New(
+		&config.HealthExporterConfig{
+			IncludeComponentData: true,
+		},
+		nil,
+		nil,
+		nil,
+		nil,
+		registry,
+		nil,
+		nil,
+		"test-machine-id",
+		nil,
+	)
+
+	data, err := c.Collect(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, data)
+	require.Len(t, data.ComponentData, 1)
+
+	compData := data.ComponentData["cpu"].(map[string]interface{})
+	assert.Equal(t, "cpu", compData["component_name"])
+	assert.Equal(t, "Healthy", compData["health"])
+}
+
 func TestCollector_AllFeaturesEnabled(t *testing.T) {
 	ctx := context.Background()
 	cfg := &config.HealthExporterConfig{
@@ -843,6 +1058,7 @@ type mockComponent struct {
 	events       []apiv1.Event
 	healthStates []apiv1.HealthState
 	shouldError  bool
+	eventFunc    func(ctx context.Context, since time.Time) (apiv1.Events, error)
 }
 
 func (m *mockComponent) Name() string {
@@ -850,6 +1066,9 @@ func (m *mockComponent) Name() string {
 }
 
 func (m *mockComponent) Events(ctx context.Context, since time.Time) (apiv1.Events, error) {
+	if m.eventFunc != nil {
+		return m.eventFunc(ctx, since)
+	}
 	if m.shouldError {
 		return nil, errors.New("mock component error")
 	}
@@ -884,3 +1103,39 @@ func (m *mockComponent) IsSupported() bool {
 func (m *mockComponent) Tags() []string {
 	return []string{}
 }
+
+type cancelingHealthStateComponent struct {
+	name   string
+	cancel context.CancelFunc
+}
+
+func (c *cancelingHealthStateComponent) Name() string { return c.name }
+
+func (c *cancelingHealthStateComponent) Events(ctx context.Context, since time.Time) (apiv1.Events, error) {
+	return nil, nil
+}
+
+func (c *cancelingHealthStateComponent) LastHealthStates() apiv1.HealthStates {
+	c.cancel()
+	return nil
+}
+
+func (c *cancelingHealthStateComponent) Start() error { return nil }
+
+func (c *cancelingHealthStateComponent) Stop(ctx context.Context) error { return nil }
+
+func (c *cancelingHealthStateComponent) States(ctx context.Context) ([]any, error) {
+	return nil, nil
+}
+
+func (c *cancelingHealthStateComponent) Metrics(ctx context.Context, since time.Time) ([]pkgmetrics.Metric, error) {
+	return nil, nil
+}
+
+func (c *cancelingHealthStateComponent) Check() components.CheckResult { return nil }
+
+func (c *cancelingHealthStateComponent) Close() error { return nil }
+
+func (c *cancelingHealthStateComponent) IsSupported() bool { return true }
+
+func (c *cancelingHealthStateComponent) Tags() []string { return nil }

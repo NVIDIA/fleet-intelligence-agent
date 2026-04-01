@@ -28,10 +28,30 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+func useTempHomeDir(t *testing.T) string {
+	t.Helper()
+
+	origGeteuid := osGeteuid
+	origHomeDirFn := homeDirFn
+
+	tmpHome := t.TempDir()
+	osGeteuid = func() int { return 1000 }
+	homeDirFn = func() (string, error) { return tmpHome, nil }
+
+	t.Cleanup(func() {
+		osGeteuid = origGeteuid
+		homeDirFn = origHomeDirFn
+	})
+
+	return tmpHome
+}
+
 func TestDefault(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("default values", func(t *testing.T) {
+		useTempHomeDir(t)
+
 		cfg, err := Default(ctx)
 		require.NoError(t, err)
 
@@ -45,6 +65,8 @@ func TestDefault(t *testing.T) {
 	})
 
 	t.Run("with infiniband class dir option", func(t *testing.T) {
+		useTempHomeDir(t)
+
 		classDir := "/custom/class"
 
 		cfg, err := Default(ctx, WithInfinibandClassRootDir(classDir))
@@ -551,6 +573,8 @@ func TestDefaultWithHealthExporter(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("default includes health exporter", func(t *testing.T) {
+		useTempHomeDir(t)
+
 		cfg, err := Default(ctx)
 		require.NoError(t, err)
 
