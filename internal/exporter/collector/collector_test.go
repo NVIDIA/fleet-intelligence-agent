@@ -378,6 +378,60 @@ func TestNew(t *testing.T) {
 	var _ = c
 }
 
+func TestCollectReturnsPartialDataWhenEventCollectionTimesOut(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	firstEvent := apiv1.Event{
+		Component: "cpu",
+		Time:      metav1.NewTime(time.Now().UTC()),
+		Name:      "test_event",
+		Type:      apiv1.EventTypeWarning,
+		Message:   "first event",
+	}
+
+	registry := &mockRegistry{
+		components: []components.Component{
+			&mockComponent{
+				name:   "cpu",
+				events: []apiv1.Event{firstEvent},
+			},
+			&mockComponent{
+				name: "memory",
+				eventFunc: func(ctx context.Context, since time.Time) (apiv1.Events, error) {
+					cancel()
+					<-ctx.Done()
+					return nil, ctx.Err()
+				},
+			},
+		},
+	}
+
+	c := New(
+		&config.HealthExporterConfig{
+			IncludeEvents: true,
+			EventsLookback: metav1.Duration{
+				Duration: time.Minute,
+			},
+		},
+		nil,
+		nil,
+		nil,
+		&mockEventStore{},
+		registry,
+		nil,
+		nil,
+		"test-machine-id",
+		nil,
+	)
+
+	data, err := c.Collect(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, data)
+	require.Len(t, data.Events, 1)
+	assert.Equal(t, "cpu", data.Events[0].Component)
+	assert.Equal(t, "test_event", data.Events[0].Name)
+}
+
 func TestCollector_Collect_BasicFlow(t *testing.T) {
 	ctx := context.Background()
 	cfg := &config.HealthExporterConfig{
@@ -843,6 +897,7 @@ type mockComponent struct {
 	events       []apiv1.Event
 	healthStates []apiv1.HealthState
 	shouldError  bool
+	eventFunc    func(ctx context.Context, since time.Time) (apiv1.Events, error)
 }
 
 func (m *mockComponent) Name() string {
@@ -850,6 +905,9 @@ func (m *mockComponent) Name() string {
 }
 
 func (m *mockComponent) Events(ctx context.Context, since time.Time) (apiv1.Events, error) {
+	if m.eventFunc != nil {
+		return m.eventFunc(ctx, since)
+	}
 	if m.shouldError {
 		return nil, errors.New("mock component error")
 	}

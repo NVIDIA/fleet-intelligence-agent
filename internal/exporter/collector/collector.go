@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -124,25 +125,44 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 		Timestamp:    time.Now().UTC(),
 	}
 
+	if err := ctx.Err(); err != nil {
+		return data, err
+	}
+
 	// Collect machine info if enabled
 	if c.config.IncludeMachineInfo {
 		if err := c.collectMachineInfo(data); err != nil {
 			log.Logger.Errorw("Failed to collect machine info", "error", err)
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return data, err
+	}
 
 	// Collect metrics if enabled
 	if c.config.IncludeMetrics {
 		if err := c.collectMetrics(ctx, data); err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return data, err
+			}
 			log.Logger.Errorw("Failed to collect metrics", "error", err)
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return data, err
 	}
 
 	// Collect events if enabled
 	if c.config.IncludeEvents {
 		if err := c.collectEvents(ctx, data); err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return data, err
+			}
 			log.Logger.Errorw("Failed to collect events", "error", err)
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return data, err
 	}
 
 	// Collect component data if enabled
@@ -150,6 +170,9 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 		if err := c.collectComponentData(data); err != nil {
 			log.Logger.Errorw("Failed to collect component data", "error", err)
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return data, err
 	}
 
 	// Collect attestation data if provider is available
@@ -219,8 +242,17 @@ func (c *collector) collectEvents(ctx context.Context, data *HealthData) error {
 	}
 
 	for _, component := range components {
+		if err := ctx.Err(); err != nil {
+			data.Events = allEvents
+			return err
+		}
+
 		componentEvents, err := component.Events(ctx, since)
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				data.Events = allEvents
+				return err
+			}
 			log.Logger.Errorw("Failed to get events from component",
 				"component", component.Name(), "error", err)
 			continue

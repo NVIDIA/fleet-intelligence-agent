@@ -24,6 +24,7 @@ package exporter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -173,26 +174,35 @@ func (e *healthExporter) ExportNow(ctx context.Context) error {
 // export performs the actual data export operation
 func (e *healthExporter) export() error {
 	log.Logger.Infow("Starting health export")
-	ctx, cancel := context.WithTimeout(e.ctx, e.options.timeout)
-	defer cancel()
+	collectCtx, cancelCollect := context.WithTimeout(e.ctx, e.options.timeout)
+	defer cancelCollect()
 
 	// Refresh configuration from metadata on every export
 	// If the endpoints/auth token are not empty, export will continue
 	// If the endpoints/auth token are empty, exportHTTP will skip
-	e.refreshConfigFromMetadata(ctx)
+	e.refreshConfigFromMetadata(collectCtx)
 
 	// Collect health data
-	healthData, err := e.collector.Collect(ctx)
-	if err != nil {
+	healthData, err := e.collector.Collect(collectCtx)
+	if err != nil && healthData == nil {
 		return fmt.Errorf("collection failed: %w", err)
+	}
+	if err != nil {
+		log.Logger.Warnw("Collection completed with partial data",
+			"error", err,
+			"timed_out", errors.Is(err, context.DeadlineExceeded),
+			"canceled", errors.Is(err, context.Canceled))
 	}
 
 	// Export data based on mode
 	if e.options.config.OfflineMode {
 		return e.exportToFile(healthData)
-	} else {
-		return e.exportToHTTP(ctx, healthData)
 	}
+
+	uploadCtx, cancelUpload := context.WithTimeout(e.ctx, e.options.timeout)
+	defer cancelUpload()
+
+	return e.exportToHTTP(uploadCtx, healthData)
 }
 
 // exportToFile writes health data to files

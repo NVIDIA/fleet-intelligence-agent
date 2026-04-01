@@ -40,6 +40,7 @@ import (
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/writer"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
@@ -57,6 +58,16 @@ func (m *MockCollector) Collect(ctx context.Context) (*collector.HealthData, err
 	}
 	return args.Get(0).(*collector.HealthData), args.Error(1)
 }
+
+type mockHTTPWriter struct {
+	sendFunc func(ctx context.Context, data *collector.HealthData, metricsEndpoint string, logsEndpoint string, maxRetries int, authToken string) (string, error)
+}
+
+func (m *mockHTTPWriter) Send(ctx context.Context, data *collector.HealthData, metricsEndpoint string, logsEndpoint string, maxRetries int, authToken string) (string, error) {
+	return m.sendFunc(ctx, data, metricsEndpoint, logsEndpoint, maxRetries, authToken)
+}
+
+func (m *mockHTTPWriter) SetJWTRefreshFunc(refreshFunc writer.JWTRefreshFunc) {}
 
 // MockMetricsStore is a mock implementation of pkgmetrics.Store
 type MockMetricsStore struct {
@@ -1111,6 +1122,53 @@ func TestExportWithCollectorError(t *testing.T) {
 	assert.Contains(t, err.Error(), "collection failed")
 
 	// Cleanup
+	err = exporter.Stop()
+	require.NoError(t, err)
+}
+
+func TestExportUsesFreshUploadContextAfterPartialCollection(t *testing.T) {
+	cfg := &config.HealthExporterConfig{
+		Interval:        metav1.Duration{Duration: 1 * time.Minute},
+		Timeout:         metav1.Duration{Duration: 20 * time.Millisecond},
+		MetricsEndpoint: "https://metrics.example.com",
+		LogsEndpoint:    "https://logs.example.com",
+		AuthToken:       "test-token",
+	}
+
+	ctx := context.Background()
+	exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
+	require.NoError(t, err)
+
+	he := exporter.(*healthExporter)
+	healthData := &collector.HealthData{
+		CollectionID: "test-collection",
+		MachineID:    "test-machine-id",
+		Timestamp:    time.Now(),
+	}
+
+	mockCollector := &MockCollector{}
+	mockCollector.
+		On("Collect", mock.Anything).
+		Run(func(args mock.Arguments) {
+			<-args.Get(0).(context.Context).Done()
+		}).
+		Return(healthData, context.DeadlineExceeded)
+	he.collector = mockCollector
+
+	sendCalled := false
+	he.httpWriter = &mockHTTPWriter{
+		sendFunc: func(ctx context.Context, data *collector.HealthData, metricsEndpoint string, logsEndpoint string, maxRetries int, authToken string) (string, error) {
+			sendCalled = true
+			assert.NoError(t, ctx.Err(), "upload should use a fresh context")
+			assert.Equal(t, healthData, data)
+			return "", nil
+		},
+	}
+
+	err = he.export()
+	require.NoError(t, err)
+	assert.True(t, sendCalled, "upload should still run with partial collection data")
+
 	err = exporter.Stop()
 	require.NoError(t, err)
 }
