@@ -77,9 +77,8 @@ type collector struct {
 	machineInfoMu             sync.RWMutex
 	cachedMachineInfo         *machineinfo.MachineInfo
 	machineInfoCollecting     bool
+	machineInfoFetcher        func(nvidianvml.Instance, ...machineinfo.MachineInfoOption) (*machineinfo.MachineInfo, error)
 }
-
-var getMachineInfo = machineinfo.GetMachineInfo
 
 // New creates a new health data collector
 func New(
@@ -111,6 +110,7 @@ func New(
 		attestationManager: attestationManager,
 		machineID:          machineID,
 		dcgmGPUIndexes:     dcgmGPUIndexes,
+		machineInfoFetcher: machineinfo.GetMachineInfo,
 	}
 }
 
@@ -199,7 +199,7 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 }
 
 // collectMachineInfo attaches cached machine info when available and triggers
-// a background refresh if one is not already in progress.
+// a background refresh only until the cache has been populated.
 func (c *collector) collectMachineInfo(ctx context.Context, data *HealthData) error {
 	if c.nvmlInstance == nil {
 		return fmt.Errorf("NVML instance not available")
@@ -220,7 +220,7 @@ func (c *collector) collectMachineInfo(ctx context.Context, data *HealthData) er
 
 func (c *collector) startMachineInfoRefresh() {
 	c.machineInfoMu.Lock()
-	if c.machineInfoCollecting {
+	if c.machineInfoCollecting || c.cachedMachineInfo != nil {
 		c.machineInfoMu.Unlock()
 		return
 	}
@@ -239,7 +239,7 @@ func (c *collector) startMachineInfoRefresh() {
 			opts = append(opts, machineinfo.WithDCGMGPUIndexes(c.dcgmGPUIndexes))
 		}
 
-		machineInfo, err := getMachineInfo(c.nvmlInstance, opts...)
+		machineInfo, err := c.machineInfoFetcher(c.nvmlInstance, opts...)
 		if err != nil {
 			log.Logger.Errorw("Failed to refresh machine info", "error", err)
 			return

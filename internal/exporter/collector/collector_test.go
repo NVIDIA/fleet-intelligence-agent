@@ -483,12 +483,9 @@ func TestCollector_CollectMachineInfo_NoNVML(t *testing.T) {
 }
 
 func TestCollector_CollectMachineInfoHangDoesNotBlockOtherData(t *testing.T) {
-	originalGetMachineInfo := getMachineInfo
-	defer func() { getMachineInfo = originalGetMachineInfo }()
-
 	release := make(chan struct{})
 	started := make(chan struct{}, 1)
-	getMachineInfo = func(nvmlInstance nvidianvml.Instance, opts ...machineinfo.MachineInfoOption) (*machineinfo.MachineInfo, error) {
+	machineInfoFetcher := func(nvmlInstance nvidianvml.Instance, opts ...machineinfo.MachineInfoOption) (*machineinfo.MachineInfo, error) {
 		started <- struct{}{}
 		<-release
 		return &machineinfo.MachineInfo{MachineID: "machine-info-id"}, nil
@@ -521,7 +518,8 @@ func TestCollector_CollectMachineInfoHangDoesNotBlockOtherData(t *testing.T) {
 	}
 	mockRegistry := &mockRegistry{components: []components.Component{mockComp}}
 
-	collector := New(cfg, nil, nil, mockStore, &mockEventStore{}, mockRegistry, nvidianvml.NewNoOp(), nil, "test-machine-id", nil)
+	collector := New(cfg, nil, nil, mockStore, &mockEventStore{}, mockRegistry, nvidianvml.NewNoOp(), nil, "test-machine-id", nil).(*collector)
+	collector.machineInfoFetcher = machineInfoFetcher
 
 	done := make(chan struct{})
 	var (
@@ -555,12 +553,9 @@ func TestCollector_CollectMachineInfoHangDoesNotBlockOtherData(t *testing.T) {
 }
 
 func TestCollector_CollectMachineInfoUsesCachedRefreshResult(t *testing.T) {
-	originalGetMachineInfo := getMachineInfo
-	defer func() { getMachineInfo = originalGetMachineInfo }()
-
 	var callCount atomic.Int32
 	refreshed := make(chan struct{}, 1)
-	getMachineInfo = func(nvmlInstance nvidianvml.Instance, opts ...machineinfo.MachineInfoOption) (*machineinfo.MachineInfo, error) {
+	machineInfoFetcher := func(nvmlInstance nvidianvml.Instance, opts ...machineinfo.MachineInfoOption) (*machineinfo.MachineInfo, error) {
 		callCount.Add(1)
 		info := &machineinfo.MachineInfo{
 			MachineID:               "machine-info-id",
@@ -575,7 +570,8 @@ func TestCollector_CollectMachineInfoUsesCachedRefreshResult(t *testing.T) {
 		IncludeMachineInfo: true,
 	}
 
-	collector := New(cfg, nil, nil, nil, nil, nil, nvidianvml.NewNoOp(), nil, "test-machine-id", nil)
+	collector := New(cfg, nil, nil, nil, nil, nil, nvidianvml.NewNoOp(), nil, "test-machine-id", nil).(*collector)
+	collector.machineInfoFetcher = machineInfoFetcher
 
 	data1, err := collector.Collect(context.Background())
 	require.NoError(t, err)
