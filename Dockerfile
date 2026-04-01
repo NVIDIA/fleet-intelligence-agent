@@ -1,4 +1,4 @@
-ARG DCGM_VERSION="4.5.2-1-ubuntu22.04"
+ARG DCGM_VERSION="4.4.2-1-ubuntu22.04"
 
 FROM golang:1.26.1 AS build
 
