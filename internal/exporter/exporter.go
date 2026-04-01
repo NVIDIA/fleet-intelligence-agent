@@ -174,6 +174,9 @@ func (e *healthExporter) ExportNow(ctx context.Context) error {
 // export performs the actual data export operation
 func (e *healthExporter) export() error {
 	log.Logger.Infow("Starting health export")
+
+	// Collection and upload get independent timeout budgets so partial collection
+	// does not immediately starve the subsequent HTTP send.
 	collectCtx, cancelCollect := context.WithTimeout(e.ctx, e.options.timeout)
 	defer cancelCollect()
 

@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
@@ -73,7 +74,12 @@ type collector struct {
 	lastAttestationCollection time.Time
 	machineID                 string            // Agent's stable identity from server initialization
 	dcgmGPUIndexes            map[string]string // UUID → DCGM device ID override for GPU indices
+	machineInfoMu             sync.RWMutex
+	cachedMachineInfo         *machineinfo.MachineInfo
+	machineInfoCollecting     bool
 }
+
+var getMachineInfo = machineinfo.GetMachineInfo
 
 // New creates a new health data collector
 func New(
@@ -131,7 +137,7 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 
 	// Collect machine info if enabled
 	if c.config.IncludeMachineInfo {
-		if err := c.collectMachineInfo(data); err != nil {
+		if err := c.collectMachineInfo(ctx, data); err != nil {
 			log.Logger.Errorw("Failed to collect machine info", "error", err)
 		}
 	}
@@ -167,7 +173,10 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 
 	// Collect component data if enabled
 	if c.config.IncludeComponentData {
-		if err := c.collectComponentData(data); err != nil {
+		if err := c.collectComponentData(ctx, data); err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return data, err
+			}
 			log.Logger.Errorw("Failed to collect component data", "error", err)
 		}
 	}
@@ -189,25 +198,65 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 	return data, nil
 }
 
-// collectMachineInfo collects machine hardware information
-func (c *collector) collectMachineInfo(data *HealthData) error {
+// collectMachineInfo attaches cached machine info when available and triggers
+// a background refresh if one is not already in progress.
+func (c *collector) collectMachineInfo(ctx context.Context, data *HealthData) error {
 	if c.nvmlInstance == nil {
 		return fmt.Errorf("NVML instance not available")
 	}
 
-	var opts []machineinfo.MachineInfoOption
-	if len(c.dcgmGPUIndexes) > 0 {
-		opts = append(opts, machineinfo.WithDCGMGPUIndexes(c.dcgmGPUIndexes))
+	if cached := c.getCachedMachineInfo(); cached != nil {
+		data.MachineInfo = cached
+		log.Logger.Debugw("Using cached machine info")
 	}
 
-	machineInfo, err := machineinfo.GetMachineInfo(c.nvmlInstance, opts...)
-	if err != nil {
-		return fmt.Errorf("failed to get machine info: %w", err)
+	c.startMachineInfoRefresh()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
-	data.MachineInfo = machineInfo
-	log.Logger.Debugw("Collected machine info", "machine_info", data.MachineInfo)
 	return nil
+}
+
+func (c *collector) startMachineInfoRefresh() {
+	c.machineInfoMu.Lock()
+	if c.machineInfoCollecting {
+		c.machineInfoMu.Unlock()
+		return
+	}
+	c.machineInfoCollecting = true
+	c.machineInfoMu.Unlock()
+
+	go func() {
+		defer func() {
+			c.machineInfoMu.Lock()
+			c.machineInfoCollecting = false
+			c.machineInfoMu.Unlock()
+		}()
+
+		var opts []machineinfo.MachineInfoOption
+		if len(c.dcgmGPUIndexes) > 0 {
+			opts = append(opts, machineinfo.WithDCGMGPUIndexes(c.dcgmGPUIndexes))
+		}
+
+		machineInfo, err := getMachineInfo(c.nvmlInstance, opts...)
+		if err != nil {
+			log.Logger.Errorw("Failed to refresh machine info", "error", err)
+			return
+		}
+
+		c.machineInfoMu.Lock()
+		c.cachedMachineInfo = machineInfo
+		c.machineInfoMu.Unlock()
+		log.Logger.Debugw("Refreshed machine info", "machine_info", machineInfo)
+	}()
+}
+
+func (c *collector) getCachedMachineInfo() *machineinfo.MachineInfo {
+	c.machineInfoMu.RLock()
+	defer c.machineInfoMu.RUnlock()
+
+	return c.cachedMachineInfo
 }
 
 // collectMetrics collects metrics data from the metrics store
@@ -282,7 +331,7 @@ func (c *collector) collectEvents(ctx context.Context, data *HealthData) error {
 }
 
 // collectComponentData collects health states from all components
-func (c *collector) collectComponentData(data *HealthData) error {
+func (c *collector) collectComponentData(ctx context.Context, data *HealthData) error {
 	if c.componentsRegistry == nil {
 		return fmt.Errorf("components registry not available")
 	}
@@ -291,10 +340,19 @@ func (c *collector) collectComponentData(data *HealthData) error {
 	components := c.componentsRegistry.All()
 
 	for _, component := range components {
+		if err := ctx.Err(); err != nil {
+			data.ComponentData = componentData
+			return err
+		}
+
 		componentName := component.Name()
 
 		// Get health states
 		healthStates := component.LastHealthStates()
+		if err := ctx.Err(); err != nil {
+			data.ComponentData = componentData
+			return err
+		}
 		log.Logger.Debugw("Collecting health states",
 			"component", componentName, "health_states", healthStates)
 

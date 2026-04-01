@@ -1126,6 +1126,42 @@ func TestExportWithCollectorError(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestExportDoesNotAttemptUploadWhenCollectionReturnsNoData(t *testing.T) {
+	cfg := &config.HealthExporterConfig{
+		Interval:        metav1.Duration{Duration: 1 * time.Minute},
+		Timeout:         metav1.Duration{Duration: 30 * time.Second},
+		MetricsEndpoint: "https://metrics.example.com",
+		LogsEndpoint:    "https://logs.example.com",
+		AuthToken:       "test-token",
+	}
+
+	ctx := context.Background()
+	exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
+	require.NoError(t, err)
+
+	he := exporter.(*healthExporter)
+
+	mockCollector := &MockCollector{}
+	mockCollector.On("Collect", mock.Anything).Return(nil, errors.New("collection failed"))
+	he.collector = mockCollector
+
+	sendCalled := false
+	he.httpWriter = &mockHTTPWriter{
+		sendFunc: func(ctx context.Context, data *collector.HealthData, metricsEndpoint string, logsEndpoint string, maxRetries int, authToken string) (string, error) {
+			sendCalled = true
+			return "", nil
+		},
+	}
+
+	err = he.export()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "collection failed")
+	assert.False(t, sendCalled, "upload should not run when collection returns no data")
+
+	err = exporter.Stop()
+	require.NoError(t, err)
+}
+
 func TestExportUsesFreshUploadContextAfterPartialCollection(t *testing.T) {
 	cfg := &config.HealthExporterConfig{
 		Interval:        metav1.Duration{Duration: 1 * time.Minute},
