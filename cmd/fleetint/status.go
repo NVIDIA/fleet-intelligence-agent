@@ -33,6 +33,7 @@ import (
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/cmdutil"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
 )
 
 func statusCommand(cliContext *cli.Context) error {
@@ -45,6 +46,11 @@ func statusCommand(cliContext *cli.Context) error {
 	log.Logger = log.CreateLogger(zapLvl, "")
 
 	log.Logger.Debugw("starting status command")
+
+	validatedServerURL, err := endpoint.ValidateLocalServerURL(serverURL)
+	if err != nil {
+		return fmt.Errorf("invalid server URL: %w", err)
+	}
 
 	rootCtx, rootCancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer rootCancel()
@@ -126,7 +132,12 @@ func statusCommand(cliContext *cli.Context) error {
 		Timeout: 5 * time.Second,
 	}
 
-	resp, err := client.Get(serverURL + "/healthz")
+	healthURL, err := endpoint.JoinPath(validatedServerURL, "healthz")
+	if err != nil {
+		return fmt.Errorf("failed to construct health URL: %w", err)
+	}
+
+	resp, err := client.Get(healthURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)
 	}

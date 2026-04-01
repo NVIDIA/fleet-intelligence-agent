@@ -689,9 +689,9 @@ func TestRefreshConfigFromMetadata(t *testing.T) {
 		ctx := context.Background()
 
 		// Insert test data into metadata table using SetMetadata
-		err := pkgmetadata.SetMetadata(ctx, tmpDB, "metrics_endpoint", "http://new-metrics.example.com")
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "metrics_endpoint", "https://new-metrics.example.com")
 		require.NoError(t, err)
-		err = pkgmetadata.SetMetadata(ctx, tmpDB, "logs_endpoint", "http://new-logs.example.com")
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "logs_endpoint", "https://new-logs.example.com")
 		require.NoError(t, err)
 		err = pkgmetadata.SetMetadata(ctx, tmpDB, pkgmetadata.MetadataKeyToken, "new-test-token")
 		require.NoError(t, err)
@@ -699,8 +699,8 @@ func TestRefreshConfigFromMetadata(t *testing.T) {
 		cfg := &config.HealthExporterConfig{
 			Interval:        metav1.Duration{Duration: 1 * time.Minute},
 			Timeout:         metav1.Duration{Duration: 30 * time.Second},
-			MetricsEndpoint: "http://old-metrics.example.com",
-			LogsEndpoint:    "http://old-logs.example.com",
+			MetricsEndpoint: "https://old-metrics.example.com",
+			LogsEndpoint:    "https://old-logs.example.com",
 			AuthToken:       "old-token",
 		}
 
@@ -718,8 +718,8 @@ func TestRefreshConfigFromMetadata(t *testing.T) {
 		he.refreshConfigFromMetadata(ctx)
 
 		// Verify config was updated
-		assert.Equal(t, "http://new-metrics.example.com", he.options.config.MetricsEndpoint)
-		assert.Equal(t, "http://new-logs.example.com", he.options.config.LogsEndpoint)
+		assert.Equal(t, "https://new-metrics.example.com", he.options.config.MetricsEndpoint)
+		assert.Equal(t, "https://new-logs.example.com", he.options.config.LogsEndpoint)
 		assert.Equal(t, "new-test-token", he.options.config.AuthToken)
 
 		// Cleanup
@@ -742,8 +742,8 @@ func TestRefreshConfigFromMetadata(t *testing.T) {
 		cfg := &config.HealthExporterConfig{
 			Interval:        metav1.Duration{Duration: 1 * time.Minute},
 			Timeout:         metav1.Duration{Duration: 30 * time.Second},
-			MetricsEndpoint: "http://old-metrics.example.com",
-			LogsEndpoint:    "http://old-logs.example.com",
+			MetricsEndpoint: "https://old-metrics.example.com",
+			LogsEndpoint:    "https://old-logs.example.com",
 		}
 
 		exporter, err := New(ctx,
@@ -764,6 +764,42 @@ func TestRefreshConfigFromMetadata(t *testing.T) {
 		assert.Empty(t, he.options.config.LogsEndpoint)
 
 		// Cleanup
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("ignores invalid endpoints from metadata", func(t *testing.T) {
+		tmpDB := setupTestDB(t)
+		defer tmpDB.Close()
+
+		ctx := context.Background()
+
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "metrics_endpoint", "http://bad-metrics.example.com")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "logs_endpoint", "https://user@bad-logs.example.com")
+		require.NoError(t, err)
+
+		cfg := &config.HealthExporterConfig{
+			Interval:        metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:         metav1.Duration{Duration: 30 * time.Second},
+			MetricsEndpoint: "https://old-metrics.example.com",
+			LogsEndpoint:    "https://old-logs.example.com",
+		}
+
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithDatabaseConnections(tmpDB, tmpDB),
+			WithMachineID("test-machine-id"),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+		he.refreshConfigFromMetadata(ctx)
+
+		assert.Empty(t, he.options.config.MetricsEndpoint)
+		assert.Empty(t, he.options.config.LogsEndpoint)
+
 		err = exporter.Stop()
 		require.NoError(t, err)
 	})
