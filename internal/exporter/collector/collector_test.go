@@ -531,6 +531,35 @@ func TestCollector_CollectMachineInfo_InitialWaitDoesNotRepeatAfterFirstRefresh(
 	assert.Less(t, elapsed, 200*time.Millisecond)
 }
 
+func TestCollector_CollectMachineInfo_InitialWaitDoesNotRepeatAfterTimeout(t *testing.T) {
+	ctx := context.Background()
+	cfg := &config.HealthExporterConfig{
+		IncludeMachineInfo: true,
+	}
+
+	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
+	provider := newMockMachineInfoProvider()
+	provider.refreshFn = func(parent context.Context) {}
+	c.machineInfoProvider = provider
+
+	start := time.Now()
+	data, err := c.Collect(ctx)
+	firstElapsed := time.Since(start)
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+	assert.GreaterOrEqual(t, firstElapsed, 4900*time.Millisecond)
+	assert.Less(t, firstElapsed, 5500*time.Millisecond)
+
+	start = time.Now()
+	data, err = c.Collect(ctx)
+	secondElapsed := time.Since(start)
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+	assert.Less(t, secondElapsed, 200*time.Millisecond)
+}
+
 func TestCollector_CollectMachineInfo_RetainsLastGoodOnRefreshFailure(t *testing.T) {
 	ctx := context.Background()
 	cfg := &config.HealthExporterConfig{
@@ -971,9 +1000,11 @@ type mockMetricsStore struct {
 }
 
 type mockMachineInfoProvider struct {
+	mu                 sync.RWMutex
 	cached             *machineinfo.MachineInfo
 	refreshFn          func(context.Context)
 	refreshCalls       atomic.Int32
+	initialWaited      bool
 	initialRefreshDone chan struct{}
 	initialRefreshOnce sync.Once
 }
@@ -985,6 +1016,9 @@ func newMockMachineInfoProvider() *mockMachineInfoProvider {
 }
 
 func (m *mockMachineInfoProvider) Get() (*machineinfo.MachineInfo, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	if m.cached == nil {
 		return nil, false
 	}
@@ -1004,21 +1038,33 @@ func (m *mockMachineInfoProvider) RefreshAsync(parent context.Context) {
 	}()
 }
 
-func (m *mockMachineInfoProvider) WaitForInitialRefresh(maxWait time.Duration) {
+func (m *mockMachineInfoProvider) WaitForInitialRefresh(maxWait time.Duration) bool {
 	if maxWait <= 0 {
-		return
+		return false
 	}
+
+	m.mu.Lock()
+	if m.initialWaited {
+		m.mu.Unlock()
+		return false
+	}
+	m.initialWaited = true
+	m.mu.Unlock()
 
 	timer := time.NewTimer(maxWait)
 	defer timer.Stop()
 
 	select {
 	case <-m.initialRefreshDone:
+		return true
 	case <-timer.C:
+		return false
 	}
 }
 
 func (m *mockMachineInfoProvider) setCached(info *machineinfo.MachineInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.cached = info
 }
 
