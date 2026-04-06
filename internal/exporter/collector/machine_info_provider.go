@@ -35,7 +35,7 @@ var getMachineInfo = machineinfo.GetMachineInfo
 type machineInfoProvider interface {
 	Get() (*machineinfo.MachineInfo, bool)
 	RefreshAsync(parent context.Context)
-	WaitForInitialRefresh(maxWait time.Duration) bool
+	WaitForInitialRefresh(ctx context.Context, maxWait time.Duration) bool
 }
 
 type cachedMachineInfoProvider struct {
@@ -116,7 +116,7 @@ func (p *cachedMachineInfoProvider) RefreshAsync(parent context.Context) {
 	}()
 }
 
-func (p *cachedMachineInfoProvider) WaitForInitialRefresh(maxWait time.Duration) bool {
+func (p *cachedMachineInfoProvider) WaitForInitialRefresh(ctx context.Context, maxWait time.Duration) bool {
 	if p == nil || maxWait <= 0 {
 		return false
 	}
@@ -135,6 +135,8 @@ func (p *cachedMachineInfoProvider) WaitForInitialRefresh(maxWait time.Duration)
 	select {
 	case <-p.initialRefreshDone:
 		return true
+	case <-ctx.Done():
+		return false
 	case <-timer.C:
 		return false
 	}

@@ -560,6 +560,28 @@ func TestCollector_CollectMachineInfo_InitialWaitDoesNotRepeatAfterTimeout(t *te
 	assert.Less(t, secondElapsed, 200*time.Millisecond)
 }
 
+func TestCollector_CollectMachineInfo_InitialWaitHonorsContextCancellation(t *testing.T) {
+	cfg := &config.HealthExporterConfig{
+		IncludeMachineInfo: true,
+	}
+
+	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
+	provider := newMockMachineInfoProvider()
+	provider.refreshFn = func(parent context.Context) {}
+	c.machineInfoProvider = provider
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	data, err := c.Collect(ctx)
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+	assert.Less(t, elapsed, 200*time.Millisecond)
+}
+
 func TestCollector_CollectMachineInfo_RetainsLastGoodOnRefreshFailure(t *testing.T) {
 	ctx := context.Background()
 	cfg := &config.HealthExporterConfig{
@@ -623,7 +645,7 @@ func TestCachedMachineInfoProvider_WaitForInitialRefreshReturnsAfterCompletion(t
 	}()
 
 	start := time.Now()
-	provider.WaitForInitialRefresh(time.Second)
+	provider.WaitForInitialRefresh(context.Background(), time.Second)
 	elapsed := time.Since(start)
 
 	assert.GreaterOrEqual(t, elapsed, 50*time.Millisecond)
@@ -634,7 +656,7 @@ func TestCachedMachineInfoProvider_WaitForInitialRefreshTimesOut(t *testing.T) {
 	provider := newCachedMachineInfoProvider(nvidianvml.NewNoOp(), time.Minute).(*cachedMachineInfoProvider)
 
 	start := time.Now()
-	provider.WaitForInitialRefresh(100 * time.Millisecond)
+	provider.WaitForInitialRefresh(context.Background(), 100*time.Millisecond)
 	elapsed := time.Since(start)
 
 	assert.GreaterOrEqual(t, elapsed, 100*time.Millisecond)
@@ -1038,7 +1060,7 @@ func (m *mockMachineInfoProvider) RefreshAsync(parent context.Context) {
 	}()
 }
 
-func (m *mockMachineInfoProvider) WaitForInitialRefresh(maxWait time.Duration) bool {
+func (m *mockMachineInfoProvider) WaitForInitialRefresh(ctx context.Context, maxWait time.Duration) bool {
 	if maxWait <= 0 {
 		return false
 	}
@@ -1057,6 +1079,8 @@ func (m *mockMachineInfoProvider) WaitForInitialRefresh(maxWait time.Duration) b
 	select {
 	case <-m.initialRefreshDone:
 		return true
+	case <-ctx.Done():
+		return false
 	case <-timer.C:
 		return false
 	}

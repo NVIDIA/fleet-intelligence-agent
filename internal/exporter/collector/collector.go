@@ -185,7 +185,7 @@ func (c *collector) collectMachineInfo(ctx context.Context, data *HealthData) {
 	}
 
 	if _, ok := c.machineInfoProvider.Get(); !ok {
-		c.machineInfoProvider.WaitForInitialRefresh(initialMachineInfoWait)
+		c.machineInfoProvider.WaitForInitialRefresh(ctx, initialMachineInfoWait)
 	}
 
 	if machineInfo, ok := c.machineInfoProvider.Get(); ok {
