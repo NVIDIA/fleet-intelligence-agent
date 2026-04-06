@@ -16,6 +16,7 @@
 package dcgm
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -117,8 +118,47 @@ type Instance interface {
 	Shutdown() error
 }
 
+var newInstanceFunc = newInitializedInstance
+
 // New creates a DCGM instance. Returns no-op instance if DCGM is unavailable.
 func New() (Instance, error) {
+	return newInitializedInstance()
+}
+
+// NewWithContext creates a DCGM instance with a bounded wait. If initialization
+// exceeds the context deadline, it returns a no-op instance so callers can
+// continue startup without blocking on slow DCGM device enumeration.
+func NewWithContext(ctx context.Context) (Instance, error) {
+	type result struct {
+		inst Instance
+		err  error
+	}
+
+	resultCh := make(chan result, 1)
+	abandonCh := make(chan struct{})
+
+	go func() {
+		inst, err := newInstanceFunc()
+		select {
+		case resultCh <- result{inst: inst, err: err}:
+		case <-abandonCh:
+			if err == nil && inst != nil {
+				_ = inst.Shutdown()
+			}
+		}
+	}()
+
+	select {
+	case res := <-resultCh:
+		return res.inst, res.err
+	case <-ctx.Done():
+		close(abandonCh)
+		log.Logger.Warnw("DCGM initialization timed out, returning no-op instance", "error", ctx.Err())
+		return NewNoOp(), nil
+	}
+}
+
+func newInitializedInstance() (Instance, error) {
 	initParams := resolveInitFromEnv()
 
 	cleanup, err := dcgm.Init(dcgm.Standalone, initParams.address, initParams.isUnixSocket)

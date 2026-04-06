@@ -16,8 +16,11 @@
 package dcgm
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 )
@@ -123,6 +126,55 @@ func TestInstanceWhenDCGMNotAvailable(t *testing.T) {
 	// Should be safe to call methods on the instance
 	_ = inst.DCGMExists()
 	_ = inst.Shutdown()
+}
+
+func TestNewWithContextReturnsNoOpOnTimeout(t *testing.T) {
+	originalNewInstanceFunc := newInstanceFunc
+	defer func() {
+		newInstanceFunc = originalNewInstanceFunc
+	}()
+
+	blocker := make(chan struct{})
+	newInstanceFunc = func() (Instance, error) {
+		<-blocker
+		return &instance{}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	inst, err := NewWithContext(ctx)
+	if err != nil {
+		t.Fatalf("NewWithContext() returned error: %v", err)
+	}
+	if inst == nil {
+		t.Fatal("instance should not be nil")
+	}
+	if inst.DCGMExists() {
+		t.Fatalf("expected no-op instance after timeout")
+	}
+
+	close(blocker)
+}
+
+func TestNewWithContextReturnsUnderlyingError(t *testing.T) {
+	originalNewInstanceFunc := newInstanceFunc
+	defer func() {
+		newInstanceFunc = originalNewInstanceFunc
+	}()
+
+	expectedErr := errors.New("boom")
+	newInstanceFunc = func() (Instance, error) {
+		return nil, expectedErr
+	}
+
+	inst, err := NewWithContext(context.Background())
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected error %v, got %v", expectedErr, err)
+	}
+	if inst != nil {
+		t.Fatalf("expected nil instance on error")
+	}
 }
 
 func TestAddHealthWatch(t *testing.T) {
