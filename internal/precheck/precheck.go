@@ -99,7 +99,7 @@ func Run() (Result, error) {
 		return Result{}, err
 	}
 
-	return Evaluate(input), nil
+	return Evaluate(&input), nil
 }
 
 func CollectInput() (Input, error) {
@@ -134,19 +134,19 @@ func CollectInput() (Input, error) {
 	return input, nil
 }
 
-func Evaluate(input Input) Result {
+func Evaluate(input *Input) Result {
 	checks := []Check{
 		evaluateGPUPresence(input),
 		evaluateArchitecture(input),
 		evaluateDriver(input),
 		evaluateNVAttest(input.NVAttestPresent),
-		evaluateDCGM(input),
+		evaluateDCGM(*input),
 	}
 
 	return Result{Checks: checks}
 }
 
-func evaluateGPUPresence(input Input) Check {
+func evaluateGPUPresence(input *Input) Check {
 	if !gpuHardwareDetected(input) {
 		return Check{
 			Name:    "gpu-present",
@@ -161,7 +161,7 @@ func evaluateGPUPresence(input Input) Check {
 	}
 }
 
-func evaluateArchitecture(input Input) Check {
+func evaluateArchitecture(input *Input) Check {
 	if !gpuHardwareDetected(input) {
 		return Check{
 			Name:    "gpu-architecture",
@@ -170,7 +170,7 @@ func evaluateArchitecture(input Input) Check {
 		}
 	}
 
-	if input.GPUDriverVersion == "" {
+	if input == nil || input.GPUDriverVersion == "" {
 		return Check{
 			Name:    "gpu-architecture",
 			Passed:  true,
@@ -209,7 +209,7 @@ func evaluateArchitecture(input Input) Check {
 	}
 }
 
-func evaluateDriver(input Input) Check {
+func evaluateDriver(input *Input) Check {
 	if !gpuHardwareDetected(input) {
 		return Check{
 			Name:    "gpu-driver",
@@ -218,7 +218,7 @@ func evaluateDriver(input Input) Check {
 		}
 	}
 
-	if input.GPUDriverVersion == "" {
+	if input == nil || input.GPUDriverVersion == "" {
 		return Check{
 			Name:    "gpu-driver",
 			Message: "NVIDIA GPU hardware is present, but the NVIDIA driver was not detected; install or load the NVIDIA driver and retry",
@@ -247,7 +247,11 @@ func evaluateDriver(input Input) Check {
 	}
 }
 
-func gpuHardwareDetected(input Input) bool {
+func gpuHardwareDetected(input *Input) bool {
+	if input == nil {
+		return false
+	}
+
 	if input.GPUHardwarePresent {
 		return true
 	}

@@ -105,7 +105,7 @@ func TestEvaluateArchitecture(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := Evaluate(tt.input)
+			result := Evaluate(&tt.input)
 
 			assert.Equal(t, tt.wantPassed, result.Passed())
 			for _, wantMessage := range tt.wantMessages {
@@ -203,7 +203,7 @@ func TestEvaluateDriverAndNVAT(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := Evaluate(tt.input)
+			result := Evaluate(&tt.input)
 
 			assert.Equal(t, tt.wantPassed, result.Passed())
 			for _, wantMessage := range tt.wantMessages {
@@ -216,7 +216,7 @@ func TestEvaluateDriverAndNVAT(t *testing.T) {
 func TestEvaluateDetectsHardwareWithoutDriver(t *testing.T) {
 	t.Parallel()
 
-	result := Evaluate(Input{
+	result := Evaluate(&Input{
 		GPUHardwarePresent: true,
 		NVAttestPresent:    boolPtr(true),
 	})
@@ -230,7 +230,7 @@ func TestEvaluateDetectsHardwareWithoutDriver(t *testing.T) {
 func TestEvaluateSkipsArchitectureWhenGPUDetailsFail(t *testing.T) {
 	t.Parallel()
 
-	result := Evaluate(Input{
+	result := Evaluate(&Input{
 		GPUHardwarePresent: true,
 		GPUDriverVersion:   "575.57.08",
 		GPUInfoErr:         fmt.Errorf("gpu info failed"),
@@ -245,7 +245,7 @@ func TestEvaluateSkipsArchitectureWhenGPUDetailsFail(t *testing.T) {
 func TestEvaluateAggregatesFailures(t *testing.T) {
 	t.Parallel()
 
-	result := Evaluate(Input{
+	result := Evaluate(&Input{
 		GPUInfo:          gpuInfo("Ampere"),
 		GPUDriverVersion: "",
 		NVAttestPresent:  boolPtr(false),
@@ -322,7 +322,7 @@ func TestEvaluateDCGM(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := Evaluate(tt.input)
+			result := Evaluate(&tt.input)
 
 			assert.Equal(t, tt.wantPassed, result.Passed())
 			for _, wantMessage := range tt.wantMessages {
@@ -335,7 +335,7 @@ func TestEvaluateDCGM(t *testing.T) {
 func TestEvaluateDCGMSkipsWhenReachabilityUnset(t *testing.T) {
 	t.Parallel()
 
-	result := Evaluate(Input{
+	result := Evaluate(&Input{
 		GPUInfo:          gpuInfo("Hopper"),
 		GPUDriverVersion: "575.57.08",
 		NVAttestPresent:  boolPtr(true),
