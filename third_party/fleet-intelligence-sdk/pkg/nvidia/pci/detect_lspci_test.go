@@ -26,6 +26,11 @@ func Test_isNVIDIAGPUPCI(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "NVIDIA VGA compatible controller",
+			line:     "01:00.0 VGA compatible controller: NVIDIA Corporation Device 2c33 (rev a1)",
+			expected: true,
+		},
+		{
 			name:     "uppercase 3D CONTROLLER",
 			line:     "000b:00:00.0 3D CONTROLLER: NVIDIA Corporation GA100 [A100 SXM4 80GB] (rev a1)",
 			expected: false, // function checks for exact case "3D controller"

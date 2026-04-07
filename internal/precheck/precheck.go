@@ -17,16 +17,20 @@
 package precheck
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	pkgmachineinfo "github.com/NVIDIA/fleet-intelligence-sdk/pkg/machine-info"
 	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
+	nvidiapci "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia/pci"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/dcgmversion"
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
 var supportedArchitectures = []string{"Hopper", "Blackwell", "Rubin"}
@@ -36,18 +40,23 @@ const minimumDriverMajorVersion = 510
 
 var (
 	newNVML           = nvidianvml.New
-	getMachineInfo    = machineinfo.GetMachineInfo
+	getMachineGPUInfo = pkgmachineinfo.GetMachineGPUInfo
 	lookPath          = exec.LookPath
 	detectDCGMVersion = dcgmversion.DetectHostengineVersion
+	listPCIGPUs       = nvidiapci.ListPCIGPUs
 )
 
 type nvmlInstance = nvidianvml.Instance
 
 type Input struct {
-	MachineInfo     *machineinfo.MachineInfo
-	NVAttestPresent *bool
-	DCGMReachable   *bool
-	DCGMVersion     string
+	GPUHardwarePresent bool
+	GPUHardwareErr     error
+	GPUInfo            *apiv1.MachineGPUInfo
+	GPUInfoErr         error
+	GPUDriverVersion   string
+	NVAttestPresent    *bool
+	DCGMReachable      *bool
+	DCGMVersion        string
 }
 
 type Check struct {
@@ -91,7 +100,7 @@ func Run() (Result, error) {
 		return Result{}, err
 	}
 
-	return Evaluate(input), nil
+	return Evaluate(&input), nil
 }
 
 func CollectInput() (Input, error) {
@@ -101,10 +110,19 @@ func CollectInput() (Input, error) {
 	if err == nil {
 		defer func() { _ = nvmlInstance.Shutdown() }()
 
-		info, machineInfoErr := getMachineInfo(nvmlInstance)
-		if machineInfoErr == nil {
-			input.MachineInfo = info
+		input.GPUDriverVersion = nvmlInstance.DriverVersion()
+
+		gpuInfo, gpuInfoErr := getMachineGPUInfo(nvmlInstance)
+		if gpuInfoErr == nil {
+			input.GPUInfo = gpuInfo
+			input.GPUHardwarePresent = hasDetectedGPUInfo(gpuInfo)
+		} else {
+			input.GPUInfoErr = gpuInfoErr
 		}
+	}
+
+	if !input.GPUHardwarePresent {
+		input.GPUHardwarePresent, input.GPUHardwareErr = detectGPUHardware()
 	}
 
 	nvattestPresent := detectNVAttest()
@@ -117,11 +135,15 @@ func CollectInput() (Input, error) {
 	return input, nil
 }
 
-func Evaluate(input Input) Result {
+func Evaluate(input *Input) Result {
+	if input == nil {
+		input = &Input{}
+	}
+
 	checks := []Check{
-		evaluateGPUPresence(input.MachineInfo),
-		evaluateArchitecture(input.MachineInfo),
-		evaluateDriver(input.MachineInfo),
+		evaluateGPUPresence(input),
+		evaluateArchitecture(input),
+		evaluateDriver(input),
 		evaluateNVAttest(input.NVAttestPresent),
 		evaluateDCGM(input),
 	}
@@ -129,11 +151,18 @@ func Evaluate(input Input) Result {
 	return Result{Checks: checks}
 }
 
-func evaluateGPUPresence(info *machineinfo.MachineInfo) Check {
-	if info == nil || info.GPUInfo == nil || len(info.GPUInfo.GPUs) == 0 {
+func evaluateGPUPresence(input *Input) Check {
+	if input != nil && input.GPUHardwareErr != nil {
 		return Check{
 			Name:    "gpu-present",
-			Message: "no NVIDIA GPU detected",
+			Message: "Unable to determine NVIDIA GPU presence; verify lspci is installed and accessible, then retry",
+		}
+	}
+
+	if !gpuHardwareDetected(input) {
+		return Check{
+			Name:    "gpu-present",
+			Message: "No NVIDIA GPU detected; verify the node has an NVIDIA GPU installed and visible to the OS",
 		}
 	}
 
@@ -144,55 +173,71 @@ func evaluateGPUPresence(info *machineinfo.MachineInfo) Check {
 	}
 }
 
-func evaluateArchitecture(info *machineinfo.MachineInfo) Check {
-	if info == nil || info.GPUInfo == nil || len(info.GPUInfo.GPUs) == 0 {
+func evaluateArchitecture(input *Input) Check {
+	if !gpuHardwareDetected(input) {
 		return Check{
 			Name:    "gpu-architecture",
 			Passed:  true,
-			Message: "GPU architecture check skipped because no GPU was detected",
+			Message: "GPU architecture check skipped because no NVIDIA GPU was detected",
 		}
 	}
 
-	if info.GPUInfo.Architecture == "" {
+	if input == nil || input.GPUDriverVersion == "" {
 		return Check{
 			Name:    "gpu-architecture",
-			Message: "GPU architecture is unknown",
+			Passed:  true,
+			Message: "GPU architecture check skipped because the NVIDIA driver is not available",
+		}
+	}
+
+	if input.GPUInfo == nil || len(input.GPUInfo.GPUs) == 0 {
+		return Check{
+			Name:    "gpu-architecture",
+			Passed:  true,
+			Message: "GPU architecture check skipped because GPU details could not be collected; check agent logs and retry",
+		}
+	}
+
+	if input.GPUInfo.Architecture == "" {
+		return Check{
+			Name:    "gpu-architecture",
+			Message: "GPU detected, but its architecture could not be determined; verify the NVIDIA driver is installed and loaded",
 		}
 	}
 
 	if !slices.ContainsFunc(supportedArchitectures, func(s string) bool {
-		return strings.EqualFold(s, info.GPUInfo.Architecture)
+		return strings.EqualFold(s, input.GPUInfo.Architecture)
 	}) {
 		return Check{
 			Name:    "gpu-architecture",
-			Message: "unsupported GPU architecture: " + info.GPUInfo.Architecture,
+			Message: "Unsupported GPU architecture: " + input.GPUInfo.Architecture + "; supported architectures are Hopper, Blackwell, and Rubin",
 		}
 	}
 
 	return Check{
 		Name:    "gpu-architecture",
 		Passed:  true,
-		Message: "supported GPU architecture detected: " + info.GPUInfo.Architecture,
+		Message: "supported GPU architecture detected: " + input.GPUInfo.Architecture,
 	}
 }
 
-func evaluateDriver(info *machineinfo.MachineInfo) Check {
-	if info == nil || info.GPUInfo == nil || len(info.GPUInfo.GPUs) == 0 {
+func evaluateDriver(input *Input) Check {
+	if !gpuHardwareDetected(input) {
 		return Check{
 			Name:    "gpu-driver",
 			Passed:  true,
-			Message: "driver check skipped because no GPU was detected",
+			Message: "NVIDIA driver check skipped because no NVIDIA GPU was detected",
 		}
 	}
 
-	if info.GPUDriverVersion == "" {
+	if input == nil || input.GPUDriverVersion == "" {
 		return Check{
 			Name:    "gpu-driver",
-			Message: "NVIDIA driver not detected",
+			Message: "NVIDIA GPU hardware is present, but the NVIDIA driver was not detected; install or load the NVIDIA driver and retry",
 		}
 	}
 
-	driverMajor, _, _, err := nvidianvml.ParseDriverVersion(info.GPUDriverVersion)
+	driverMajor, _, _, err := nvidianvml.ParseDriverVersion(input.GPUDriverVersion)
 	if err != nil {
 		return Check{
 			Name:    "gpu-driver",
@@ -203,15 +248,43 @@ func evaluateDriver(info *machineinfo.MachineInfo) Check {
 	if driverMajor < minimumDriverMajorVersion {
 		return Check{
 			Name:    "gpu-driver",
-			Message: fmt.Sprintf("NVIDIA driver major version %d is below required minimum %d", driverMajor, minimumDriverMajorVersion),
+			Message: fmt.Sprintf("NVIDIA driver version %s is below the required minimum %d; upgrade the driver and retry", input.GPUDriverVersion, minimumDriverMajorVersion),
 		}
 	}
 
 	return Check{
 		Name:    "gpu-driver",
 		Passed:  true,
-		Message: "NVIDIA driver detected: " + info.GPUDriverVersion,
+		Message: "NVIDIA driver detected: " + input.GPUDriverVersion,
 	}
+}
+
+func gpuHardwareDetected(input *Input) bool {
+	if input == nil {
+		return false
+	}
+
+	if input.GPUHardwarePresent {
+		return true
+	}
+
+	return hasDetectedGPUInfo(input.GPUInfo)
+}
+
+func hasDetectedGPUInfo(info *apiv1.MachineGPUInfo) bool {
+	return info != nil && len(info.GPUs) > 0
+}
+
+func detectGPUHardware() (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	devs, err := listPCIGPUs(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return len(devs) > 0, nil
 }
 
 // evaluateNVAttest checks whether nvattest is present in PATH.
@@ -229,7 +302,7 @@ func evaluateNVAttest(present *bool) Check {
 	if !*present {
 		return Check{
 			Name:    "nvattest",
-			Message: "nvattest not found in PATH",
+			Message: "nvattest was not found in PATH; install nvattest and ensure it is available in PATH",
 		}
 	}
 
@@ -240,7 +313,15 @@ func evaluateNVAttest(present *bool) Check {
 	}
 }
 
-func evaluateDCGM(input Input) Check {
+func evaluateDCGM(input *Input) Check {
+	if input == nil {
+		return Check{
+			Name:    "dcgm",
+			Passed:  true,
+			Message: "DCGM checks skipped",
+		}
+	}
+
 	if input.DCGMReachable == nil {
 		return Check{
 			Name:    "dcgm",
@@ -252,14 +333,14 @@ func evaluateDCGM(input Input) Check {
 	if !*input.DCGMReachable {
 		return Check{
 			Name:    "dcgm",
-			Message: "DCGM HostEngine is not reachable",
+			Message: "DCGM HostEngine is not reachable; verify DCGM is running and DCGM_URL is configured correctly",
 		}
 	}
 
 	if input.DCGMVersion == "" {
 		return Check{
 			Name:    "dcgm",
-			Message: "DCGM HostEngine version could not be determined",
+			Message: "DCGM HostEngine is reachable, but its version could not be determined; verify the DCGM installation",
 		}
 	}
 
@@ -274,7 +355,7 @@ func evaluateDCGM(input Input) Check {
 	if !versionOK {
 		return Check{
 			Name:    "dcgm",
-			Message: "DCGM HostEngine version " + input.DCGMVersion + " is below required minimum " + minimumDCGMVersion,
+			Message: "DCGM HostEngine version " + input.DCGMVersion + " is below the required minimum " + minimumDCGMVersion + "; upgrade DCGM and retry",
 		}
 	}
 
