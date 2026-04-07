@@ -23,8 +23,6 @@ import (
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
 func TestEvaluateArchitecture(t *testing.T) {
@@ -39,28 +37,31 @@ func TestEvaluateArchitecture(t *testing.T) {
 		{
 			name: "passes for hopper",
 			input: Input{
-				MachineInfo: machineInfoWithGPU("Hopper", "575.57.08"),
+				GPUInfo:          gpuInfo("Hopper"),
+				GPUDriverVersion: "575.57.08",
 			},
 			wantPassed: true,
 		},
 		{
 			name: "passes for blackwell",
 			input: Input{
-				MachineInfo: machineInfoWithGPU("Blackwell", "575.57.08"),
+				GPUInfo:          gpuInfo("Blackwell"),
+				GPUDriverVersion: "575.57.08",
 			},
 			wantPassed: true,
 		},
 		{
 			name: "passes for rubin",
 			input: Input{
-				MachineInfo: machineInfoWithGPU("Rubin", "575.57.08"),
+				GPUInfo:          gpuInfo("Rubin"),
+				GPUDriverVersion: "575.57.08",
 			},
 			wantPassed: true,
 		},
 		{
 			name: "fails for missing gpu",
 			input: Input{
-				MachineInfo: &machineinfo.MachineInfo{},
+				GPUInfo: &apiv1.MachineGPUInfo{},
 			},
 			wantPassed: false,
 			wantMessages: []string{
@@ -70,14 +71,16 @@ func TestEvaluateArchitecture(t *testing.T) {
 		{
 			name: "passes for hopper lowercase",
 			input: Input{
-				MachineInfo: machineInfoWithGPU("hopper", "575.57.08"),
+				GPUInfo:          gpuInfo("hopper"),
+				GPUDriverVersion: "575.57.08",
 			},
 			wantPassed: true,
 		},
 		{
 			name: "fails for unsupported architecture",
 			input: Input{
-				MachineInfo: machineInfoWithGPU("Ampere", "575.57.08"),
+				GPUInfo:          gpuInfo("Ampere"),
+				GPUDriverVersion: "575.57.08",
 			},
 			wantPassed: false,
 			wantMessages: []string{
@@ -87,7 +90,8 @@ func TestEvaluateArchitecture(t *testing.T) {
 		{
 			name: "fails for empty architecture",
 			input: Input{
-				MachineInfo: machineInfoWithGPU("", "575.57.08"),
+				GPUInfo:          gpuInfo(""),
+				GPUDriverVersion: "575.57.08",
 			},
 			wantPassed: false,
 			wantMessages: []string{
@@ -129,8 +133,9 @@ func TestEvaluateDriverAndNVAT(t *testing.T) {
 		{
 			name: "fails for missing driver",
 			input: Input{
-				MachineInfo:     machineInfoWithGPU("Hopper", ""),
-				NVAttestPresent: boolPtr(true),
+				GPUInfo:          gpuInfo("Hopper"),
+				GPUDriverVersion: "",
+				NVAttestPresent:  boolPtr(true),
 			},
 			wantPassed: false,
 			wantMessages: []string{
@@ -140,8 +145,9 @@ func TestEvaluateDriverAndNVAT(t *testing.T) {
 		{
 			name: "fails for malformed driver version",
 			input: Input{
-				MachineInfo:     machineInfoWithGPU("Hopper", "not-a-version"),
-				NVAttestPresent: boolPtr(true),
+				GPUInfo:          gpuInfo("Hopper"),
+				GPUDriverVersion: "not-a-version",
+				NVAttestPresent:  boolPtr(true),
 			},
 			wantPassed: false,
 			wantMessages: []string{
@@ -151,8 +157,9 @@ func TestEvaluateDriverAndNVAT(t *testing.T) {
 		{
 			name: "fails for driver below minimum major version",
 			input: Input{
-				MachineInfo:     machineInfoWithGPU("Hopper", "509.12.01"),
-				NVAttestPresent: boolPtr(true),
+				GPUInfo:          gpuInfo("Hopper"),
+				GPUDriverVersion: "509.12.01",
+				NVAttestPresent:  boolPtr(true),
 			},
 			wantPassed: false,
 			wantMessages: []string{
@@ -162,8 +169,9 @@ func TestEvaluateDriverAndNVAT(t *testing.T) {
 		{
 			name: "fails for missing nvattest",
 			input: Input{
-				MachineInfo:     machineInfoWithGPU("Hopper", "575.57.08"),
-				NVAttestPresent: boolPtr(false),
+				GPUInfo:          gpuInfo("Hopper"),
+				GPUDriverVersion: "575.57.08",
+				NVAttestPresent:  boolPtr(false),
 			},
 			wantPassed: false,
 			wantMessages: []string{
@@ -173,16 +181,18 @@ func TestEvaluateDriverAndNVAT(t *testing.T) {
 		{
 			name: "passes when driver major is at minimum and nvattest is present",
 			input: Input{
-				MachineInfo:     machineInfoWithGPU("Hopper", "510.47.03"),
-				NVAttestPresent: boolPtr(true),
+				GPUInfo:          gpuInfo("Hopper"),
+				GPUDriverVersion: "510.47.03",
+				NVAttestPresent:  boolPtr(true),
 			},
 			wantPassed: true,
 		},
 		{
 			name: "passes when newer driver and nvattest are present",
 			input: Input{
-				MachineInfo:     machineInfoWithGPU("Hopper", "575.57.08"),
-				NVAttestPresent: boolPtr(true),
+				GPUInfo:          gpuInfo("Hopper"),
+				GPUDriverVersion: "575.57.08",
+				NVAttestPresent:  boolPtr(true),
 			},
 			wantPassed: true,
 		},
@@ -214,19 +224,35 @@ func TestEvaluateDetectsHardwareWithoutDriver(t *testing.T) {
 	assert.False(t, result.Passed())
 	assert.Contains(t, checkMessages(result.Checks), "NVIDIA GPU detected")
 	assert.Contains(t, checkMessages(result.Checks), "GPU architecture check skipped because the NVIDIA driver is not available")
-	assert.Contains(t, checkMessages(result.Checks), "NVIDIA GPU detected via PCI, but the NVIDIA driver was not detected; install or load the NVIDIA driver and retry")
+	assert.Contains(t, checkMessages(result.Checks), "NVIDIA GPU hardware is present, but the NVIDIA driver was not detected; install or load the NVIDIA driver and retry")
+}
+
+func TestEvaluateSkipsArchitectureWhenGPUDetailsFail(t *testing.T) {
+	t.Parallel()
+
+	result := Evaluate(Input{
+		GPUHardwarePresent: true,
+		GPUDriverVersion:   "575.57.08",
+		GPUInfoErr:         fmt.Errorf("gpu info failed"),
+		NVAttestPresent:    boolPtr(true),
+	})
+
+	assert.True(t, findCheck(t, result.Checks, "gpu-present").Passed)
+	assert.True(t, findCheck(t, result.Checks, "gpu-driver").Passed)
+	assert.Contains(t, checkMessages(result.Checks), "GPU architecture check skipped because GPU details could not be collected; check agent logs and retry")
 }
 
 func TestEvaluateAggregatesFailures(t *testing.T) {
 	t.Parallel()
 
 	result := Evaluate(Input{
-		MachineInfo:     machineInfoWithGPU("Ampere", ""),
-		NVAttestPresent: boolPtr(false),
+		GPUInfo:          gpuInfo("Ampere"),
+		GPUDriverVersion: "",
+		NVAttestPresent:  boolPtr(false),
 	})
 
 	assert.False(t, result.Passed())
-	assert.Contains(t, checkMessages(result.Checks), "Unsupported GPU architecture: Ampere; supported architectures are Hopper, Blackwell, and Rubin")
+	assert.Contains(t, checkMessages(result.Checks), "GPU architecture check skipped because the NVIDIA driver is not available")
 	assert.Contains(t, checkMessages(result.Checks), "NVIDIA GPU hardware is present, but the NVIDIA driver was not detected; install or load the NVIDIA driver and retry")
 	assert.Contains(t, checkMessages(result.Checks), "nvattest was not found in PATH; install nvattest and ensure it is available in PATH")
 }
@@ -243,9 +269,10 @@ func TestEvaluateDCGM(t *testing.T) {
 		{
 			name: "fails when dcgm is unreachable",
 			input: Input{
-				MachineInfo:     machineInfoWithGPU("Hopper", "575.57.08"),
-				NVAttestPresent: boolPtr(true),
-				DCGMReachable:   boolPtr(false),
+				GPUInfo:          gpuInfo("Hopper"),
+				GPUDriverVersion: "575.57.08",
+				NVAttestPresent:  boolPtr(true),
+				DCGMReachable:    boolPtr(false),
 			},
 			wantPassed: false,
 			wantMessages: []string{
@@ -255,10 +282,11 @@ func TestEvaluateDCGM(t *testing.T) {
 		{
 			name: "fails when dcgm version is too old",
 			input: Input{
-				MachineInfo:     machineInfoWithGPU("Hopper", "575.57.08"),
-				NVAttestPresent: boolPtr(true),
-				DCGMReachable:   boolPtr(true),
-				DCGMVersion:     "4.2.2",
+				GPUInfo:          gpuInfo("Hopper"),
+				GPUDriverVersion: "575.57.08",
+				NVAttestPresent:  boolPtr(true),
+				DCGMReachable:    boolPtr(true),
+				DCGMVersion:      "4.2.2",
 			},
 			wantPassed: false,
 			wantMessages: []string{
@@ -268,20 +296,22 @@ func TestEvaluateDCGM(t *testing.T) {
 		{
 			name: "passes for minimum supported dcgm version",
 			input: Input{
-				MachineInfo:     machineInfoWithGPU("Hopper", "575.57.08"),
-				NVAttestPresent: boolPtr(true),
-				DCGMReachable:   boolPtr(true),
-				DCGMVersion:     "4.2.3",
+				GPUInfo:          gpuInfo("Hopper"),
+				GPUDriverVersion: "575.57.08",
+				NVAttestPresent:  boolPtr(true),
+				DCGMReachable:    boolPtr(true),
+				DCGMVersion:      "4.2.3",
 			},
 			wantPassed: true,
 		},
 		{
 			name: "passes for newer dcgm version",
 			input: Input{
-				MachineInfo:     machineInfoWithGPU("Hopper", "575.57.08"),
-				NVAttestPresent: boolPtr(true),
-				DCGMReachable:   boolPtr(true),
-				DCGMVersion:     "4.3.0",
+				GPUInfo:          gpuInfo("Hopper"),
+				GPUDriverVersion: "575.57.08",
+				NVAttestPresent:  boolPtr(true),
+				DCGMReachable:    boolPtr(true),
+				DCGMVersion:      "4.3.0",
 			},
 			wantPassed: true,
 		},
@@ -306,8 +336,9 @@ func TestEvaluateDCGMSkipsWhenReachabilityUnset(t *testing.T) {
 	t.Parallel()
 
 	result := Evaluate(Input{
-		MachineInfo:     machineInfoWithGPU("Hopper", "575.57.08"),
-		NVAttestPresent: boolPtr(true),
+		GPUInfo:          gpuInfo("Hopper"),
+		GPUDriverVersion: "575.57.08",
+		NVAttestPresent:  boolPtr(true),
 	})
 
 	assert.True(t, result.Passed())
@@ -355,17 +386,27 @@ func TestCollectInputCallsDCGMInit(t *testing.T) {
 	assert.True(t, detectDCGMCalled)
 }
 
-func machineInfoWithGPU(architecture, driverVersion string) *machineinfo.MachineInfo {
-	return &machineinfo.MachineInfo{
-		GPUDriverVersion: driverVersion,
-		GPUInfo: &apiv1.MachineGPUInfo{
-			Architecture: architecture,
-			Product:      "test-gpu",
-			GPUs: []apiv1.MachineGPUInstance{
-				{UUID: "GPU-1"},
-			},
+func gpuInfo(architecture string) *apiv1.MachineGPUInfo {
+	return &apiv1.MachineGPUInfo{
+		Architecture: architecture,
+		Product:      "test-gpu",
+		GPUs: []apiv1.MachineGPUInstance{
+			{UUID: "GPU-1"},
 		},
 	}
+}
+
+func findCheck(t *testing.T, checks []Check, name string) Check {
+	t.Helper()
+
+	for _, check := range checks {
+		if check.Name == name {
+			return check
+		}
+	}
+
+	t.Fatalf("check %q not found", name)
+	return Check{}
 }
 
 func checkMessages(checks []Check) []string {

@@ -25,11 +25,12 @@ import (
 	"strings"
 	"time"
 
+	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	pkgmachineinfo "github.com/NVIDIA/fleet-intelligence-sdk/pkg/machine-info"
 	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 	nvidiapci "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia/pci"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/dcgmversion"
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
 var supportedArchitectures = []string{"Hopper", "Blackwell", "Rubin"}
@@ -39,7 +40,7 @@ const minimumDriverMajorVersion = 510
 
 var (
 	newNVML           = nvidianvml.New
-	getMachineInfo    = machineinfo.GetMachineInfo
+	getMachineGPUInfo = pkgmachineinfo.GetMachineGPUInfo
 	lookPath          = exec.LookPath
 	detectDCGMVersion = dcgmversion.DetectHostengineVersion
 	listPCIGPUs       = nvidiapci.ListPCIGPUs
@@ -49,7 +50,9 @@ type nvmlInstance = nvidianvml.Instance
 
 type Input struct {
 	GPUHardwarePresent bool
-	MachineInfo        *machineinfo.MachineInfo
+	GPUInfo            *apiv1.MachineGPUInfo
+	GPUInfoErr         error
+	GPUDriverVersion   string
 	NVAttestPresent    *bool
 	DCGMReachable      *bool
 	DCGMVersion        string
@@ -106,10 +109,14 @@ func CollectInput() (Input, error) {
 	if err == nil {
 		defer func() { _ = nvmlInstance.Shutdown() }()
 
-		info, machineInfoErr := getMachineInfo(nvmlInstance)
-		if machineInfoErr == nil {
-			input.MachineInfo = info
-			input.GPUHardwarePresent = hasDetectedGPU(info)
+		input.GPUDriverVersion = nvmlInstance.DriverVersion()
+
+		gpuInfo, gpuInfoErr := getMachineGPUInfo(nvmlInstance)
+		if gpuInfoErr == nil {
+			input.GPUInfo = gpuInfo
+			input.GPUHardwarePresent = hasDetectedGPUInfo(gpuInfo)
+		} else {
+			input.GPUInfoErr = gpuInfoErr
 		}
 	}
 
@@ -163,8 +170,7 @@ func evaluateArchitecture(input Input) Check {
 		}
 	}
 
-	info := input.MachineInfo
-	if info == nil || info.GPUInfo == nil || len(info.GPUInfo.GPUs) == 0 {
+	if input.GPUDriverVersion == "" {
 		return Check{
 			Name:    "gpu-architecture",
 			Passed:  true,
@@ -172,7 +178,15 @@ func evaluateArchitecture(input Input) Check {
 		}
 	}
 
-	if info.GPUInfo.Architecture == "" {
+	if input.GPUInfo == nil || len(input.GPUInfo.GPUs) == 0 {
+		return Check{
+			Name:    "gpu-architecture",
+			Passed:  true,
+			Message: "GPU architecture check skipped because GPU details could not be collected; check agent logs and retry",
+		}
+	}
+
+	if input.GPUInfo.Architecture == "" {
 		return Check{
 			Name:    "gpu-architecture",
 			Message: "GPU detected, but its architecture could not be determined; verify the NVIDIA driver is installed and loaded",
@@ -180,18 +194,18 @@ func evaluateArchitecture(input Input) Check {
 	}
 
 	if !slices.ContainsFunc(supportedArchitectures, func(s string) bool {
-		return strings.EqualFold(s, info.GPUInfo.Architecture)
+		return strings.EqualFold(s, input.GPUInfo.Architecture)
 	}) {
 		return Check{
 			Name:    "gpu-architecture",
-			Message: "Unsupported GPU architecture: " + info.GPUInfo.Architecture + "; supported architectures are Hopper, Blackwell, and Rubin",
+			Message: "Unsupported GPU architecture: " + input.GPUInfo.Architecture + "; supported architectures are Hopper, Blackwell, and Rubin",
 		}
 	}
 
 	return Check{
 		Name:    "gpu-architecture",
 		Passed:  true,
-		Message: "supported GPU architecture detected: " + info.GPUInfo.Architecture,
+		Message: "supported GPU architecture detected: " + input.GPUInfo.Architecture,
 	}
 }
 
@@ -204,22 +218,14 @@ func evaluateDriver(input Input) Check {
 		}
 	}
 
-	info := input.MachineInfo
-	if info == nil || info.GPUInfo == nil || len(info.GPUInfo.GPUs) == 0 {
-		return Check{
-			Name:    "gpu-driver",
-			Message: "NVIDIA GPU detected via PCI, but the NVIDIA driver was not detected; install or load the NVIDIA driver and retry",
-		}
-	}
-
-	if info.GPUDriverVersion == "" {
+	if input.GPUDriverVersion == "" {
 		return Check{
 			Name:    "gpu-driver",
 			Message: "NVIDIA GPU hardware is present, but the NVIDIA driver was not detected; install or load the NVIDIA driver and retry",
 		}
 	}
 
-	driverMajor, _, _, err := nvidianvml.ParseDriverVersion(info.GPUDriverVersion)
+	driverMajor, _, _, err := nvidianvml.ParseDriverVersion(input.GPUDriverVersion)
 	if err != nil {
 		return Check{
 			Name:    "gpu-driver",
@@ -230,14 +236,14 @@ func evaluateDriver(input Input) Check {
 	if driverMajor < minimumDriverMajorVersion {
 		return Check{
 			Name:    "gpu-driver",
-			Message: fmt.Sprintf("NVIDIA driver version %s is below the required minimum %d; upgrade the driver and retry", info.GPUDriverVersion, minimumDriverMajorVersion),
+			Message: fmt.Sprintf("NVIDIA driver version %s is below the required minimum %d; upgrade the driver and retry", input.GPUDriverVersion, minimumDriverMajorVersion),
 		}
 	}
 
 	return Check{
 		Name:    "gpu-driver",
 		Passed:  true,
-		Message: "NVIDIA driver detected: " + info.GPUDriverVersion,
+		Message: "NVIDIA driver detected: " + input.GPUDriverVersion,
 	}
 }
 
@@ -246,11 +252,11 @@ func gpuHardwareDetected(input Input) bool {
 		return true
 	}
 
-	return hasDetectedGPU(input.MachineInfo)
+	return hasDetectedGPUInfo(input.GPUInfo)
 }
 
-func hasDetectedGPU(info *machineinfo.MachineInfo) bool {
-	return info != nil && info.GPUInfo != nil && len(info.GPUInfo.GPUs) > 0
+func hasDetectedGPUInfo(info *apiv1.MachineGPUInfo) bool {
+	return info != nil && len(info.GPUs) > 0
 }
 
 func detectGPUHardware() bool {
