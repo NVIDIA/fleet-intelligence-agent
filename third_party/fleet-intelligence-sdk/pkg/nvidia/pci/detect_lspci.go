@@ -24,15 +24,17 @@ func ListPCIGPUs(ctx context.Context) ([]string, error) {
 	return listPCIs(ctx, "lspci -nn", isNVIDIAGPUPCI)
 }
 
-// 3D controller represents the GPU device itself
+// 3D controller and VGA compatible controller represent GPU devices,
 // whereas PCI Bridge refers to the PCIe switch/bridge component
 // that connects the GPU to the system's PCIe infrastructure
 //
 // e.g.,
 // 000a:00:00.0 Bridge: NVIDIA Corporation Device 1af1 (rev a1)
 // 000b:00:00.0 3D controller: NVIDIA Corporation GA100 [A100 SXM4 80GB] (rev a1)
+// 0001:00:00.0 VGA compatible controller: NVIDIA Corporation Device 2c33 (rev a1)
 func isNVIDIAGPUPCI(line string) bool {
-	return strings.Contains(line, "NVIDIA") && strings.Contains(line, "3D controller")
+	return strings.Contains(line, "NVIDIA") &&
+		(strings.Contains(line, "3D controller") || strings.Contains(line, "VGA compatible controller"))
 }
 
 func listPCIs(ctx context.Context, command string, matchFunc func(line string) bool) ([]string, error) {
