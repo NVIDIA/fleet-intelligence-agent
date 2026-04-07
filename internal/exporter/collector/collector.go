@@ -35,6 +35,8 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
+const initialMachineInfoWait = 5 * time.Second
+
 // GenerateCollectionID generates a unique identifier for a data collection cycle
 func GenerateCollectionID() string {
 	bytes := make([]byte, 16)
@@ -72,6 +74,7 @@ type collector struct {
 	lastAttestationCollection time.Time
 	machineID                 string            // Agent's stable identity from server initialization
 	dcgmGPUIndexes            map[string]string // UUID → DCGM device ID override for GPU indices
+	machineInfoProvider       machineInfoProvider
 }
 
 // New creates a new health data collector
@@ -94,16 +97,27 @@ func New(
 		log.Logger.Infow("Config entries computed at startup", "entries_count", len(configEntries))
 	}
 
+	var provider machineInfoProvider
+	if cfg != nil && cfg.IncludeMachineInfo && nvmlInstance != nil {
+		var opts []machineinfo.MachineInfoOption
+		if len(dcgmGPUIndexes) > 0 {
+			opts = append(opts, machineinfo.WithDCGMGPUIndexes(dcgmGPUIndexes))
+		}
+		provider = newCachedMachineInfoProvider(nvmlInstance, 0, opts...)
+		provider.RefreshAsync(context.Background())
+	}
+
 	return &collector{
-		config:             cfg,
-		configEntries:      configEntries,
-		metricsStore:       metricsStore,
-		eventStore:         eventStore,
-		componentsRegistry: componentsRegistry,
-		nvmlInstance:       nvmlInstance,
-		attestationManager: attestationManager,
-		machineID:          machineID,
-		dcgmGPUIndexes:     dcgmGPUIndexes,
+		config:              cfg,
+		configEntries:       configEntries,
+		metricsStore:        metricsStore,
+		eventStore:          eventStore,
+		componentsRegistry:  componentsRegistry,
+		nvmlInstance:        nvmlInstance,
+		attestationManager:  attestationManager,
+		machineID:           machineID,
+		dcgmGPUIndexes:      dcgmGPUIndexes,
+		machineInfoProvider: provider,
 	}
 }
 
@@ -126,9 +140,7 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 
 	// Collect machine info if enabled
 	if c.config.IncludeMachineInfo {
-		if err := c.collectMachineInfo(data); err != nil {
-			log.Logger.Errorw("Failed to collect machine info", "error", err)
-		}
+		c.collectMachineInfo(ctx, data)
 	}
 
 	// Collect metrics if enabled
@@ -166,25 +178,21 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 	return data, nil
 }
 
-// collectMachineInfo collects machine hardware information
-func (c *collector) collectMachineInfo(data *HealthData) error {
-	if c.nvmlInstance == nil {
-		return fmt.Errorf("NVML instance not available")
+// collectMachineInfo reads cached machine info and triggers a best-effort refresh.
+func (c *collector) collectMachineInfo(ctx context.Context, data *HealthData) {
+	if c.machineInfoProvider == nil {
+		return
 	}
 
-	var opts []machineinfo.MachineInfoOption
-	if len(c.dcgmGPUIndexes) > 0 {
-		opts = append(opts, machineinfo.WithDCGMGPUIndexes(c.dcgmGPUIndexes))
+	if _, ok := c.machineInfoProvider.Get(); !ok {
+		c.machineInfoProvider.WaitForInitialRefresh(ctx, initialMachineInfoWait)
 	}
 
-	machineInfo, err := machineinfo.GetMachineInfo(c.nvmlInstance, opts...)
-	if err != nil {
-		return fmt.Errorf("failed to get machine info: %w", err)
+	if machineInfo, ok := c.machineInfoProvider.Get(); ok {
+		data.MachineInfo = machineInfo
 	}
 
-	data.MachineInfo = machineInfo
-	log.Logger.Debugw("Collected machine info", "machine_info", data.MachineInfo)
-	return nil
+	c.machineInfoProvider.RefreshAsync(ctx)
 }
 
 // collectMetrics collects metrics data from the metrics store

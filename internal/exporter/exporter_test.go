@@ -40,6 +40,7 @@ import (
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/writer"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
@@ -56,6 +57,19 @@ func (m *MockCollector) Collect(ctx context.Context) (*collector.HealthData, err
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*collector.HealthData), args.Error(1)
+}
+
+type MockHTTPWriter struct {
+	mock.Mock
+}
+
+func (m *MockHTTPWriter) Send(ctx context.Context, data *collector.HealthData, metricsEndpoint string, logsEndpoint string, maxRetries int, authToken string) (string, error) {
+	args := m.Called(ctx, data, metricsEndpoint, logsEndpoint, maxRetries, authToken)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockHTTPWriter) SetJWTRefreshFunc(refreshFunc writer.JWTRefreshFunc) {
+	m.Called(refreshFunc)
 }
 
 // MockMetricsStore is a mock implementation of pkgmetrics.Store
@@ -1111,6 +1125,57 @@ func TestExportWithCollectorError(t *testing.T) {
 	assert.Contains(t, err.Error(), "collection failed")
 
 	// Cleanup
+	err = exporter.Stop()
+	require.NoError(t, err)
+}
+
+func TestExportUsesSeparateContextsForCollectionAndHTTP(t *testing.T) {
+	cfg := &config.HealthExporterConfig{
+		Interval:        metav1.Duration{Duration: 1 * time.Minute},
+		Timeout:         metav1.Duration{Duration: 50 * time.Millisecond},
+		MetricsEndpoint: "https://metrics.example.com",
+		LogsEndpoint:    "https://logs.example.com",
+		AuthToken:       "test-token",
+	}
+
+	ctx := context.Background()
+	exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
+	require.NoError(t, err)
+	require.NotNil(t, exporter)
+
+	he := exporter.(*healthExporter)
+
+	mockCollector := &MockCollector{}
+	mockCollector.
+		On("Collect", mock.Anything).
+		Run(func(args mock.Arguments) {
+			time.Sleep(75 * time.Millisecond)
+		}).
+		Return(&collector.HealthData{
+			CollectionID: "collection-1",
+			MachineID:    "test-machine-id",
+			Timestamp:    time.Now().UTC(),
+		}, nil)
+
+	mockHTTPWriter := &MockHTTPWriter{}
+	mockHTTPWriter.
+		On("Send", mock.Anything, mock.Anything, cfg.MetricsEndpoint, cfg.LogsEndpoint, cfg.RetryMaxAttempts, cfg.AuthToken).
+		Run(func(args mock.Arguments) {
+			sendCtx, ok := args.Get(0).(context.Context)
+			require.True(t, ok)
+			assert.NoError(t, sendCtx.Err(), "export should receive a fresh context even if collection overran its deadline")
+		}).
+		Return("", nil)
+
+	he.collector = mockCollector
+	he.httpWriter = mockHTTPWriter
+
+	err = he.export()
+	require.NoError(t, err)
+
+	mockCollector.AssertExpectations(t)
+	mockHTTPWriter.AssertExpectations(t)
+
 	err = exporter.Stop()
 	require.NoError(t, err)
 }

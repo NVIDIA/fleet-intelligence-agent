@@ -211,7 +211,9 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 	}
 
 	// Initialize DCGM instance
-	dcgmInstance, err := nvidiadcgm.New()
+	dcgmInitCtx, dcgmInitCancel := context.WithTimeout(ctx, time.Minute)
+	dcgmInstance, err := nvidiadcgm.NewWithContext(dcgmInitCtx)
+	dcgmInitCancel()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create DCGM instance: %w", err)
 	}

@@ -19,6 +19,8 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,12 +28,14 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
+	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
 func TestCollector_AttestationDataCollection(t *testing.T) {
@@ -425,6 +429,240 @@ func TestCollector_CollectMachineInfo_NoNVML(t *testing.T) {
 	assert.Nil(t, data.MachineInfo, "MachineInfo should be nil without NVML")
 }
 
+func TestCollector_CollectMachineInfo_UsesCachedValue(t *testing.T) {
+	ctx := context.Background()
+	cfg := &config.HealthExporterConfig{
+		IncludeMachineInfo: true,
+	}
+
+	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
+	expected := &machineinfo.MachineInfo{Hostname: "cached-host"}
+	provider := &mockMachineInfoProvider{
+		cached: expected,
+	}
+	c.machineInfoProvider = provider
+
+	data, err := c.Collect(ctx)
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+	require.NotNil(t, data.MachineInfo)
+	assert.Equal(t, expected, data.MachineInfo)
+	assert.Equal(t, int32(1), provider.refreshCalls.Load())
+}
+
+func TestCollector_CollectMachineInfo_WaitsBrieflyForInitialRefresh(t *testing.T) {
+	ctx := context.Background()
+	cfg := &config.HealthExporterConfig{
+		IncludeMachineInfo: true,
+	}
+
+	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
+	provider := newMockMachineInfoProvider()
+	c.machineInfoProvider = provider
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		provider.setCached(&machineinfo.MachineInfo{Hostname: "prewarmed-host"})
+		provider.markInitialRefreshDone()
+	}()
+
+	data, err := c.Collect(ctx)
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+	require.NotNil(t, data.MachineInfo)
+	assert.Equal(t, "prewarmed-host", data.MachineInfo.Hostname)
+}
+
+func TestCollector_CollectMachineInfo_RefreshDoesNotBlockMetrics(t *testing.T) {
+	ctx := context.Background()
+	cfg := &config.HealthExporterConfig{
+		IncludeMachineInfo: true,
+		IncludeMetrics:     true,
+		MetricsLookback:    metav1.Duration{Duration: 5 * time.Minute},
+	}
+
+	c := New(cfg, nil, nil, &mockMetricsStore{
+		metrics: pkgmetrics.Metrics{
+			{Component: "gpu", Name: "temperature", Value: 70, UnixMilliseconds: time.Now().UnixMilli()},
+		},
+	}, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
+
+	blocker := make(chan struct{})
+	provider := newMockMachineInfoProvider()
+	provider.refreshFn = func(parent context.Context) {
+		provider.markInitialRefreshDone()
+		<-blocker
+	}
+	c.machineInfoProvider = provider
+
+	start := time.Now()
+	data, err := c.Collect(ctx)
+	elapsed := time.Since(start)
+	close(blocker)
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+	assert.Len(t, data.Metrics, 1)
+	assert.Nil(t, data.MachineInfo)
+	assert.GreaterOrEqual(t, elapsed, 4900*time.Millisecond)
+	assert.Less(t, elapsed, 5500*time.Millisecond)
+}
+
+func TestCollector_CollectMachineInfo_InitialWaitDoesNotRepeatAfterFirstRefresh(t *testing.T) {
+	ctx := context.Background()
+	cfg := &config.HealthExporterConfig{
+		IncludeMachineInfo: true,
+	}
+
+	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
+	provider := newMockMachineInfoProvider()
+	provider.markInitialRefreshDone()
+	provider.refreshFn = func(parent context.Context) {}
+	c.machineInfoProvider = provider
+
+	start := time.Now()
+	data, err := c.Collect(ctx)
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+	assert.Less(t, elapsed, 200*time.Millisecond)
+}
+
+func TestCollector_CollectMachineInfo_InitialWaitDoesNotRepeatAfterTimeout(t *testing.T) {
+	ctx := context.Background()
+	cfg := &config.HealthExporterConfig{
+		IncludeMachineInfo: true,
+	}
+
+	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
+	provider := newMockMachineInfoProvider()
+	provider.refreshFn = func(parent context.Context) {}
+	c.machineInfoProvider = provider
+
+	start := time.Now()
+	data, err := c.Collect(ctx)
+	firstElapsed := time.Since(start)
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+	assert.GreaterOrEqual(t, firstElapsed, 4900*time.Millisecond)
+	assert.Less(t, firstElapsed, 5500*time.Millisecond)
+
+	start = time.Now()
+	data, err = c.Collect(ctx)
+	secondElapsed := time.Since(start)
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+	assert.Less(t, secondElapsed, 200*time.Millisecond)
+}
+
+func TestCollector_CollectMachineInfo_InitialWaitHonorsContextCancellation(t *testing.T) {
+	cfg := &config.HealthExporterConfig{
+		IncludeMachineInfo: true,
+	}
+
+	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
+	provider := newMockMachineInfoProvider()
+	provider.refreshFn = func(parent context.Context) {}
+	c.machineInfoProvider = provider
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	data, err := c.Collect(ctx)
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+	assert.Less(t, elapsed, 200*time.Millisecond)
+}
+
+func TestCollector_CollectMachineInfo_RetainsLastGoodOnRefreshFailure(t *testing.T) {
+	ctx := context.Background()
+	cfg := &config.HealthExporterConfig{
+		IncludeMachineInfo: true,
+	}
+
+	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
+	expected := &machineinfo.MachineInfo{Hostname: "last-good"}
+	provider := newMockMachineInfoProvider()
+	provider.cached = expected
+	provider.initialRefreshOnce.Do(func() { close(provider.initialRefreshDone) })
+	provider.refreshFn = func(parent context.Context) {}
+	c.machineInfoProvider = provider
+
+	data, err := c.Collect(ctx)
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+	assert.Equal(t, expected, data.MachineInfo)
+}
+
+func TestCachedMachineInfoProvider_DeduplicatesConcurrentRefresh(t *testing.T) {
+	originalGetMachineInfo := getMachineInfo
+	defer func() {
+		getMachineInfo = originalGetMachineInfo
+	}()
+
+	var calls atomic.Int32
+	blocker := make(chan struct{})
+	getMachineInfo = func(nvmlInstance nvidianvml.Instance, opts ...machineinfo.MachineInfoOption) (*machineinfo.MachineInfo, error) {
+		calls.Add(1)
+		<-blocker
+		return &machineinfo.MachineInfo{Hostname: "refreshed"}, nil
+	}
+
+	provider := newCachedMachineInfoProvider(nvidianvml.NewNoOp(), time.Minute).(*cachedMachineInfoProvider)
+	ctx := context.Background()
+
+	for range 3 {
+		provider.RefreshAsync(ctx)
+	}
+
+	require.Eventually(t, func() bool {
+		return calls.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+
+	close(blocker)
+
+	require.Eventually(t, func() bool {
+		info, ok := provider.Get()
+		return ok && info.Hostname == "refreshed"
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestCachedMachineInfoProvider_WaitForInitialRefreshReturnsAfterCompletion(t *testing.T) {
+	provider := newCachedMachineInfoProvider(nvidianvml.NewNoOp(), time.Minute).(*cachedMachineInfoProvider)
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		provider.markInitialRefreshDone()
+	}()
+
+	start := time.Now()
+	provider.WaitForInitialRefresh(context.Background(), time.Second)
+	elapsed := time.Since(start)
+
+	assert.GreaterOrEqual(t, elapsed, 50*time.Millisecond)
+	assert.Less(t, elapsed, 300*time.Millisecond)
+}
+
+func TestCachedMachineInfoProvider_WaitForInitialRefreshTimesOut(t *testing.T) {
+	provider := newCachedMachineInfoProvider(nvidianvml.NewNoOp(), time.Minute).(*cachedMachineInfoProvider)
+
+	start := time.Now()
+	provider.WaitForInitialRefresh(context.Background(), 100*time.Millisecond)
+	elapsed := time.Since(start)
+
+	assert.GreaterOrEqual(t, elapsed, 100*time.Millisecond)
+	assert.Less(t, elapsed, 300*time.Millisecond)
+}
+
 func TestCollector_CollectMetrics_NoStore(t *testing.T) {
 	ctx := context.Background()
 	cfg := &config.HealthExporterConfig{
@@ -781,6 +1019,83 @@ func TestCollector_AllFeaturesEnabled(t *testing.T) {
 type mockMetricsStore struct {
 	metrics     pkgmetrics.Metrics
 	shouldError bool
+}
+
+type mockMachineInfoProvider struct {
+	mu                 sync.RWMutex
+	cached             *machineinfo.MachineInfo
+	refreshFn          func(context.Context)
+	refreshCalls       atomic.Int32
+	initialWaited      bool
+	initialRefreshDone chan struct{}
+	initialRefreshOnce sync.Once
+}
+
+func newMockMachineInfoProvider() *mockMachineInfoProvider {
+	return &mockMachineInfoProvider{
+		initialRefreshDone: make(chan struct{}),
+	}
+}
+
+func (m *mockMachineInfoProvider) Get() (*machineinfo.MachineInfo, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.cached == nil {
+		return nil, false
+	}
+	return m.cached, true
+}
+
+func (m *mockMachineInfoProvider) RefreshAsync(parent context.Context) {
+	m.refreshCalls.Add(1)
+	if m.refreshFn == nil {
+		return
+	}
+	go func() {
+		defer func() {
+			_ = recover()
+		}()
+		m.refreshFn(parent)
+	}()
+}
+
+func (m *mockMachineInfoProvider) WaitForInitialRefresh(ctx context.Context, maxWait time.Duration) bool {
+	if maxWait <= 0 {
+		return false
+	}
+
+	m.mu.Lock()
+	if m.initialWaited {
+		m.mu.Unlock()
+		return false
+	}
+	m.initialWaited = true
+	m.mu.Unlock()
+
+	timer := time.NewTimer(maxWait)
+	defer timer.Stop()
+
+	select {
+	case <-m.initialRefreshDone:
+		return true
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return false
+	}
+}
+
+func (m *mockMachineInfoProvider) setCached(info *machineinfo.MachineInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cached = info
+}
+
+func (m *mockMachineInfoProvider) markInitialRefreshDone() {
+	m.initialRefreshOnce.Do(func() {
+		close(m.initialRefreshDone)
+	})
 }
 
 func (m *mockMetricsStore) Read(ctx context.Context, opts ...pkgmetrics.OpOption) (pkgmetrics.Metrics, error) {
