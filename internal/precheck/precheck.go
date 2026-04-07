@@ -50,6 +50,7 @@ type nvmlInstance = nvidianvml.Instance
 
 type Input struct {
 	GPUHardwarePresent bool
+	GPUHardwareErr     error
 	GPUInfo            *apiv1.MachineGPUInfo
 	GPUInfoErr         error
 	GPUDriverVersion   string
@@ -121,7 +122,7 @@ func CollectInput() (Input, error) {
 	}
 
 	if !input.GPUHardwarePresent {
-		input.GPUHardwarePresent = detectGPUHardware()
+		input.GPUHardwarePresent, input.GPUHardwareErr = detectGPUHardware()
 	}
 
 	nvattestPresent := detectNVAttest()
@@ -135,6 +136,10 @@ func CollectInput() (Input, error) {
 }
 
 func Evaluate(input *Input) Result {
+	if input == nil {
+		input = &Input{}
+	}
+
 	checks := []Check{
 		evaluateGPUPresence(input),
 		evaluateArchitecture(input),
@@ -147,6 +152,13 @@ func Evaluate(input *Input) Result {
 }
 
 func evaluateGPUPresence(input *Input) Check {
+	if input != nil && input.GPUHardwareErr != nil {
+		return Check{
+			Name:    "gpu-present",
+			Message: "Unable to determine NVIDIA GPU presence; verify lspci is installed and accessible, then retry",
+		}
+	}
+
 	if !gpuHardwareDetected(input) {
 		return Check{
 			Name:    "gpu-present",
@@ -263,16 +275,16 @@ func hasDetectedGPUInfo(info *apiv1.MachineGPUInfo) bool {
 	return info != nil && len(info.GPUs) > 0
 }
 
-func detectGPUHardware() bool {
+func detectGPUHardware() (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	devs, err := listPCIGPUs(ctx)
 	if err != nil {
-		return false
+		return false, err
 	}
 
-	return len(devs) > 0
+	return len(devs) > 0, nil
 }
 
 // evaluateNVAttest checks whether nvattest is present in PATH.

@@ -227,6 +227,17 @@ func TestEvaluateDetectsHardwareWithoutDriver(t *testing.T) {
 	assert.Contains(t, checkMessages(result.Checks), "NVIDIA GPU hardware is present, but the NVIDIA driver was not detected; install or load the NVIDIA driver and retry")
 }
 
+func TestEvaluateNilInput(t *testing.T) {
+	t.Parallel()
+
+	result := Evaluate(nil)
+
+	assert.False(t, result.Passed())
+	assert.Contains(t, checkMessages(result.Checks), "No NVIDIA GPU detected; verify the node has an NVIDIA GPU installed and visible to the OS")
+	assert.Contains(t, checkMessages(result.Checks), "nvattest check skipped")
+	assert.Contains(t, checkMessages(result.Checks), "DCGM checks skipped")
+}
+
 func TestEvaluateSkipsArchitectureWhenGPUDetailsFail(t *testing.T) {
 	t.Parallel()
 
@@ -240,6 +251,19 @@ func TestEvaluateSkipsArchitectureWhenGPUDetailsFail(t *testing.T) {
 	assert.True(t, findCheck(t, result.Checks, "gpu-present").Passed)
 	assert.True(t, findCheck(t, result.Checks, "gpu-driver").Passed)
 	assert.Contains(t, checkMessages(result.Checks), "GPU architecture check skipped because GPU details could not be collected; check agent logs and retry")
+}
+
+func TestEvaluateReportsGPUProbeFailure(t *testing.T) {
+	t.Parallel()
+
+	result := Evaluate(&Input{
+		GPUHardwareErr:  fmt.Errorf("lspci unavailable"),
+		NVAttestPresent: boolPtr(true),
+	})
+
+	assert.False(t, result.Passed())
+	assert.Contains(t, checkMessages(result.Checks), "Unable to determine NVIDIA GPU presence; verify lspci is installed and accessible, then retry")
+	assert.Contains(t, checkMessages(result.Checks), "NVIDIA driver check skipped because no NVIDIA GPU was detected")
 }
 
 func TestEvaluateAggregatesFailures(t *testing.T) {
@@ -384,6 +408,41 @@ func TestCollectInputCallsDCGMInit(t *testing.T) {
 	assert.True(t, *input.DCGMReachable)
 	assert.Equal(t, "4.2.3", input.DCGMVersion)
 	assert.True(t, detectDCGMCalled)
+}
+
+func TestCollectInputPreservesGPUProbeError(t *testing.T) {
+	t.Parallel()
+
+	originalNewNVML := newNVML
+	originalLookPath := lookPath
+	originalDetectDCGMVersion := detectDCGMVersion
+	originalListPCIGPUs := listPCIGPUs
+	t.Cleanup(func() {
+		newNVML = originalNewNVML
+		lookPath = originalLookPath
+		detectDCGMVersion = originalDetectDCGMVersion
+		listPCIGPUs = originalListPCIGPUs
+	})
+
+	newNVML = func() (nvmlInstance, error) {
+		return nil, fmt.Errorf("skip nvml in test")
+	}
+	lookPath = func(file string) (string, error) {
+		return "/usr/bin/" + file, nil
+	}
+	detectDCGMVersion = func() (string, error) {
+		return "4.2.3", nil
+	}
+	listPCIGPUs = func(_ context.Context) ([]string, error) {
+		return nil, fmt.Errorf("lspci unavailable")
+	}
+
+	input, err := CollectInput()
+
+	require.NoError(t, err)
+	assert.False(t, input.GPUHardwarePresent)
+	require.Error(t, input.GPUHardwareErr)
+	assert.Contains(t, input.GPUHardwareErr.Error(), "lspci unavailable")
 }
 
 func gpuInfo(architecture string) *apiv1.MachineGPUInfo {
