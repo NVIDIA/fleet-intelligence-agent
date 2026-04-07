@@ -140,7 +140,7 @@ func Evaluate(input *Input) Result {
 		evaluateArchitecture(input),
 		evaluateDriver(input),
 		evaluateNVAttest(input.NVAttestPresent),
-		evaluateDCGM(*input),
+		evaluateDCGM(input),
 	}
 
 	return Result{Checks: checks}
@@ -301,7 +301,15 @@ func evaluateNVAttest(present *bool) Check {
 	}
 }
 
-func evaluateDCGM(input Input) Check {
+func evaluateDCGM(input *Input) Check {
+	if input == nil {
+		return Check{
+			Name:    "dcgm",
+			Passed:  true,
+			Message: "DCGM checks skipped",
+		}
+	}
+
 	if input.DCGMReachable == nil {
 		return Check{
 			Name:    "dcgm",
