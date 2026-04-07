@@ -16,6 +16,7 @@
 package precheck
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -202,6 +203,20 @@ func TestEvaluateDriverAndNVAT(t *testing.T) {
 	}
 }
 
+func TestEvaluateDetectsHardwareWithoutDriver(t *testing.T) {
+	t.Parallel()
+
+	result := Evaluate(Input{
+		GPUHardwarePresent: true,
+		NVAttestPresent:    boolPtr(true),
+	})
+
+	assert.False(t, result.Passed())
+	assert.Contains(t, checkMessages(result.Checks), "NVIDIA GPU detected")
+	assert.Contains(t, checkMessages(result.Checks), "GPU architecture check skipped because NVIDIA driver is not detected")
+	assert.Contains(t, checkMessages(result.Checks), "NVIDIA driver not detected")
+}
+
 func TestEvaluateAggregatesFailures(t *testing.T) {
 	t.Parallel()
 
@@ -305,10 +320,12 @@ func TestCollectInputCallsDCGMInit(t *testing.T) {
 	originalNewNVML := newNVML
 	originalLookPath := lookPath
 	originalDetectDCGMVersion := detectDCGMVersion
+	originalListPCIGPUs := listPCIGPUs
 	t.Cleanup(func() {
 		newNVML = originalNewNVML
 		lookPath = originalLookPath
 		detectDCGMVersion = originalDetectDCGMVersion
+		listPCIGPUs = originalListPCIGPUs
 	})
 
 	newNVML = func() (nvmlInstance, error) {
@@ -324,9 +341,14 @@ func TestCollectInputCallsDCGMInit(t *testing.T) {
 		return "4.2.3", nil
 	}
 
+	listPCIGPUs = func(_ context.Context) ([]string, error) {
+		return []string{"0000:00:00.0 3D controller: NVIDIA Corporation Test GPU [10de:ffff]"}, nil
+	}
+
 	input, err := CollectInput()
 
 	require.NoError(t, err)
+	assert.True(t, input.GPUHardwarePresent)
 	require.NotNil(t, input.DCGMReachable)
 	assert.True(t, *input.DCGMReachable)
 	assert.Equal(t, "4.2.3", input.DCGMVersion)

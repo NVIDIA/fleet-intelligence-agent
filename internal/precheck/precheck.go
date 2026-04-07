@@ -17,13 +17,16 @@
 package precheck
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
+	nvidiapci "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia/pci"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/dcgmversion"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
@@ -39,15 +42,17 @@ var (
 	getMachineInfo    = machineinfo.GetMachineInfo
 	lookPath          = exec.LookPath
 	detectDCGMVersion = dcgmversion.DetectHostengineVersion
+	listPCIGPUs       = nvidiapci.ListPCIGPUs
 )
 
 type nvmlInstance = nvidianvml.Instance
 
 type Input struct {
-	MachineInfo     *machineinfo.MachineInfo
-	NVAttestPresent *bool
-	DCGMReachable   *bool
-	DCGMVersion     string
+	GPUHardwarePresent bool
+	MachineInfo        *machineinfo.MachineInfo
+	NVAttestPresent    *bool
+	DCGMReachable      *bool
+	DCGMVersion        string
 }
 
 type Check struct {
@@ -104,7 +109,12 @@ func CollectInput() (Input, error) {
 		info, machineInfoErr := getMachineInfo(nvmlInstance)
 		if machineInfoErr == nil {
 			input.MachineInfo = info
+			input.GPUHardwarePresent = hasDetectedGPU(info)
 		}
+	}
+
+	if !input.GPUHardwarePresent {
+		input.GPUHardwarePresent = detectGPUHardware()
 	}
 
 	nvattestPresent := detectNVAttest()
@@ -119,9 +129,9 @@ func CollectInput() (Input, error) {
 
 func Evaluate(input Input) Result {
 	checks := []Check{
-		evaluateGPUPresence(input.MachineInfo),
-		evaluateArchitecture(input.MachineInfo),
-		evaluateDriver(input.MachineInfo),
+		evaluateGPUPresence(input),
+		evaluateArchitecture(input),
+		evaluateDriver(input),
 		evaluateNVAttest(input.NVAttestPresent),
 		evaluateDCGM(input),
 	}
@@ -129,8 +139,8 @@ func Evaluate(input Input) Result {
 	return Result{Checks: checks}
 }
 
-func evaluateGPUPresence(info *machineinfo.MachineInfo) Check {
-	if info == nil || info.GPUInfo == nil || len(info.GPUInfo.GPUs) == 0 {
+func evaluateGPUPresence(input Input) Check {
+	if !gpuHardwareDetected(input) {
 		return Check{
 			Name:    "gpu-present",
 			Message: "no NVIDIA GPU detected",
@@ -144,12 +154,21 @@ func evaluateGPUPresence(info *machineinfo.MachineInfo) Check {
 	}
 }
 
-func evaluateArchitecture(info *machineinfo.MachineInfo) Check {
-	if info == nil || info.GPUInfo == nil || len(info.GPUInfo.GPUs) == 0 {
+func evaluateArchitecture(input Input) Check {
+	if !gpuHardwareDetected(input) {
 		return Check{
 			Name:    "gpu-architecture",
 			Passed:  true,
 			Message: "GPU architecture check skipped because no GPU was detected",
+		}
+	}
+
+	info := input.MachineInfo
+	if info == nil || info.GPUInfo == nil || len(info.GPUInfo.GPUs) == 0 {
+		return Check{
+			Name:    "gpu-architecture",
+			Passed:  true,
+			Message: "GPU architecture check skipped because NVIDIA driver is not detected",
 		}
 	}
 
@@ -176,12 +195,20 @@ func evaluateArchitecture(info *machineinfo.MachineInfo) Check {
 	}
 }
 
-func evaluateDriver(info *machineinfo.MachineInfo) Check {
-	if info == nil || info.GPUInfo == nil || len(info.GPUInfo.GPUs) == 0 {
+func evaluateDriver(input Input) Check {
+	if !gpuHardwareDetected(input) {
 		return Check{
 			Name:    "gpu-driver",
 			Passed:  true,
 			Message: "driver check skipped because no GPU was detected",
+		}
+	}
+
+	info := input.MachineInfo
+	if info == nil || info.GPUInfo == nil || len(info.GPUInfo.GPUs) == 0 {
+		return Check{
+			Name:    "gpu-driver",
+			Message: "NVIDIA driver not detected",
 		}
 	}
 
@@ -212,6 +239,30 @@ func evaluateDriver(info *machineinfo.MachineInfo) Check {
 		Passed:  true,
 		Message: "NVIDIA driver detected: " + info.GPUDriverVersion,
 	}
+}
+
+func gpuHardwareDetected(input Input) bool {
+	if input.GPUHardwarePresent {
+		return true
+	}
+
+	return hasDetectedGPU(input.MachineInfo)
+}
+
+func hasDetectedGPU(info *machineinfo.MachineInfo) bool {
+	return info != nil && info.GPUInfo != nil && len(info.GPUInfo.GPUs) > 0
+}
+
+func detectGPUHardware() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	devs, err := listPCIGPUs(ctx)
+	if err != nil {
+		return false
+	}
+
+	return len(devs) > 0
 }
 
 // evaluateNVAttest checks whether nvattest is present in PATH.
