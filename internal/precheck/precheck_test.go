@@ -64,7 +64,7 @@ func TestEvaluateArchitecture(t *testing.T) {
 			},
 			wantPassed: false,
 			wantMessages: []string{
-				"no NVIDIA GPU detected",
+				"No NVIDIA GPU detected; verify the node has an NVIDIA GPU installed and visible to the OS",
 			},
 		},
 		{
@@ -81,7 +81,7 @@ func TestEvaluateArchitecture(t *testing.T) {
 			},
 			wantPassed: false,
 			wantMessages: []string{
-				"unsupported GPU architecture: Ampere",
+				"Unsupported GPU architecture: Ampere; supported architectures are Hopper, Blackwell, and Rubin",
 			},
 		},
 		{
@@ -91,7 +91,7 @@ func TestEvaluateArchitecture(t *testing.T) {
 			},
 			wantPassed: false,
 			wantMessages: []string{
-				"GPU architecture is unknown",
+				"GPU detected, but its architecture could not be determined; verify the NVIDIA driver is installed and loaded",
 			},
 		},
 	}
@@ -134,7 +134,7 @@ func TestEvaluateDriverAndNVAT(t *testing.T) {
 			},
 			wantPassed: false,
 			wantMessages: []string{
-				"NVIDIA driver not detected",
+				"NVIDIA GPU hardware is present, but the NVIDIA driver was not detected; install or load the NVIDIA driver and retry",
 			},
 		},
 		{
@@ -156,7 +156,7 @@ func TestEvaluateDriverAndNVAT(t *testing.T) {
 			},
 			wantPassed: false,
 			wantMessages: []string{
-				"NVIDIA driver major version 509 is below required minimum 510",
+				"NVIDIA driver version 509.12.01 is below the required minimum 510; upgrade the driver and retry",
 			},
 		},
 		{
@@ -167,7 +167,7 @@ func TestEvaluateDriverAndNVAT(t *testing.T) {
 			},
 			wantPassed: false,
 			wantMessages: []string{
-				"nvattest not found in PATH",
+				"nvattest was not found in PATH; install nvattest and ensure it is available in PATH",
 			},
 		},
 		{
@@ -213,8 +213,8 @@ func TestEvaluateDetectsHardwareWithoutDriver(t *testing.T) {
 
 	assert.False(t, result.Passed())
 	assert.Contains(t, checkMessages(result.Checks), "NVIDIA GPU detected")
-	assert.Contains(t, checkMessages(result.Checks), "GPU architecture check skipped because NVIDIA driver is not detected")
-	assert.Contains(t, checkMessages(result.Checks), "NVIDIA driver not detected")
+	assert.Contains(t, checkMessages(result.Checks), "GPU architecture check skipped because the NVIDIA driver is not available")
+	assert.Contains(t, checkMessages(result.Checks), "NVIDIA GPU detected via PCI, but the NVIDIA driver was not detected; install or load the NVIDIA driver and retry")
 }
 
 func TestEvaluateAggregatesFailures(t *testing.T) {
@@ -226,9 +226,9 @@ func TestEvaluateAggregatesFailures(t *testing.T) {
 	})
 
 	assert.False(t, result.Passed())
-	assert.Contains(t, checkMessages(result.Checks), "unsupported GPU architecture: Ampere")
-	assert.Contains(t, checkMessages(result.Checks), "NVIDIA driver not detected")
-	assert.Contains(t, checkMessages(result.Checks), "nvattest not found in PATH")
+	assert.Contains(t, checkMessages(result.Checks), "Unsupported GPU architecture: Ampere; supported architectures are Hopper, Blackwell, and Rubin")
+	assert.Contains(t, checkMessages(result.Checks), "NVIDIA GPU hardware is present, but the NVIDIA driver was not detected; install or load the NVIDIA driver and retry")
+	assert.Contains(t, checkMessages(result.Checks), "nvattest was not found in PATH; install nvattest and ensure it is available in PATH")
 }
 
 func TestEvaluateDCGM(t *testing.T) {
@@ -249,7 +249,7 @@ func TestEvaluateDCGM(t *testing.T) {
 			},
 			wantPassed: false,
 			wantMessages: []string{
-				"DCGM HostEngine is not reachable",
+				"DCGM HostEngine is not reachable; verify DCGM is running and DCGM_URL is configured correctly",
 			},
 		},
 		{
@@ -262,7 +262,7 @@ func TestEvaluateDCGM(t *testing.T) {
 			},
 			wantPassed: false,
 			wantMessages: []string{
-				"DCGM HostEngine version 4.2.2 is below required minimum 4.2.3",
+				"DCGM HostEngine version 4.2.2 is below the required minimum 4.2.3; upgrade DCGM and retry",
 			},
 		},
 		{

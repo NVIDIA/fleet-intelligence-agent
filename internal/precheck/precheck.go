@@ -143,7 +143,7 @@ func evaluateGPUPresence(input Input) Check {
 	if !gpuHardwareDetected(input) {
 		return Check{
 			Name:    "gpu-present",
-			Message: "no NVIDIA GPU detected",
+			Message: "No NVIDIA GPU detected; verify the node has an NVIDIA GPU installed and visible to the OS",
 		}
 	}
 
@@ -159,7 +159,7 @@ func evaluateArchitecture(input Input) Check {
 		return Check{
 			Name:    "gpu-architecture",
 			Passed:  true,
-			Message: "GPU architecture check skipped because no GPU was detected",
+			Message: "GPU architecture check skipped because no NVIDIA GPU was detected",
 		}
 	}
 
@@ -168,14 +168,14 @@ func evaluateArchitecture(input Input) Check {
 		return Check{
 			Name:    "gpu-architecture",
 			Passed:  true,
-			Message: "GPU architecture check skipped because NVIDIA driver is not detected",
+			Message: "GPU architecture check skipped because the NVIDIA driver is not available",
 		}
 	}
 
 	if info.GPUInfo.Architecture == "" {
 		return Check{
 			Name:    "gpu-architecture",
-			Message: "GPU architecture is unknown",
+			Message: "GPU detected, but its architecture could not be determined; verify the NVIDIA driver is installed and loaded",
 		}
 	}
 
@@ -184,7 +184,7 @@ func evaluateArchitecture(input Input) Check {
 	}) {
 		return Check{
 			Name:    "gpu-architecture",
-			Message: "unsupported GPU architecture: " + info.GPUInfo.Architecture,
+			Message: "Unsupported GPU architecture: " + info.GPUInfo.Architecture + "; supported architectures are Hopper, Blackwell, and Rubin",
 		}
 	}
 
@@ -200,7 +200,7 @@ func evaluateDriver(input Input) Check {
 		return Check{
 			Name:    "gpu-driver",
 			Passed:  true,
-			Message: "driver check skipped because no GPU was detected",
+			Message: "NVIDIA driver check skipped because no NVIDIA GPU was detected",
 		}
 	}
 
@@ -208,14 +208,14 @@ func evaluateDriver(input Input) Check {
 	if info == nil || info.GPUInfo == nil || len(info.GPUInfo.GPUs) == 0 {
 		return Check{
 			Name:    "gpu-driver",
-			Message: "NVIDIA driver not detected",
+			Message: "NVIDIA GPU detected via PCI, but the NVIDIA driver was not detected; install or load the NVIDIA driver and retry",
 		}
 	}
 
 	if info.GPUDriverVersion == "" {
 		return Check{
 			Name:    "gpu-driver",
-			Message: "NVIDIA driver not detected",
+			Message: "NVIDIA GPU hardware is present, but the NVIDIA driver was not detected; install or load the NVIDIA driver and retry",
 		}
 	}
 
@@ -230,7 +230,7 @@ func evaluateDriver(input Input) Check {
 	if driverMajor < minimumDriverMajorVersion {
 		return Check{
 			Name:    "gpu-driver",
-			Message: fmt.Sprintf("NVIDIA driver major version %d is below required minimum %d", driverMajor, minimumDriverMajorVersion),
+			Message: fmt.Sprintf("NVIDIA driver version %s is below the required minimum %d; upgrade the driver and retry", info.GPUDriverVersion, minimumDriverMajorVersion),
 		}
 	}
 
@@ -280,7 +280,7 @@ func evaluateNVAttest(present *bool) Check {
 	if !*present {
 		return Check{
 			Name:    "nvattest",
-			Message: "nvattest not found in PATH",
+			Message: "nvattest was not found in PATH; install nvattest and ensure it is available in PATH",
 		}
 	}
 
@@ -303,14 +303,14 @@ func evaluateDCGM(input Input) Check {
 	if !*input.DCGMReachable {
 		return Check{
 			Name:    "dcgm",
-			Message: "DCGM HostEngine is not reachable",
+			Message: "DCGM HostEngine is not reachable; verify DCGM is running and DCGM_URL is configured correctly",
 		}
 	}
 
 	if input.DCGMVersion == "" {
 		return Check{
 			Name:    "dcgm",
-			Message: "DCGM HostEngine version could not be determined",
+			Message: "DCGM HostEngine is reachable, but its version could not be determined; verify the DCGM installation",
 		}
 	}
 
@@ -325,7 +325,7 @@ func evaluateDCGM(input Input) Check {
 	if !versionOK {
 		return Check{
 			Name:    "dcgm",
-			Message: "DCGM HostEngine version " + input.DCGMVersion + " is below required minimum " + minimumDCGMVersion,
+			Message: "DCGM HostEngine version " + input.DCGMVersion + " is below the required minimum " + minimumDCGMVersion + "; upgrade DCGM and retry",
 		}
 	}
 
