@@ -27,6 +27,9 @@ type Event struct {
 	// Component represents which component generated the event.
 	Component string
 
+	// EventID uniquely identifies an event in the exported agent message.
+	EventID string
+
 	// Time represents when the event happened
 	Time time.Time
 
@@ -46,6 +49,7 @@ type Event struct {
 func (e *Event) ToEvent() apiv1.Event {
 	return apiv1.Event{
 		Component: e.Component,
+		EventID:   e.EventID,
 		Time:      metav1.Time{Time: e.Time},
 		Name:      e.Name,
 		Type:      apiv1.EventType(e.Type),
