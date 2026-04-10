@@ -300,8 +300,6 @@ func TestEvaluateDCGMSkipsWhenReachabilityUnset(t *testing.T) {
 }
 
 func TestCollectInputCallsDCGMInit(t *testing.T) {
-	t.Parallel()
-
 	originalNewNVML := newNVML
 	originalLookPath := lookPath
 	originalDCGMInit := dcgmInit
