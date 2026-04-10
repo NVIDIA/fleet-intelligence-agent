@@ -183,6 +183,23 @@ func TestPerformEnrollment_InvalidJSON(t *testing.T) {
 	assert.Empty(t, token)
 }
 
+func TestPerformEnrollment_ResponseTooLarge(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write(make([]byte, maxEnrollmentResponseSize+1))
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "enrollment response too large")
+	assert.Empty(t, token)
+}
+
 func TestPerformEnrollment_ContextCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Simulate slow response

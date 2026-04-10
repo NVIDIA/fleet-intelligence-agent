@@ -28,6 +28,8 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 )
 
+const maxEnrollmentResponseSize = 1 << 20
+
 // EnrollResponse represents the response from the enrollment endpoint
 type EnrollResponse struct {
 	JWTToken string `json:"jwt_assertion"`
@@ -68,11 +70,17 @@ func PerformEnrollment(ctx context.Context, enrollEndpoint, sakToken string) (st
 	}
 	defer resp.Body.Close()
 
-	// Read response body (capped at 1 MiB to prevent memory exhaustion from a malicious server)
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	// Read at most max+1 bytes so oversized responses fail explicitly instead of
+	// surfacing later as a truncated JSON parse error.
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxEnrollmentResponseSize+1))
 	if err != nil {
 		log.Logger.Errorw("Failed to read enrollment response body", "error", err)
 		return "", fmt.Errorf("failed to read enrollment response: %w", err)
+	}
+	if len(respBody) > maxEnrollmentResponseSize {
+		err = fmt.Errorf("enrollment response too large (max %d bytes)", maxEnrollmentResponseSize)
+		log.Logger.Errorw("Failed to read enrollment response body", "error", err)
+		return "", err
 	}
 
 	// Check response status and return specific error messages

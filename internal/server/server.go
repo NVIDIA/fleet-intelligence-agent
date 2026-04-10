@@ -24,7 +24,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	stdos "os"
 	"time"
 
@@ -472,12 +474,12 @@ func (s *Server) startServer(ctx context.Context, nvmlInstance nvidianvml.Instan
 func (s *Server) installMiddlewares(router *gin.Engine) {
 	router.Use(gin.Recovery())
 	router.Use(func(c *gin.Context) {
-		// Restrict CORS to same origin (loopback). Browsers enforce the Origin header;
-		// non-browser callers don't rely on CORS at all.
+		// Restrict browser access to loopback origins only. Non-browser callers do not
+		// rely on CORS, so requests without an Origin header continue normally.
 		origin := c.Request.Header.Get("Origin")
-		if origin != "" {
+		if origin != "" && isLoopbackOrigin(origin) {
 			c.Header("Access-Control-Allow-Origin", origin)
-			c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			c.Header("Access-Control-Allow-Headers", "Content-Type")
 			c.Header("Vary", "Origin")
 		}
@@ -487,6 +489,27 @@ func (s *Server) installMiddlewares(router *gin.Engine) {
 		}
 		c.Next()
 	})
+}
+
+func isLoopbackOrigin(origin string) bool {
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return false
+	}
+
+	host := parsed.Hostname()
+	if host == "" {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // healthz returns a simple health check handler
