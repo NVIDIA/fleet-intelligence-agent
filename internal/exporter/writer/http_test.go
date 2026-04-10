@@ -86,7 +86,7 @@ func TestHTTPWriter_Send_Success(t *testing.T) {
 	writer := NewHTTPWriter(httpClient, otlpConverter)
 
 	ctx := context.Background()
-	newToken, err := writer.Send(ctx, testData, metricsServer.URL, logsServer.URL, 1, "test-token")
+	newToken, err := writer.Send(ctx, testData, metricsServer.URL, logsServer.URL, 1, "test-token", 1*time.Minute)
 
 	require.NoError(t, err)
 	assert.Empty(t, newToken)
@@ -126,7 +126,7 @@ func TestHTTPWriter_Send_EmptyMetrics(t *testing.T) {
 	writer := NewHTTPWriter(httpClient, otlpConverter)
 
 	ctx := context.Background()
-	_, err := writer.Send(ctx, testData, "", logsServer.URL, 1, "test-token")
+	_, err := writer.Send(ctx, testData, "", logsServer.URL, 1, "test-token", 1*time.Minute)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, logsRequests)
@@ -164,7 +164,7 @@ func TestHTTPWriter_Send_EmptyLogs(t *testing.T) {
 	writer := NewHTTPWriter(httpClient, otlpConverter)
 
 	ctx := context.Background()
-	_, err := writer.Send(ctx, testData, metricsServer.URL, "", 1, "test-token")
+	_, err := writer.Send(ctx, testData, metricsServer.URL, "", 1, "test-token", 1*time.Minute)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, metricsRequests)
@@ -204,7 +204,7 @@ func TestHTTPWriter_Send_RetryOnFailure(t *testing.T) {
 	writer := NewHTTPWriter(httpClient, otlpConverter)
 
 	ctx := context.Background()
-	_, err := writer.Send(ctx, testData, server.URL, "", 3, "test-token")
+	_, err := writer.Send(ctx, testData, server.URL, "", 3, "test-token", 1*time.Minute)
 
 	require.NoError(t, err)
 	assert.Equal(t, 3, attempts)
@@ -241,7 +241,7 @@ func TestHTTPWriter_Send_RetryExhausted(t *testing.T) {
 	writer := NewHTTPWriter(httpClient, otlpConverter)
 
 	ctx := context.Background()
-	_, err := writer.Send(ctx, testData, "", server.URL, maxAttempts, "test-token")
+	_, err := writer.Send(ctx, testData, "", server.URL, maxAttempts, "test-token", 1*time.Minute)
 
 	require.Error(t, err)
 	assert.Equal(t, maxAttempts, attempts)
@@ -292,7 +292,7 @@ func TestHTTPWriter_Send_UnauthorizedWithJWTRefresh(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	_, err := writer.Send(ctx, testData, server.URL, "", 3, "old-token")
+	_, err := writer.Send(ctx, testData, server.URL, "", 3, "old-token", 1*time.Minute)
 
 	require.NoError(t, err)
 	assert.True(t, refreshCalled)
@@ -332,7 +332,7 @@ func TestHTTPWriter_Send_UnauthorizedJWTRefreshFails(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	_, err := writer.Send(ctx, testData, "", server.URL, 2, "old-token") // Reduce retries
+	_, err := writer.Send(ctx, testData, "", server.URL, 2, "old-token", 1*time.Minute) // Reduce retries
 
 	require.Error(t, err)
 	assert.GreaterOrEqual(t, attempts, 1)
@@ -368,7 +368,7 @@ func TestHTTPWriter_Send_JWTTokenRefreshFromHeader(t *testing.T) {
 	writer := NewHTTPWriter(httpClient, otlpConverter)
 
 	ctx := context.Background()
-	returnedToken, err := writer.Send(ctx, testData, server.URL, "", 1, "test-token")
+	returnedToken, err := writer.Send(ctx, testData, server.URL, "", 1, "test-token", 1*time.Minute)
 
 	require.NoError(t, err)
 	assert.Equal(t, newToken, returnedToken)
@@ -404,7 +404,7 @@ func TestHTTPWriter_Send_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err := writer.Send(ctx, testData, "", server.URL, 1, "test-token")
+	_, err := writer.Send(ctx, testData, "", server.URL, 1, "test-token", 1*time.Minute)
 
 	require.Error(t, err)
 }
@@ -443,7 +443,7 @@ func TestHTTPWriter_Send_LogsFailure(t *testing.T) {
 	writer := NewHTTPWriter(httpClient, otlpConverter)
 
 	ctx := context.Background()
-	_, err := writer.Send(ctx, testData, metricsServer.URL, logsServer.URL, 1, "test-token")
+	_, err := writer.Send(ctx, testData, metricsServer.URL, logsServer.URL, 1, "test-token", 1*time.Minute)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to send critical logs data")
@@ -571,7 +571,7 @@ func TestHTTPWriter_MarshalError(t *testing.T) {
 
 	ctx := context.Background()
 	// Pass empty endpoints - should not send anything
-	newToken, err := writer.Send(ctx, testData, "", "", 1, "test-token")
+	newToken, err := writer.Send(ctx, testData, "", "", 1, "test-token", 1*time.Minute)
 
 	require.NoError(t, err)
 	assert.Empty(t, newToken)
