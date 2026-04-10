@@ -5,13 +5,12 @@ package host
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/file"
-	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
-	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/process"
 )
 
 // VirtualizationEnvironment represents the virtualization environment of the host.
@@ -45,68 +44,48 @@ func GetSystemdDetectVirt(ctx context.Context) (VirtualizationEnvironment, error
 		return VirtualizationEnvironment{}, nil
 	}
 
-	p, err := process.New(
-		process.WithBashScriptContentsToRun(fmt.Sprintf(`
-%s --vm || true
-%s --container || true
-%s || true
-`,
-			detectExecPath,
-			detectExecPath,
-			detectExecPath,
-		)),
-		process.WithRunAsBashScript(),
-		process.WithRunBashInline(),
-	)
+	vm, err := runSystemdDetectVirt(ctx, detectExecPath, "--vm")
 	if err != nil {
 		return VirtualizationEnvironment{}, err
 	}
 
-	if err := p.Start(ctx); err != nil {
+	container, err := runSystemdDetectVirt(ctx, detectExecPath, "--container")
+	if err != nil {
 		return VirtualizationEnvironment{}, err
 	}
-	defer func() {
-		if err := p.Close(ctx); err != nil {
-			log.Logger.Warnw("failed to abort command", "err", err)
-		}
-	}()
 
-	lines := make([]string, 0)
-	if err := process.Read(
-		ctx,
-		p,
-		process.WithReadStdout(),
-		process.WithReadStderr(),
-		process.WithProcessLine(func(line string) {
-			lines = append(lines, line)
-		}),
-		process.WithWaitForCmd(),
-	); err != nil {
-		return VirtualizationEnvironment{}, fmt.Errorf("failed to read systemd-detect-virt output: %w\n\noutput:\n%s", err, strings.Join(lines, "\n"))
+	virtType, err := runSystemdDetectVirt(ctx, detectExecPath)
+	if err != nil {
+		return VirtualizationEnvironment{}, err
 	}
 
 	virt := VirtualizationEnvironment{}
-	if len(lines) > 0 {
-		virt.VM = strings.TrimSpace(lines[0])
-	}
+	virt.VM = vm
 	virt.IsKVM = virt.VM == "kvm"
-	if len(lines) > 1 {
-		virt.Container = strings.TrimSpace(lines[1])
-	}
-	if len(lines) > 2 {
-		virt.Type = strings.TrimSpace(lines[2])
-	}
-
-	select {
-	case err := <-p.Wait():
-		if err != nil {
-			return virt, err
-		}
-	case <-ctx.Done():
-		return virt, ctx.Err()
-	}
-
+	virt.Container = container
+	virt.Type = virtType
 	return virt, nil
+}
+
+func runSystemdDetectVirt(ctx context.Context, detectExecPath string, args ...string) (string, error) {
+	output, err := exec.CommandContext(ctx, detectExecPath, args...).CombinedOutput()
+	trimmed := strings.TrimSpace(string(output))
+	if err == nil {
+		return trimmed, nil
+	}
+	if ctx.Err() != nil {
+		return trimmed, ctx.Err()
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		// systemd-detect-virt returns non-zero when no matching virtualization
+		// environment is detected; the previous shell pipeline masked that with
+		// "|| true", so preserve that behavior here.
+		return trimmed, nil
+	}
+
+	return "", fmt.Errorf("failed to read systemd-detect-virt output: %w\n\noutput:\n%s", err, trimmed)
 }
 
 // GetSystemManufacturer detects the system manufacturer, using "dmidecode".
