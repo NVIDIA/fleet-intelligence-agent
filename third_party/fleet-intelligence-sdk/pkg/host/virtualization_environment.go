@@ -79,10 +79,12 @@ func runSystemdDetectVirt(ctx context.Context, detectExecPath string, args ...st
 
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		// systemd-detect-virt returns non-zero when no matching virtualization
-		// environment is detected; the previous shell pipeline masked that with
-		// "|| true", so preserve that behavior here.
-		return trimmed, nil
+		// systemd-detect-virt returns exit code 1 when no matching virtualization
+		// environment is detected. Preserve the previous "|| true" behavior only
+		// for that specific case and surface other execution failures.
+		if exitErr.ExitCode() == 1 {
+			return trimmed, nil
+		}
 	}
 
 	return "", fmt.Errorf("failed to read systemd-detect-virt output: %w\n\noutput:\n%s", err, trimmed)
