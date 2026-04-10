@@ -40,6 +40,8 @@ import (
 
 const diskPartitionsTimeout = 10 * time.Second
 
+var listPCIGPUs = nvidiapci.ListPCIGPUs
+
 func GetMachineInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineInfo, error) {
 	hostname, _ := os.Hostname()
 	info := &apiv1.MachineInfo{
@@ -307,7 +309,7 @@ func GetSystemResourceGPUCount(nvmlInstance nvidianvml.Instance) (string, error)
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
-		devs, err := nvidiapci.ListPCIGPUs(ctx)
+		devs, err := listPCIGPUs(ctx)
 		if err != nil {
 			log.Logger.Errorw("failed to list nvidia pci devices", "error", err)
 		}

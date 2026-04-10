@@ -78,16 +78,25 @@ func TestGetSystemResourceGPUCount(t *testing.T) {
 		}
 	}()
 
-	devCnt, err := nvidiadev.CountAllDevicesFromDevDir()
+	_, err = nvidiadev.CountAllDevicesFromDevDir()
 	assert.NoError(t, err)
 	gpuCnt, err := GetSystemResourceGPUCount(nvmlInstance)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, gpuCnt)
 
-	if devCnt == 0 {
+	expectedCount := len(nvmlInstance.Devices())
+	if expectedCount == 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		pciDevs, err := listPCIGPUs(ctx)
+		assert.NoError(t, err)
+		expectedCount = len(pciDevs)
+	}
+
+	if expectedCount == 0 {
 		assert.Equal(t, "0", gpuCnt)
 	} else {
-		assert.Equal(t, strconv.Itoa(devCnt), gpuCnt)
+		assert.Equal(t, strconv.Itoa(expectedCount), gpuCnt)
 	}
 }
 
@@ -225,6 +234,14 @@ func TestGetMachineMemoryInfo(t *testing.T) {
 
 // TestGetSystemResourceGPUCount_NoGPU tests GPU count when no GPUs are present
 func TestGetSystemResourceGPUCount_NoGPU(t *testing.T) {
+	originalListPCIGPUs := listPCIGPUs
+	t.Cleanup(func() {
+		listPCIGPUs = originalListPCIGPUs
+	})
+	listPCIGPUs = func(_ context.Context) ([]string, error) {
+		return nil, nil
+	}
+
 	// Create a mock NVML instance with no devices
 	mockInstance := &mockNvmlInstance{}
 

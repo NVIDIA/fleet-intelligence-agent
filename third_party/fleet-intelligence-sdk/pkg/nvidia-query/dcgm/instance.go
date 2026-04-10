@@ -136,9 +136,10 @@ func NewWithContext(ctx context.Context) (Instance, error) {
 
 	resultCh := make(chan result, 1)
 	abandonCh := make(chan struct{})
+	initFn := newInstanceFunc
 
 	go func() {
-		inst, err := newInstanceFunc()
+		inst, err := initFn()
 		select {
 		case resultCh <- result{inst: inst, err: err}:
 		case <-abandonCh:
