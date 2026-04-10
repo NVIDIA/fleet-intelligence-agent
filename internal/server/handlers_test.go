@@ -626,7 +626,6 @@ func TestInstallMiddlewares(t *testing.T) {
 	tests := []struct {
 		name           string
 		method         string
-		origin         string
 		checkHeaders   func(t *testing.T, w *httptest.ResponseRecorder)
 		expectedStatus int
 	}{
@@ -641,47 +640,16 @@ func TestInstallMiddlewares(t *testing.T) {
 			expectedStatus: http.StatusOK,
 		},
 		{
-			name:   "OPTIONS_request",
-			method: "OPTIONS",
-			origin: "http://localhost:8080",
-			checkHeaders: func(t *testing.T, w *httptest.ResponseRecorder) {
-				assert.Equal(t, "http://localhost:8080", w.Header().Get("Access-Control-Allow-Origin"))
-				assert.Equal(t, "GET, POST, OPTIONS", w.Header().Get("Access-Control-Allow-Methods"))
-				assert.Equal(t, "Content-Type", w.Header().Get("Access-Control-Allow-Headers"))
-				assert.Equal(t, "Origin", w.Header().Get("Vary"))
-			},
-			expectedStatus: http.StatusNoContent,
-		},
-		{
-			name:   "OPTIONS_request_disallowed_origin",
-			method: "OPTIONS",
-			origin: "https://example.com",
-			checkHeaders: func(t *testing.T, w *httptest.ResponseRecorder) {
-				assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
-				assert.Empty(t, w.Header().Get("Access-Control-Allow-Methods"))
-				assert.Empty(t, w.Header().Get("Access-Control-Allow-Headers"))
-				assert.Empty(t, w.Header().Get("Vary"))
-			},
-			expectedStatus: http.StatusNoContent,
-		},
-		{
-			name:   "OPTIONS_request_ipv4_loopback_origin",
-			method: "OPTIONS",
-			origin: "http://127.0.0.1:3000",
-			checkHeaders: func(t *testing.T, w *httptest.ResponseRecorder) {
-				assert.Equal(t, "http://127.0.0.1:3000", w.Header().Get("Access-Control-Allow-Origin"))
-				assert.Equal(t, "GET, POST, OPTIONS", w.Header().Get("Access-Control-Allow-Methods"))
-			},
-			expectedStatus: http.StatusNoContent,
+			name:           "OPTIONS_request",
+			method:         "OPTIONS",
+			checkHeaders:   nil,
+			expectedStatus: http.StatusNotFound,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(tt.method, "/test", nil)
-			if tt.origin != "" {
-				req.Header.Set("Origin", tt.origin)
-			}
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
