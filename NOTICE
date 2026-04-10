@@ -440,12 +440,6 @@ projects. Their original copyright notices are retained in each file.
 Copyright (c) Tailscale Inc & AUTHORS - BSD 3-Clause License
 
 Files:
-  third_party/fleet-intelligence-sdk/cmd/gpud/update/command.go
-  third_party/fleet-intelligence-sdk/cmd/gpud/release/command_gen_key.go
-  third_party/fleet-intelligence-sdk/cmd/gpud/release/command_sign_key.go
-  third_party/fleet-intelligence-sdk/cmd/gpud/release/command_sign_package.go
-  third_party/fleet-intelligence-sdk/cmd/gpud/release/command_verify_key_signature.go
-  third_party/fleet-intelligence-sdk/cmd/gpud/release/command_verify_package_signature.go
   third_party/fleet-intelligence-sdk/pkg/release/distsign/distsign.go
   third_party/fleet-intelligence-sdk/pkg/release/distsign/distsign_test.go
   third_party/fleet-intelligence-sdk/pkg/release/distsign/roots.go
@@ -465,9 +459,7 @@ Files:
   third_party/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband/class/class.go
   third_party/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband/class/types.go
   third_party/fleet-intelligence-sdk/components/accelerator/nvidia/infiniband/class/value_parser.go
-  third_party/fleet-intelligence-sdk/pkg/memory/memory_linux.go
   third_party/fleet-intelligence-sdk/pkg/file/descriptors_linux.go
-  third_party/fleet-intelligence-sdk/pkg/uptime/uptime_linux.go
 
 // Copyright 2019 The Prometheus Authors
 // Licensed under the Apache License, Version 2.0
