@@ -6,6 +6,7 @@ package host
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/file"
@@ -115,47 +116,10 @@ func GetSystemManufacturer(ctx context.Context) (string, error) {
 		return "", nil
 	}
 
-	p, err := process.New(
-		process.WithCommand(fmt.Sprintf("sudo %s -s system-manufacturer", dmidecodePath)),
-		process.WithRunAsBashScript(),
-		process.WithRunBashInline(),
-	)
+	output, err := exec.CommandContext(ctx, "sudo", dmidecodePath, "-s", "system-manufacturer").CombinedOutput()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to read dmidecode for system manufacturer: %w\n\noutput:\n%s", err, strings.TrimSpace(string(output)))
 	}
 
-	if err := p.Start(ctx); err != nil {
-		return "", err
-	}
-	defer func() {
-		if err := p.Close(ctx); err != nil {
-			log.Logger.Warnw("failed to abort command", "err", err)
-		}
-	}()
-
-	lines := make([]string, 0)
-	if err := process.Read(
-		ctx,
-		p,
-		process.WithReadStdout(),
-		process.WithReadStderr(),
-		process.WithProcessLine(func(line string) {
-			lines = append(lines, line)
-		}),
-		process.WithWaitForCmd(),
-	); err != nil {
-		return "", fmt.Errorf("failed to read dmidecode for system manufacturer: %w\n\noutput:\n%s", err, strings.Join(lines, "\n"))
-	}
-	out := strings.TrimSpace(strings.Join(lines, "\n"))
-
-	select {
-	case err := <-p.Wait():
-		if err != nil {
-			return out, err
-		}
-	case <-ctx.Done():
-		return out, ctx.Err()
-	}
-
-	return out, nil
+	return strings.TrimSpace(string(output)), nil
 }

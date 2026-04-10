@@ -454,8 +454,12 @@ func (s *Server) startServer(ctx context.Context, nvmlInstance nvidianvml.Instan
 	log.Logger.Infow("fleetint started serving with HTTP", "address", s.config.Address)
 
 	srv := &http.Server{
-		Addr:    s.config.Address,
-		Handler: router,
+		Addr:              s.config.Address,
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	if err := srv.ListenAndServe(); err != nil {
@@ -467,6 +471,22 @@ func (s *Server) startServer(ctx context.Context, nvmlInstance nvidianvml.Instan
 // installMiddlewares installs basic middleware for the router
 func (s *Server) installMiddlewares(router *gin.Engine) {
 	router.Use(gin.Recovery())
+	router.Use(func(c *gin.Context) {
+		// Restrict CORS to same origin (loopback). Browsers enforce the Origin header;
+		// non-browser callers don't rely on CORS at all.
+		origin := c.Request.Header.Get("Origin")
+		if origin != "" {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
+			c.Header("Access-Control-Allow-Headers", "Content-Type")
+			c.Header("Vary", "Origin")
+		}
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+		c.Next()
+	})
 }
 
 // healthz returns a simple health check handler

@@ -61,9 +61,9 @@ func (s *Server) injectFault(c *gin.Context) {
 		return
 	}
 
-	// read the request body
+	// read the request body (capped at 1 MiB)
 	request := new(pkgfaultinjector.Request)
-	if err := json.NewDecoder(c.Request.Body).Decode(request); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)).Decode(request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": errdefs.ErrInvalidArgument, "message": "failed to decode request body: " + err.Error()})
 		return
 	}

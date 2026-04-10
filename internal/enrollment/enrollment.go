@@ -68,8 +68,8 @@ func PerformEnrollment(ctx context.Context, enrollEndpoint, sakToken string) (st
 	}
 	defer resp.Body.Close()
 
-	// Read response body
-	respBody, err := io.ReadAll(resp.Body)
+	// Read response body (capped at 1 MiB to prevent memory exhaustion from a malicious server)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		log.Logger.Errorw("Failed to read enrollment response body", "error", err)
 		return "", fmt.Errorf("failed to read enrollment response: %w", err)
