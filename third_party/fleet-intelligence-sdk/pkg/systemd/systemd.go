@@ -14,7 +14,6 @@ import (
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/file"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
-	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/process"
 )
 
 func SystemdExists() bool {
@@ -49,42 +48,15 @@ func GetVersion() (string, []string, error) {
 		return "", nil, err
 	}
 
-	p, err := process.New(
-		process.WithCommand(systemdPath+" --version"),
-		process.WithRunAsBashScript(),
-		process.WithRunBashInline(),
-	)
-	if err != nil {
-		return "", nil, err
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := p.Start(ctx); err != nil {
-		return "", nil, err
-	}
-	defer func() {
-		if err := p.Close(ctx); err != nil {
-			log.Logger.Warnw("failed to abort command", "err", err)
-		}
-	}()
-
-	lines := make([]string, 0)
-	if err := process.Read(
-		ctx,
-		p,
-		process.WithReadStdout(),
-		process.WithReadStderr(),
-		process.WithProcessLine(func(line string) {
-			lines = append(lines, line)
-		}),
-		process.WithWaitForCmd(),
-	); err != nil {
-		return "", nil, fmt.Errorf("failed to read systemd --version output: %w\n\noutput:\n%s", err, strings.Join(lines, "\n"))
+	out, err := exec.CommandContext(ctx, systemdPath, "--version").CombinedOutput()
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to read systemd --version output: %w\n\noutput:\n%s", err, strings.TrimSpace(string(out)))
 	}
 
-	ver, extra := parseVersion(strings.Join(lines, "\n"))
+	ver, extra := parseVersion(strings.TrimSpace(string(out)))
 	return ver, extra, nil
 }
 

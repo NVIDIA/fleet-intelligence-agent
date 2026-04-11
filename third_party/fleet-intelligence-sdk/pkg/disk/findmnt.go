@@ -7,12 +7,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os/exec"
 	"strconv"
 	"strings"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/file"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
-	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/process"
 
 	"github.com/dustin/go-humanize"
 )
@@ -26,37 +26,13 @@ func FindMnt(ctx context.Context, target string) (*FindMntOutput, error) {
 	}
 
 	// Try with --df flag first to get disk usage statistics
-	p, err := process.New(
-		process.WithCommand(fmt.Sprintf("%s --target %s --json --df", findmntPath, target)),
-		process.WithRunAsBashScript(),
-		process.WithRunBashInline(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	output, err := p.StartAndWaitForCombinedOutput(ctx)
-	_ = p.Close(ctx)
+	output, err := exec.CommandContext(ctx, findmntPath, "--target", target, "--json", "--df").CombinedOutput()
 
 	// If --df flag fails (common in containers with overlay fs), try without it
 	if err != nil {
 		log.Logger.Debugw("findmnt with --df failed, retrying without --df flag", "error", err, "target", target)
 
-		p, err = process.New(
-			process.WithCommand(fmt.Sprintf("%s --target %s --json", findmntPath, target)),
-			process.WithRunAsBashScript(),
-			process.WithRunBashInline(),
-		)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if err := p.Close(ctx); err != nil {
-				log.Logger.Warnw("failed to abort command", "err", err)
-			}
-		}()
-
-		output, err = p.StartAndWaitForCombinedOutput(ctx)
+		output, err = exec.CommandContext(ctx, findmntPath, "--target", target, "--json").CombinedOutput()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read findmnt output: %w (output: %s)", err, string(output))
 		}
