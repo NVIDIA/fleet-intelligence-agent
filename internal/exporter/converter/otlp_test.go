@@ -104,6 +104,7 @@ func TestOTLPConverter_Convert_WithEvents(t *testing.T) {
 		MachineID: "test-machine",
 		Events: eventstore.Events{
 			{
+				EventID:   "123e4567-e89b-12d3-a456-426614174000",
 				Time:      time.Date(2025, 11, 5, 12, 0, 0, 0, time.UTC),
 				Component: "gpu",
 				Name:      "temperature_warning",
@@ -134,6 +135,7 @@ func TestOTLPConverter_Convert_WithEvents(t *testing.T) {
 	logRecord := logs[0]
 	body := logRecord.Body.GetStringValue()
 	assert.Contains(t, body, "gpu")
+	assert.Equal(t, "123e4567-e89b-12d3-a456-426614174000", findAttribute(t, logs[0].Attributes, "event_id").GetStringValue())
 	// Body should contain either the event name or message
 	assert.True(t, contains(body, "temperature_warning") || contains(body, "GPU temperature high"),
 		"Log should contain event name or message")

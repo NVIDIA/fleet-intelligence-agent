@@ -29,6 +29,7 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
 	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -358,6 +359,20 @@ func TestGenerateCollectionID(t *testing.T) {
 	// Verify IDs are 32 characters (16 bytes in hex)
 	assert.Len(t, id1, 32, "Collection ID should be 32 characters")
 	assert.Len(t, id2, 32, "Collection ID should be 32 characters")
+}
+
+func TestGenerateEventID(t *testing.T) {
+	id1 := GenerateEventID()
+	id2 := GenerateEventID()
+
+	assert.NotEmpty(t, id1)
+	assert.NotEmpty(t, id2)
+	assert.NotEqual(t, id1, id2, "Event IDs should be unique")
+
+	_, err1 := uuid.Parse(id1)
+	_, err2 := uuid.Parse(id2)
+	assert.NoError(t, err1, "ID1 should be a valid UUID")
+	assert.NoError(t, err2, "ID2 should be a valid UUID")
 }
 
 func TestNew(t *testing.T) {
@@ -771,6 +786,7 @@ func TestCollector_CollectEvents_WithComponents(t *testing.T) {
 		name: "test-component",
 		events: []apiv1.Event{
 			{
+				EventID:   "123e4567-e89b-12d3-a456-426614174000",
 				Time:      metav1.Time{Time: time.Now()},
 				Component: "test-component",
 				Name:      "test-event",
@@ -798,6 +814,9 @@ func TestCollector_CollectEvents_WithComponents(t *testing.T) {
 	assert.Equal(t, "test-component", data.Events[0].Component)
 	assert.Equal(t, "test-event", data.Events[0].Name)
 	assert.Equal(t, map[string]string{"xid_code": "79"}, data.Events[0].ExtraInfo)
+	assert.Equal(t, "123e4567-e89b-12d3-a456-426614174000", data.Events[0].EventID)
+	_, err = uuid.Parse(data.Events[0].EventID)
+	assert.NoError(t, err)
 }
 
 func TestCollector_CollectEvents_NoComponents(t *testing.T) {
