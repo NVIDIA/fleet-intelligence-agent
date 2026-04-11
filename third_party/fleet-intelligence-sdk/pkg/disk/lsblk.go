@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
@@ -34,7 +35,6 @@ import (
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/file"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
-	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/process"
 )
 
 // Mockable function variables for testing
@@ -163,21 +163,8 @@ func decideLsblkFlag(ctx context.Context, verOutput string) (string, func([]byte
 // executeLsblkCommand executes the lsblk command and returns its output.
 // This is a separate function to make it mockable for testing.
 func executeLsblkCommand(ctx context.Context, lsblkBin string, flags string) ([]byte, error) {
-	p, err := process.New(
-		process.WithCommand(lsblkBin+" "+flags),
-		process.WithRunAsBashScript(),
-		process.WithRunBashInline(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := p.Close(ctx); err != nil {
-			log.Logger.Warnw("failed to abort command", "err", err)
-		}
-	}()
-
-	b, err := p.StartAndWaitForCombinedOutput(ctx)
+	args := strings.Fields(flags)
+	b, err := exec.CommandContext(ctx, lsblkBin, args...).CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("failed to run lsblk command: %w", err)
 	}
@@ -191,28 +178,12 @@ func getLsblkBinPathAndVersion(ctx context.Context) (string, string, error) {
 		return "", "", err
 	}
 
-	p, err := process.New(
-		process.WithCommand(lsblkBin+" "+lsblkVersionFlags),
-		process.WithRunAsBashScript(),
-		process.WithRunBashInline(),
-	)
-	if err != nil {
-		return "", "", err
-	}
-	defer func() {
-		if err := p.Close(ctx); err != nil {
-			log.Logger.Warnw("failed to abort command", "err", err)
-		}
-	}()
-
-	output, err := p.StartAndWaitForCombinedOutput(ctx)
+	output, err := exec.CommandContext(ctx, lsblkBin, lsblkVersionFlags).CombinedOutput()
 	if err != nil {
 		return "", "", fmt.Errorf("failed to check lsblk version: %w", err)
 	}
 
-	line := strings.TrimSpace(string(output))
-
-	return lsblkBin, line, nil
+	return lsblkBin, strings.TrimSpace(string(output)), nil
 }
 
 // fillFstypeFromFindmnt is a helper to populate FSType using findmnt if it's missing.

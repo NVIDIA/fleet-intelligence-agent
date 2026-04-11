@@ -266,7 +266,7 @@ func (m *Manager) runAttestation() bool {
 	attestationData.NonceRefreshTimestamp = nonceRefreshTimestamp
 
 	// Step 4: Get evidences from attestation SDK
-	log.Logger.Debugw("Getting evidences with nonce", "nonce", nonce)
+	log.Logger.Debugw("Getting evidences with nonce")
 	sdkResponse, err := m.getEvidences(nonce)
 	if err != nil {
 		log.Logger.Errorw("Failed to get evidences from attestation SDK", "error", err)
@@ -343,7 +343,7 @@ func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time
 	if response.Error != "" {
 		log.Logger.Debugw("error from server in nonce endpoint request", "error", response.Error)
 	} else {
-		log.Logger.Debugw("Nonce received from server:", "nonce", response.Nonce, "nonce_refresh_timestamp", response.NonceRefreshTimestamp)
+		log.Logger.Debugw("Nonce received from server", "nonce_refresh_timestamp", response.NonceRefreshTimestamp)
 	}
 
 	return response.Nonce, response.NonceRefreshTimestamp, nil

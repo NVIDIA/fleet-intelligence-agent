@@ -9,12 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"strings"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/file"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
-	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/process"
 	"github.com/google/uuid"
 )
 
@@ -43,16 +43,7 @@ func GetDmidecodeUUID(ctx context.Context) (string, error) {
 		return "", errors.New("dmidecode not found")
 	}
 
-	p, err := process.New(
-		process.WithCommand(fmt.Sprintf("%s -t system", dmidecodePath)),
-		process.WithRunAsBashScript(),
-		process.WithRunBashInline(),
-	)
-	if err != nil {
-		return "", err
-	}
-
-	output, err := p.StartAndWaitForCombinedOutput(ctx)
+	output, err := exec.CommandContext(ctx, dmidecodePath, "-t", "system").CombinedOutput()
 	combinedOutput := strings.TrimSpace(string(output))
 	if err != nil {
 		return "", fmt.Errorf("failed to read dmidecode for uuid: %w\n\noutput:\n%s", err, combinedOutput)

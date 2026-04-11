@@ -452,8 +452,12 @@ func (s *Server) startServer(ctx context.Context, nvmlInstance nvidianvml.Instan
 	log.Logger.Infow("fleetint started serving with HTTP", "address", s.config.Address)
 
 	srv := &http.Server{
-		Addr:    s.config.Address,
-		Handler: router,
+		Addr:              s.config.Address,
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	if err := srv.ListenAndServe(); err != nil {
