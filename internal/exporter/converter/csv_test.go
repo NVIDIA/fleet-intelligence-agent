@@ -227,6 +227,35 @@ func TestCSVConverter_Convert_MachineInfo(t *testing.T) {
 	assert.Contains(t, records, []string{"DCGM Version", "4.2.3"})
 }
 
+func TestSafeCreateFile_RejectsSymlink(t *testing.T) {
+	tmpDir := t.TempDir()
+	target := filepath.Join(tmpDir, "target.csv")
+	link := filepath.Join(tmpDir, "link.csv")
+
+	require.NoError(t, os.WriteFile(target, []byte("data"), 0o600))
+	require.NoError(t, os.Symlink(target, link))
+
+	file, err := safeCreateFile(link)
+	require.Error(t, err)
+	assert.Nil(t, file)
+	assert.Contains(t, err.Error(), "refusing to write through symlink")
+}
+
+func TestSafeCreateFile_TightensExistingPermissions(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "metrics.csv")
+
+	require.NoError(t, os.WriteFile(path, []byte("data"), 0o644))
+
+	file, err := safeCreateFile(path)
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+}
+
 func TestCSVConverter_Convert_EmptyData(t *testing.T) {
 	tmpDir := t.TempDir()
 	timestamp := "20251105_120000"

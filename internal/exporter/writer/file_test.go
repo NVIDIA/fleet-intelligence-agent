@@ -338,6 +338,35 @@ func TestFileWriter_WriteOTLPJSONFile_InvalidPath(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to create file")
 }
 
+func TestSafeCreateFile_RejectsSymlink(t *testing.T) {
+	tmpDir := t.TempDir()
+	target := filepath.Join(tmpDir, "target.json")
+	link := filepath.Join(tmpDir, "link.json")
+
+	require.NoError(t, os.WriteFile(target, []byte("{}"), 0o600))
+	require.NoError(t, os.Symlink(target, link))
+
+	file, err := safeCreateFile(link)
+	require.Error(t, err)
+	assert.Nil(t, file)
+	assert.Contains(t, err.Error(), "refusing to write through symlink")
+}
+
+func TestSafeCreateFile_TightensExistingPermissions(t *testing.T) {
+	tmpDir := t.TempDir()
+	filename := filepath.Join(tmpDir, "test.json")
+
+	require.NoError(t, os.WriteFile(filename, []byte("{}"), 0o644))
+
+	file, err := safeCreateFile(filename)
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	info, err := os.Stat(filename)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+}
+
 func TestFileWriter_TimestampFormatting(t *testing.T) {
 	tmpDir := t.TempDir()
 

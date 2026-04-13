@@ -18,6 +18,7 @@ package converter
 import (
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,6 +27,7 @@ import (
 	"time"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	"golang.org/x/sys/unix"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
@@ -95,10 +97,27 @@ func (c *csvConverter) Convert(data *collector.HealthData, outputDir, timestamp 
 	return files, nil
 }
 
+// safeCreateFile creates a new file at path with mode 0600, refusing to follow
+// symlinks. If the path already exists as a symlink, an error is returned.
+func safeCreateFile(path string) (*os.File, error) {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|unix.O_NOFOLLOW, 0o600)
+	if err != nil {
+		if errors.Is(err, unix.ELOOP) {
+			return nil, fmt.Errorf("refusing to write through symlink: %s", path)
+		}
+		return nil, err
+	}
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("failed to secure file %s: %w", path, err)
+	}
+	return file, nil
+}
+
 // writeMetricsCSV writes metrics data to CSV format
 func (c *csvConverter) writeMetricsCSV(outputDir, filename string, data *collector.HealthData) error {
 	fullPath := filepath.Join(outputDir, filename)
-	file, err := os.Create(fullPath)
+	file, err := safeCreateFile(fullPath)
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", fullPath, err)
 	}
@@ -145,7 +164,7 @@ func (c *csvConverter) writeMetricsCSV(outputDir, filename string, data *collect
 // writeEventsCSV writes events data to CSV format
 func (c *csvConverter) writeEventsCSV(outputDir, filename string, data *collector.HealthData) error {
 	fullPath := filepath.Join(outputDir, filename)
-	file, err := os.Create(fullPath)
+	file, err := safeCreateFile(fullPath)
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", fullPath, err)
 	}
@@ -184,7 +203,7 @@ func (c *csvConverter) writeEventsCSV(outputDir, filename string, data *collecto
 // writeComponentHealthCSV writes component health data to CSV format
 func (c *csvConverter) writeComponentHealthCSV(outputDir, filename string, data *collector.HealthData) error {
 	fullPath := filepath.Join(outputDir, filename)
-	file, err := os.Create(fullPath)
+	file, err := safeCreateFile(fullPath)
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", fullPath, err)
 	}
@@ -261,7 +280,7 @@ func (c *csvConverter) writeComponentHealthCSV(outputDir, filename string, data 
 // writeMachineInfoCSV writes machine info to CSV format using the same structure as RenderTable
 func (c *csvConverter) writeMachineInfoCSV(outputDir, filename string, data *collector.HealthData) error {
 	fullPath := filepath.Join(outputDir, filename)
-	file, err := os.Create(fullPath)
+	file, err := safeCreateFile(fullPath)
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", fullPath, err)
 	}

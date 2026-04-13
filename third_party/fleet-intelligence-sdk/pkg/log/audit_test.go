@@ -206,6 +206,9 @@ func TestNewAuditLogger(t *testing.T) {
 		// Verify file was created and contains expected content
 		content, err := os.ReadFile(logFile)
 		require.NoError(t, err)
+		info, err := os.Stat(logFile)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 
 		// Parse the JSON log entry
 		var logEntry map[string]interface{}

@@ -17,11 +17,13 @@
 package writer
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
@@ -92,6 +94,23 @@ func (w *fileWriter) WriteCSV(data *collector.HealthData, outputPath string) err
 	return nil
 }
 
+// safeCreateFile creates a new file at path with mode 0600, refusing to follow
+// symlinks. If the path already exists as a symlink, an error is returned.
+func safeCreateFile(path string) (*os.File, error) {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|unix.O_NOFOLLOW, 0o600)
+	if err != nil {
+		if errors.Is(err, unix.ELOOP) {
+			return nil, fmt.Errorf("refusing to write through symlink: %s", path)
+		}
+		return nil, err
+	}
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("failed to secure file %s: %w", path, err)
+	}
+	return file, nil
+}
+
 // writeOTLPJSONFile writes protobuf message as standard OTLP JSON format
 func (w *fileWriter) writeOTLPJSONFile(filename string, message proto.Message) error {
 	// Use protojson to ensure proper OTLP field naming and format
@@ -107,7 +126,7 @@ func (w *fileWriter) writeOTLPJSONFile(filename string, message proto.Message) e
 		return fmt.Errorf("failed to marshal OTLP message to JSON: %w", err)
 	}
 
-	file, err := os.Create(filename)
+	file, err := safeCreateFile(filename)
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", filename, err)
 	}

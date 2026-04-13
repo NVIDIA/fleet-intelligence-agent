@@ -4,10 +4,13 @@
 package log
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 
 	"github.com/google/uuid"
+	"golang.org/x/sys/unix"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -93,13 +96,17 @@ func NewNopAuditLogger() AuditLogger {
 func NewAuditLogger(logFile string) AuditLogger {
 	var w zapcore.WriteSyncer
 	if logFile != "" {
-		w = zapcore.AddSync(&lumberjack.Logger{
-			Filename:   logFile,
-			MaxSize:    128, // megabytes
-			MaxBackups: 5,
-			MaxAge:     3,    // days
-			Compress:   true, // compress the rotated files
-		})
+		if err := prepareAuditLogFile(logFile); err != nil {
+			w = zapcore.AddSync(os.Stdout)
+		} else {
+			w = zapcore.AddSync(&lumberjack.Logger{
+				Filename:   logFile,
+				MaxSize:    128, // megabytes
+				MaxBackups: 5,
+				MaxAge:     3,    // days
+				Compress:   true, // compress the rotated files
+			})
+		}
 	} else {
 		w = zapcore.AddSync(os.Stdout)
 	}
@@ -118,6 +125,21 @@ func NewAuditLogger(logFile string) AuditLogger {
 	logger := zap.New(core)
 
 	return &auditLogger{logger: logger}
+}
+
+func prepareAuditLogFile(logFile string) error {
+	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|unix.O_NOFOLLOW, 0o600)
+	if err != nil {
+		if errors.Is(err, unix.ELOOP) {
+			return fmt.Errorf("refusing to write audit log through symlink: %s", logFile)
+		}
+		return err
+	}
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return err
+	}
+	return file.Close()
 }
 
 type auditLogger struct {
