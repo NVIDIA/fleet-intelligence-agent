@@ -376,7 +376,7 @@ func TestManager_GetEvidences(t *testing.T) {
 	// In CI environment, the nvattest binary might not exist or directory might not exist
 	if err != nil {
 		// If binary is missing, this is expected in CI
-		if strings.Contains(err.Error(), "executable file not found") || strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "The following arguments were not expected") {
+		if strings.Contains(err.Error(), "executable file not found") || strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "not found in PATH") || strings.Contains(err.Error(), "The following arguments were not expected") {
 			t.Log("Attestation CLI binary or directory not found (expected in CI)")
 			return
 		}

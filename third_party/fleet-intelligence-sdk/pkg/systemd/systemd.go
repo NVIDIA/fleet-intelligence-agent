@@ -17,23 +17,17 @@ import (
 )
 
 func SystemdExists() bool {
-	p, err := exec.LookPath("systemd")
-	if err != nil {
-		return false
-	}
-	return p != ""
+	_, err := file.LocateExecutable("systemd")
+	return err == nil
 }
 
 func SystemctlExists() bool {
-	p, err := exec.LookPath("systemctl")
-	if err != nil {
-		return false
-	}
-	return p != ""
+	_, err := file.LocateExecutable("systemctl")
+	return err == nil
 }
 
 func DaemonReload(ctx context.Context) ([]byte, error) {
-	cmdPath, err := exec.LookPath("systemctl")
+	cmdPath, err := file.LocateExecutable("systemctl")
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +80,7 @@ func parseVersion(version string) (string, []string) {
 // IsActive returns true if the systemd service is active.
 // TODO: deprecate this
 func IsActive(service string) (bool, error) {
-	p, err := exec.LookPath("systemctl")
+	p, err := file.LocateExecutable("systemctl")
 	if err != nil {
 		return false, fmt.Errorf("systemd active check requires systemctl (%w)", err)
 	}
@@ -110,7 +104,7 @@ const uptimeTimeLayout = "Mon 2006-01-02 15:04:05 MST"
 // Returns nil if the service is not found (thus uptime is not applicable, "n/a").
 // ref. https://github.com/kubernetes/node-problem-detector/blob/c4e5400ed6d7ca30d3a803248ae5b55c53557e59/pkg/healthchecker/health_checker_linux.go
 func GetUptime(service string) (*time.Duration, error) {
-	p, err := exec.LookPath("systemctl")
+	p, err := file.LocateExecutable("systemctl")
 	if err != nil {
 		return nil, fmt.Errorf("systemd uptime check requires systemctl (%w)", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/file"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 
 	procs "github.com/shirou/gopsutil/v4/process"
@@ -15,7 +16,10 @@ import (
 
 func CheckRunningByPid(ctx context.Context, processName string) bool {
 	log.Logger.Debugw("checking if process is running", "processName", processName)
-	err := exec.CommandContext(ctx, "pidof", processName).Run()
+	pidofPath, err := file.LocateExecutable("pidof")
+	if err == nil {
+		err = exec.CommandContext(ctx, pidofPath, processName).Run()
+	}
 	if err != nil {
 		log.Logger.Debugw("failed to check -- assuming process is not running", "error", err)
 	}
