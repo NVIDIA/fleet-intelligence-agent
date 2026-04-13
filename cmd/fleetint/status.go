@@ -128,11 +128,9 @@ func statusCommand(cliContext *cli.Context) error {
 	fmt.Printf("%s successfully checked fleetint status\n", cmdutil.CheckMark)
 
 	// Check server health
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
+	client := endpoint.NewAgentHTTPClient(validatedServerURL)
 
-	healthURL, err := endpoint.JoinPath(validatedServerURL, "healthz")
+	healthURL, err := endpoint.JoinPath(endpoint.AgentBaseURL(validatedServerURL), "healthz")
 	if err != nil {
 		return fmt.Errorf("failed to construct health URL: %w", err)
 	}

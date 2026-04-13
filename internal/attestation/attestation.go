@@ -69,6 +69,7 @@ type AttestationData struct {
 type Manager struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
+	wg           sync.WaitGroup
 	cache        *cache
 	nvmlInstance nvidianvml.Instance
 	config       *config.AttestationConfig
@@ -139,7 +140,9 @@ const retryInterval = 5 * time.Minute
 func (m *Manager) Start() {
 	log.Logger.Infow("Starting attestation manager with thundering herd prevention")
 
+	m.wg.Add(1)
 	go func() {
+		defer m.wg.Done()
 		// Add initial jitter to spread out startup requests (0-30 minutes) if enabled
 		var initialJitter time.Duration
 		if m.config.JitterEnabled {
@@ -201,10 +204,14 @@ func (m *Manager) getNextInterval(shouldRetrySoon bool) time.Duration {
 	return m.config.Interval.Duration
 }
 
-// Stop gracefully shuts down the attestation manager
+// Stop gracefully shuts down the attestation manager and waits for the
+// background goroutine to exit. This ensures that any in-progress call
+// to defaultStateFileFn (or any other shared state) finishes before Stop
+// returns, which prevents data races in tests and orderly cleanup in production.
 func (m *Manager) Stop() {
 	log.Logger.Infow("Stopping attestation manager")
 	m.cancel()
+	m.wg.Wait()
 }
 
 // runAttestation performs the attestation process and updates the cache
@@ -303,8 +310,9 @@ func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time
 		return "", time.Time{}, err
 	}
 
-	// Create HTTP request with proper Bearer authorization
-	req, err := http.NewRequest("POST", endpointURL, bytes.NewBuffer(requestBody))
+	// Create HTTP request tied to the manager context so that Stop() cancellation
+	// unblocks the request and prevents wg.Wait() from hanging indefinitely.
+	req, err := http.NewRequestWithContext(m.ctx, "POST", endpointURL, bytes.NewBuffer(requestBody))
 	if err != nil {
 		log.Logger.Debugw("failed to create HTTP request in nonce endpoint request", "error", err)
 		return "", time.Time{}, err
@@ -315,7 +323,7 @@ func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", jwtToken))
 
 	// Make the HTTP request
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Logger.Debugw("failed to make POST request in nonce endpoint request", "error", err)
@@ -458,7 +466,38 @@ func (m *Manager) getMachineId() (string, error) {
 	return machineID, nil
 }
 
+// validateNonce verifies that a nonce returned by the backend is safe to forward
+// as a command-line argument to nvattest. It enforces an allowlist of characters
+// (hex, base64url, and common padding/separator symbols) and a maximum length so
+// that a compromised backend cannot craft an argument that exploits nvattest's own
+// argument parser.
+func validateNonce(nonce string) error {
+	if nonce == "" {
+		return fmt.Errorf("nonce is empty")
+	}
+	const maxLen = 512
+	if len(nonce) > maxLen {
+		return fmt.Errorf("nonce length %d exceeds maximum of %d characters", len(nonce), maxLen)
+	}
+	for i, c := range nonce {
+		switch {
+		case c >= '0' && c <= '9',
+			c >= 'a' && c <= 'z',
+			c >= 'A' && c <= 'Z',
+			c == '-', c == '_', c == '=', c == '+', c == '/':
+			// allowed
+		default:
+			return fmt.Errorf("nonce contains invalid character %q at position %d", c, i)
+		}
+	}
+	return nil
+}
+
 func (m *Manager) getEvidences(nonce string) (*AttestationSDKResponse, error) {
+	if err := validateNonce(nonce); err != nil {
+		return nil, fmt.Errorf("invalid nonce received from backend: %w", err)
+	}
+
 	log.Logger.Infow("Calling attestation SDK CLI")
 
 	// Execute nvattest command

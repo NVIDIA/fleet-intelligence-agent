@@ -18,6 +18,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"strings"
 
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
@@ -35,10 +38,47 @@ var (
 	storeEnrollmentConfig = storeConfigInMetadata
 )
 
+// resolveToken returns the SAK token from --token, --token-file, or stdin.
+func resolveToken(cliContext *cli.Context) (string, error) {
+	token := strings.TrimSpace(cliContext.String("token"))
+	tokenFile := cliContext.String("token-file")
+
+	if token != "" && tokenFile != "" {
+		return "", fmt.Errorf("--token and --token-file are mutually exclusive")
+	}
+
+	if tokenFile != "" {
+		const maxTokenSize = 1 << 20 // 1 MiB -- SAK tokens are small; anything larger is a mistake
+		var raw []byte
+		var err error
+		if tokenFile == "-" {
+			raw, err = io.ReadAll(io.LimitReader(os.Stdin, maxTokenSize))
+		} else {
+			raw, err = os.ReadFile(tokenFile)
+		}
+		if err != nil {
+			return "", fmt.Errorf("failed to read token from %q: %w", tokenFile, err)
+		}
+		if len(raw) >= maxTokenSize {
+			return "", fmt.Errorf("token file %q exceeds maximum size of %d bytes", tokenFile, maxTokenSize)
+		}
+		token = strings.TrimSpace(string(raw))
+	}
+
+	if token == "" {
+		return "", fmt.Errorf("a token is required: use --token <value> or --token-file <path>")
+	}
+	return token, nil
+}
+
 func enrollCommand(cliContext *cli.Context) error {
 	baseEndpoint := cliContext.String("endpoint")
-	sakToken := cliContext.String("token")
 	force := cliContext.Bool("force")
+
+	sakToken, err := resolveToken(cliContext)
+	if err != nil {
+		return err
+	}
 
 	result, err := runPrecheck()
 	if err != nil {

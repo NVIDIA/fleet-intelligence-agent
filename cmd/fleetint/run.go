@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -40,6 +41,57 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/server"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/version"
 )
+
+// restrictedOfflinePaths lists directories into which the agent must never write output.
+// These are system-owned paths where writing as root could corrupt the OS.
+var restrictedOfflinePaths = []string{
+	"/bin", "/boot", "/dev", "/etc", "/lib", "/lib64",
+	"/proc", "/run", "/sbin", "/sys", "/usr", "/var",
+}
+
+// validateOfflinePath ensures the --path flag points to a safe, absolute directory.
+// It resolves symlinks in existing parent components so that a symlink pointing
+// into a restricted directory is caught before any files are written.
+func validateOfflinePath(p string) error {
+	if p == "" {
+		return fmt.Errorf("--path must not be empty when --offline-mode is set")
+	}
+	if !filepath.IsAbs(p) {
+		return fmt.Errorf("--path must be an absolute path, got %q", p)
+	}
+	clean := filepath.Clean(p)
+
+	// Reject if the path itself is a symlink.
+	if info, err := os.Lstat(clean); err == nil && (info.Mode()&os.ModeSymlink) != 0 {
+		return fmt.Errorf("--path %q is a symlink", p)
+	}
+
+	// Resolve the deepest existing ancestor so symlinked parents are caught.
+	resolved := clean
+	cur := clean
+	for {
+		rp, err := filepath.EvalSymlinks(cur)
+		if err == nil {
+			resolved = filepath.Clean(filepath.Join(rp, strings.TrimPrefix(clean, cur)))
+			break
+		}
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to resolve path %q: %w", cur, err)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			break
+		}
+		cur = parent
+	}
+
+	for _, r := range restrictedOfflinePaths {
+		if resolved == r || strings.HasPrefix(resolved, r+"/") {
+			return fmt.Errorf("--path %q resolves to %q which is inside restricted system directory %q", p, resolved, r)
+		}
+	}
+	return nil
+}
 
 // parseDuration parses duration in HH:MM:SS format
 func parseDuration(durationStr string) (time.Duration, error) {
@@ -284,6 +336,10 @@ func runCommand(cliContext *cli.Context) error {
 
 	// Configure offline mode if enabled
 	if offlineMode {
+		if err := validateOfflinePath(offlineModePath); err != nil {
+			return err
+		}
+
 		log.Logger.Infow("configuring offline mode", "path", offlineModePath, "duration", offlineModeDuration)
 
 		// Create output directory if it doesn't exist

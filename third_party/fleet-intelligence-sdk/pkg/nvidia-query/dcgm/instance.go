@@ -36,6 +36,29 @@ type dcgmInitParams struct {
 	isUnixSocket string // "0" or "1" for go-dcgm
 }
 
+// isValidDCGMAddress returns true if addr is a plausible DCGM address:
+//   - an absolute unix socket path (starts with "/")
+//   - a hostname or host:port using only safe characters (no URL scheme)
+func isValidDCGMAddress(addr string) bool {
+	if strings.HasPrefix(addr, "/") {
+		return true // unix socket path
+	}
+	// Reject any value that looks like a URL scheme (e.g. "http://evil.com")
+	if strings.Contains(addr, "://") {
+		return false
+	}
+	// Allow hostname characters, dots, hyphens, underscores, colons (port), and brackets (IPv6)
+	for _, c := range addr {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '.', c == '-', c == '_', c == ':', c == '[', c == ']':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // - If DCGM_URL is set: connect via TCP to that address.
 // - Otherwise: default to TCP "localhost" (default behavior).
 // - If DCGM_URL_IS_UNIX_SOCKET is truthy: treat the address as a unix socket path.
@@ -44,6 +67,14 @@ func resolveInitFromEnv() dcgmInitParams {
 	// - TCP address, optionally including port (e.g. "dcgm-service:5555")
 	// - unix socket path (e.g. "/run/dcgm/dcgm.sock")
 	addr := strings.TrimSpace(os.Getenv("DCGM_URL"))
+	addrInvalid := false
+	if addr != "" && !isValidDCGMAddress(addr) {
+		log.Logger.Warnw("DCGM_URL contains invalid characters, ignoring override and using default",
+			"value", addr, "default", "localhost")
+		addr = ""
+		addrInvalid = true
+	}
+
 	isUnixSocketRaw := strings.TrimSpace(os.Getenv("DCGM_URL_IS_UNIX_SOCKET"))
 	isUnixSocket := "0"
 	if isUnixSocketRaw != "" {
@@ -55,6 +86,11 @@ func resolveInitFromEnv() dcgmInitParams {
 
 	if addr == "" {
 		addr = "localhost"
+		// When the address override was rejected, reset the socket flag so the
+		// TCP "localhost" default is not accidentally treated as a socket path.
+		if addrInvalid {
+			isUnixSocket = "0"
+		}
 	}
 
 	return dcgmInitParams{address: addr, isUnixSocket: isUnixSocket}

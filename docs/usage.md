@@ -18,11 +18,11 @@ Performs a quick health scan of GPUs and system components. Returns immediately 
 sudo fleetint run
 ```
 
-Starts the HTTP API server on port 15133. The server provides REST endpoints and Prometheus metrics.
+Starts the API server. By default it listens on a Unix socket at `/run/fleetint/fleetint.sock` (access controlled by file permissions). Pass `--listen-address` to switch to TCP.
 
 **Options:**
 - `--log-level`: Set logging level (debug, info, warn, error)
-- `--listen-address`: Change listen address (default: `127.0.0.1:15133` for localhost only; see [Exposing the Agent for External Monitoring](#exposing-the-agent-for-external-monitoring) for details on exposing to Prometheus and other tools)
+- `--listen-address`: Listen address. An absolute path (e.g. `/run/fleetint/fleetint.sock`) creates a Unix socket; a `host:port` value (e.g. `127.0.0.1:15133`) opens a TCP listener. Default: `/run/fleetint/fleetint.sock`. See [Exposing the Agent for External Monitoring](#exposing-the-agent-for-external-monitoring) for details on exposing to Prometheus and other tools.
 - `--components`: Enable/disable specific components
 
 ### Check Status
@@ -71,7 +71,7 @@ Compacts the local Fleet Intelligence state database to reduce disk usage.
 
 Requirements:
 - `fleetintd` must be stopped before running `compact`
-- nothing else can be listening on fleetint port `15133`
+- the agent must not be running (no active listener on the default socket or port)
 - the command needs write access to the state database, so package installs typically require `sudo`
 
 Typical workflow:
@@ -107,14 +107,24 @@ The command prints each check result and exits non-zero if any hard requirement 
 ### Enroll Agent
 
 ```bash
+# Pass token directly (visible in process list)
 sudo fleetint enroll --endpoint=https://api.example.com --token=<your-sak-token>
+
+# Read token from a file (recommended)
+sudo fleetint enroll --endpoint=https://api.example.com --token-file=/path/to/token
+
+# Read token from stdin
+echo "$TOKEN" | sudo fleetint enroll --endpoint=https://api.example.com --token-file=-
 ```
 
 Enrolls the agent with the Fleet Intelligence backend by exchanging a Service Account Key (SAK) token for a JWT token. The JWT token and backend endpoints are stored locally for subsequent data exports.
 
 **Required Options:**
 - `--endpoint`: Base endpoint URL for the Fleet Intelligence backend (must use HTTPS)
-- `--token`: Service Account Key (SAK) token for authentication
+- `--token`: Service Account Key (SAK) token for authentication (mutually exclusive with `--token-file`)
+- `--token-file`: Path to a file containing the SAK token, or `-` to read from stdin (mutually exclusive with `--token`). Preferred over `--token` because it avoids exposing the token in `/proc/<pid>/cmdline`.
+
+One of `--token` or `--token-file` is required.
 
 **Optional Flags:**
 - `--force`: Continue enrollment even if `fleetint precheck` fails
@@ -168,7 +178,7 @@ sudo fleetint run --offline-mode --path=/tmp/fleetint --duration=00:05:00 --form
 
 **Options:**
 - `--offline-mode`: Disable HTTP API server and export to files
-- `--path`: Directory to write data files
+- `--path`: Absolute path to the output directory. Must not be inside restricted system directories (`/etc`, `/usr`, `/sys`, `/bin`, `/boot`, `/dev`, `/lib`, `/proc`, `/run`, `/sbin`, `/var`).
 - `--duration`: How long to collect data (format: HH:MM:SS)
 - `--format`: Output format (`csv` or `json`)
 
@@ -191,7 +201,21 @@ sudo journalctl -u fleetintd -f
 
 ## HTTP API
 
-The fleetint HTTP API server runs on port 15133 by default and provides REST endpoints for monitoring data.
+The fleetint API server listens on a Unix socket (`/run/fleetint/fleetint.sock`) by default. When started with a TCP address (e.g. `--listen-address=127.0.0.1:15133`), the REST endpoints are also available over plain HTTP.
+
+**Using curl with the default Unix socket:**
+
+```bash
+curl --unix-socket /run/fleetint/fleetint.sock http://localhost/healthz
+```
+
+**Using curl with TCP** (requires `--listen-address=127.0.0.1:15133`):
+
+```bash
+curl http://localhost:15133/healthz
+```
+
+The examples below use the TCP form for brevity. Substitute `--unix-socket /run/fleetint/fleetint.sock http://localhost` for the hostname when using the default socket.
 
 ### Health Check
 
@@ -279,7 +303,7 @@ Returns metrics in Prometheus exposition format for integration with monitoring 
 
 ## Exposing the Agent for External Monitoring
 
-By default, fleetint binds to `127.0.0.1:15133` (localhost only) for security. To allow external monitoring tools like Prometheus to scrape metrics, you can expose the agent on a network interface using the `--listen-address` flag:
+By default, fleetint uses a Unix socket for security. To allow external monitoring tools like Prometheus to scrape metrics over the network, switch to a TCP listener with the `--listen-address` flag:
 
 ```bash
 # Expose on all interfaces
@@ -326,8 +350,12 @@ scrape_configs:
    nvidia-smi
    ```
 
-4. Check port availability:
+4. Check that the daemon is listening:
    ```bash
+   # Default (unix socket)
+   sudo ls -la /run/fleetint/fleetint.sock
+
+   # TCP mode
    sudo netstat -tlnp | grep 15133
    ```
 
