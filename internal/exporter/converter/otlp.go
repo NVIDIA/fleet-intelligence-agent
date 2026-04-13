@@ -288,6 +288,12 @@ func (c *otlpConverter) convertToOTLPLogs(data *collector.HealthData) []*logsv1.
 					},
 				},
 				{
+					Key: "event_id",
+					Value: &commonv1.AnyValue{
+						Value: &commonv1.AnyValue_StringValue{StringValue: event.EventID},
+					},
+				},
+				{
 					Key: "event_name",
 					Value: &commonv1.AnyValue{
 						Value: &commonv1.AnyValue_StringValue{StringValue: event.Name},

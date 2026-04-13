@@ -29,6 +29,7 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
 	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
+	"github.com/google/uuid"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
@@ -42,6 +43,11 @@ func GenerateCollectionID() string {
 	bytes := make([]byte, 16)
 	_, _ = rand.Read(bytes) // crypto/rand.Read never fails with a slice
 	return hex.EncodeToString(bytes)
+}
+
+// GenerateEventID generates a UUID for each exported event.
+func GenerateEventID() string {
+	return uuid.NewString()
 }
 
 // HealthData represents the collected health data
@@ -240,9 +246,14 @@ func (c *collector) collectEvents(ctx context.Context, data *HealthData) error {
 			if componentName == "" {
 				componentName = component.Name()
 			}
+			eventID := event.EventID
+			if eventID == "" {
+				eventID = GenerateEventID()
+			}
 
 			allEvents = append(allEvents, eventstore.Event{
 				Component: componentName,
+				EventID:   eventID,
 				Time:      event.Time.Time,
 				Name:      event.Name,
 				Type:      string(event.Type),

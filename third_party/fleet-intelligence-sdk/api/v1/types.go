@@ -127,6 +127,9 @@ type Event struct {
 	// Component represents which component generated the event.
 	Component string `json:"component,omitempty"`
 
+	// EventID uniquely identifies the event.
+	EventID string `json:"event_id,omitempty"`
+
 	// Time represents when the event happened.
 	Time metav1.Time `json:"time"`
 
