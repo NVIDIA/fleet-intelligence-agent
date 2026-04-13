@@ -24,6 +24,7 @@ import (
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/errdefs"
 	pkgfaultinjector "github.com/NVIDIA/fleet-intelligence-sdk/pkg/fault-injector"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 )
 
 const URLPathInjectFault = "/inject-fault"
@@ -64,25 +65,27 @@ func (s *Server) injectFault(c *gin.Context) {
 	// read the request body (capped at 1 MiB)
 	request := new(pkgfaultinjector.Request)
 	if err := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)).Decode(request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": errdefs.ErrInvalidArgument, "message": "failed to decode request body: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"code": errdefs.ErrInvalidArgument, "message": "failed to decode request body"})
 		return
 	}
 	if err := request.Validate(); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": errdefs.ErrInvalidArgument, "message": "invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"code": errdefs.ErrInvalidArgument, "message": "invalid request"})
 		return
 	}
 
 	switch {
 	case request.KernelMessage != nil:
 		if err := s.faultInjector.KmsgWriter().Write(request.KernelMessage); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": errdefs.ErrUnknown, "message": "failed to inject kernel message: " + err.Error()})
+			log.Logger.Warnw("failed to inject kernel message", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"code": errdefs.ErrUnknown, "message": "failed to inject kernel message"})
 			return
 		}
 
 	case request.ComponentError != nil:
 		if injector, ok := s.faultInjector.(pkgfaultinjector.ComponentErrorInjector); ok {
 			if err := injector.InjectComponentError(c.Request.Context(), s.componentsRegistry, request.ComponentError); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": errdefs.ErrUnknown, "message": "failed to inject component error: " + err.Error()})
+				log.Logger.Warnw("failed to inject component error", "error", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"code": errdefs.ErrUnknown, "message": "failed to inject component error"})
 				return
 			}
 		} else {
@@ -93,7 +96,8 @@ func (s *Server) injectFault(c *gin.Context) {
 	case request.Event != nil:
 		if injector, ok := s.faultInjector.(pkgfaultinjector.EventInjector); ok {
 			if err := injector.InjectEvent(c.Request.Context(), s.componentsRegistry, request.Event); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": errdefs.ErrUnknown, "message": "failed to inject event: " + err.Error()})
+				log.Logger.Warnw("failed to inject event", "error", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"code": errdefs.ErrUnknown, "message": "failed to inject event"})
 				return
 			}
 		} else {
@@ -104,7 +108,8 @@ func (s *Server) injectFault(c *gin.Context) {
 	case request.ComponentClear != nil:
 		if injector, ok := s.faultInjector.(pkgfaultinjector.ComponentClearInjector); ok {
 			if err := injector.ClearComponentFault(c.Request.Context(), s.componentsRegistry, request.ComponentClear); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": errdefs.ErrUnknown, "message": "failed to clear component fault: " + err.Error()})
+				log.Logger.Warnw("failed to clear component fault", "error", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"code": errdefs.ErrUnknown, "message": "failed to clear component fault"})
 				return
 			}
 		} else {
