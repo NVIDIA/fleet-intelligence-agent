@@ -636,6 +636,9 @@ func TestInstallMiddlewares(t *testing.T) {
 				assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
 				assert.Empty(t, w.Header().Get("Access-Control-Allow-Methods"))
 				assert.Empty(t, w.Header().Get("Access-Control-Allow-Headers"))
+				assert.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
+				assert.Equal(t, "DENY", w.Header().Get("X-Frame-Options"))
+				assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 			},
 			expectedStatus: http.StatusOK,
 		},
