@@ -121,6 +121,47 @@ func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 	assert.True(t, enrollmentCalled)
 }
 
+func TestEnrollCommandStoresV2MetricsAndLogsEndpoints(t *testing.T) {
+	originalRunPrecheck := runPrecheck
+	originalPerformEnrollment := performEnrollment
+	originalStoreConfig := storeEnrollmentConfig
+	t.Cleanup(func() {
+		runPrecheck = originalRunPrecheck
+		performEnrollment = originalPerformEnrollment
+		storeEnrollmentConfig = originalStoreConfig
+	})
+
+	var gotEnrollEndpoint string
+	var gotMetricsEndpoint string
+	var gotLogsEndpoint string
+	var gotNonceEndpoint string
+
+	runPrecheck = func() (precheck.Result, error) {
+		return precheck.Result{}, nil
+	}
+	performEnrollment = func(enrollEndpoint, sakToken string) (string, error) {
+		return "jwt-token", nil
+	}
+	storeEnrollmentConfig = func(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken string) error {
+		gotEnrollEndpoint = enrollEndpoint
+		gotMetricsEndpoint = metricsEndpoint
+		gotLogsEndpoint = logsEndpoint
+		gotNonceEndpoint = nonceEndpoint
+		return nil
+	}
+
+	app := App()
+	app.Writer = &bytes.Buffer{}
+
+	err := app.Run([]string{"fleetint", "enroll", "--endpoint", "https://example.com", "--token", "token"})
+
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/api/v1/health/enroll", gotEnrollEndpoint)
+	assert.Equal(t, "https://example.com/api/v2/health/metrics", gotMetricsEndpoint)
+	assert.Equal(t, "https://example.com/api/v2/health/logs", gotLogsEndpoint)
+	assert.Equal(t, "https://example.com/api/v1/health/nonce", gotNonceEndpoint)
+}
+
 func TestStoreConfigInMetadataSecuresFreshStateFile(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("test expects non-root default state path resolution")

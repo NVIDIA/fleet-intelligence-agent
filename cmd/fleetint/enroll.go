@@ -72,11 +72,11 @@ func enrollCommand(cliContext *cli.Context) error {
 	}
 
 	// Construct other endpoints using url.JoinPath for proper URL handling
-	metricsEndpoint, err := endpoint.JoinPath(baseURL, "api", "v1", "health", "metrics")
+	metricsEndpoint, err := endpoint.JoinPath(baseURL, "api", "v2", "health", "metrics")
 	if err != nil {
 		return fmt.Errorf("failed to construct metrics endpoint: %w", err)
 	}
-	logsEndpoint, err := endpoint.JoinPath(baseURL, "api", "v1", "health", "logs")
+	logsEndpoint, err := endpoint.JoinPath(baseURL, "api", "v2", "health", "logs")
 	if err != nil {
 		return fmt.Errorf("failed to construct logs endpoint: %w", err)
 	}
