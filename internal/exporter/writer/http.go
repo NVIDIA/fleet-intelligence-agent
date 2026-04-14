@@ -240,6 +240,18 @@ func (w *httpWriter) sendOTLPRequest(ctx context.Context, reqData []byte, dataTy
 	}
 	defer resp.Body.Close()
 
+	if resp.Request == nil || resp.Request.URL == nil || req.URL == nil {
+		return "", fmt.Errorf("failed to validate response origin")
+	}
+	if resp.Request.URL.Scheme != req.URL.Scheme || resp.Request.URL.Host != req.URL.Host {
+		log.Logger.Warnw("rejecting response from mismatched origin",
+			"configured_origin", req.URL.Scheme+"://"+req.URL.Host,
+			"response_origin", resp.Request.URL.Scheme+"://"+resp.Request.URL.Host,
+			"endpoint", endpoint,
+			"data_type", dataType)
+		return "", fmt.Errorf("response origin mismatch")
+	}
+
 	// Check response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", &HTTPError{

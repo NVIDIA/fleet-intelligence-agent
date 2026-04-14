@@ -374,6 +374,71 @@ func TestHTTPWriter_Send_JWTTokenRefreshFromHeader(t *testing.T) {
 	assert.Equal(t, newToken, returnedToken)
 }
 
+func TestHTTPWriter_sendOTLPRequest_DoesNotFollowRedirect(t *testing.T) {
+	redirectTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("unexpected redirect follow")
+	}))
+	defer redirectTarget.Close()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, redirectTarget.URL, http.StatusTemporaryRedirect)
+	}))
+	defer server.Close()
+
+	metricsData := &metricsv1.MetricsData{
+		ResourceMetrics: []*metricsv1.ResourceMetrics{},
+	}
+	reqData, err := proto.Marshal(metricsData)
+	require.NoError(t, err)
+
+	httpClient := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	otlpConverter := &mockOTLPConverter{}
+	writer := NewHTTPWriter(httpClient, otlpConverter).(*httpWriter)
+
+	ctx := context.Background()
+	returnedToken, err := writer.sendOTLPRequest(ctx, reqData, "metrics", "test-collection-id", "test-machine-id", server.URL, "test-token")
+
+	require.Error(t, err)
+	assert.Empty(t, returnedToken)
+	assert.Contains(t, err.Error(), "HTTP 307")
+}
+
+func TestHTTPWriter_sendOTLPRequest_RejectsRedirectedHost(t *testing.T) {
+	newToken := "poisoned-jwt-token"
+
+	redirectTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("jwt_assertion", newToken)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer redirectTarget.Close()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, redirectTarget.URL, http.StatusTemporaryRedirect)
+	}))
+	defer server.Close()
+
+	metricsData := &metricsv1.MetricsData{
+		ResourceMetrics: []*metricsv1.ResourceMetrics{},
+	}
+	reqData, err := proto.Marshal(metricsData)
+	require.NoError(t, err)
+
+	httpClient := &http.Client{}
+	otlpConverter := &mockOTLPConverter{}
+	writer := NewHTTPWriter(httpClient, otlpConverter).(*httpWriter)
+
+	ctx := context.Background()
+	token, err := writer.sendOTLPRequest(ctx, reqData, "metrics", "test-collection-id", "test-machine-id", server.URL, "test-token")
+
+	require.Error(t, err)
+	assert.Empty(t, token)
+	assert.Contains(t, err.Error(), "response origin mismatch")
+}
+
 func TestHTTPWriter_Send_ContextCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(2 * time.Second)
