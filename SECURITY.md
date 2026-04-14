@@ -33,7 +33,7 @@ This repository contains the `fleetint` host agent. The notes below are intended
 
 ### Key Security Assumptions
 
-- The local HTTP API is intended to be reachable only from the local host unless an operator explicitly changes the listen address.
+- The local API listens on a Unix socket (`/run/fleetint/fleetint.sock`) by default, restricting access via filesystem permissions. TCP mode (`--listen-address=host:port`) is available but binds to localhost unless an operator explicitly changes it.
 - The local HTTP API is mostly read-only and should not accept writable requests in normal operation; the fault-injection path is the exception, and it is disabled by default for test use only.
 - Backend communication is expected to use HTTPS endpoints.
 - The local state directory is trusted local storage and must remain readable only by the local service account or root.
@@ -79,7 +79,7 @@ Out of scope:
 - Initial enrollment sends the SAK token as a bearer token to the configured enrollment endpoint.
 - Successful enrollment persists the SAK token, JWT, and service endpoints for later reuse.
 - The exporter reloads persisted metadata, validates remote endpoints, and can re-enroll with the stored SAK token when JWT refresh is required.
-- The local HTTP server does not implement request authentication. Its primary protection is the default loopback bind address.
+- The local API server does not implement request authentication. Its primary protection is the default Unix socket with 0600 permissions (or localhost-only TCP bind when using `--listen-address`).
 - The fault injection endpoint is disabled by default and additionally checks that requests originate from loopback.
 
 ### Input Validation

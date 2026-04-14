@@ -594,6 +594,40 @@ func TestManager_CalculateJitter(t *testing.T) {
 	}
 }
 
+func TestValidateNonce(t *testing.T) {
+	tests := []struct {
+		name    string
+		nonce   string
+		wantErr string
+	}{
+		{name: "valid_hex", nonce: "abcdef0123456789"},
+		{name: "valid_base64", nonce: "dGVzdA=="},
+		{name: "valid_base64url", nonce: "abc-def_ghi+jkl/mno="},
+		{name: "empty", nonce: "", wantErr: "nonce is empty"},
+		{name: "too_long", nonce: strings.Repeat("a", 513), wantErr: "exceeds maximum"},
+		{name: "max_length_ok", nonce: strings.Repeat("a", 512)},
+		{name: "space", nonce: "abc def", wantErr: "invalid character"},
+		{name: "newline", nonce: "abc\ndef", wantErr: "invalid character"},
+		{name: "semicolon", nonce: "abc;def", wantErr: "invalid character"},
+		{name: "shell_metachar", nonce: "$(whoami)", wantErr: "invalid character"},
+		{name: "flag_like_valid_chars", nonce: "--output=/etc/passwd"}, // all chars are in the base64url allowlist; safe because nvattest receives it as --nonce value, not a flag
+		{name: "pipe", nonce: "abc|def", wantErr: "invalid character"},
+		{name: "null_byte", nonce: "abc\x00def", wantErr: "invalid character"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateNonce(tc.nonce)
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestManager_RunAttestation_ReturnsRetrySoon(t *testing.T) {
 	useMissingStateFile(t)
 

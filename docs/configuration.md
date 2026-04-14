@@ -68,7 +68,7 @@ sudoedit /etc/default/fleetint
 ```
 
 ```bash
-FLEETINT_FLAGS="--log-level=info --listen-address=127.0.0.1:15133 --components=all,-accelerator-nvidia-dcgm-prof"
+FLEETINT_FLAGS="--log-level=info --components=all,-accelerator-nvidia-dcgm-prof"
 DCGM_URL="localhost"
 DCGM_URL_IS_UNIX_SOCKET="false"
 FLEETINT_COLLECT_INTERVAL="2m"
@@ -115,11 +115,11 @@ These are the `fleetint run` flags supported by the CLI.
 | --- | --- | --- | --- | --- |
 | `--log-level` | Log level: `debug`, `info`, `warn`, `error`. | unset by CLI; packaged bare-metal default is `warn` via `FLEETINT_FLAGS` | `FLEETINT_FLAGS="--log-level=..."` | `logLevel` |
 | `--log-file` | Log file path. Leave empty to log to stdout/stderr. | empty | `FLEETINT_FLAGS="--log-file=..."` | not exposed by chart by default |
-| `--listen-address` | HTTP listen address for the agent API server. | CLI default `127.0.0.1:15133` | `FLEETINT_FLAGS="--listen-address=..."` | `listenAddress` |
+| `--listen-address` | Listen address for the agent API server. An absolute path creates a Unix socket; a `host:port` value opens a TCP listener. | `/run/fleetint/fleetint.sock` | `FLEETINT_FLAGS="--listen-address=..."` | `listenAddress` |
 | `--retention-period` | Retention period for stored metrics and events. Minimum `1m`. | `24h` | `FLEETINT_FLAGS="--retention-period=..."` | `retentionPeriod` |
 | `--components` | Comma-separated component selection. Use `all`, `*`, explicit names, and `-name` exclusions. | empty flag value, which means enable all components by default | `FLEETINT_FLAGS="--components=..."` | `components` |
 | `--offline-mode` | Disable the HTTP API server and write telemetry to files instead. | `false` | `FLEETINT_FLAGS="--offline-mode ..."` | not exposed by chart by default |
-| `--path` | Output directory for offline mode. Required with `--offline-mode`. | empty | `FLEETINT_FLAGS="--path=/path ..."` | not exposed by chart by default |
+| `--path` | Absolute path to the output directory for offline mode. Must not point inside restricted system directories. Required with `--offline-mode`. | empty | `FLEETINT_FLAGS="--path=/path ..."` | not exposed by chart by default |
 | `--duration` | Offline-mode collection duration in `HH:MM:SS` format. Required with `--offline-mode`. | empty | `FLEETINT_FLAGS="--duration=00:05:00 ..."` | not exposed by chart by default |
 | `--format` | Offline-mode output format: `json` or `csv`. | `json` | `FLEETINT_FLAGS="--format=csv ..."` | not exposed by chart by default |
 | `--enable-fault-injection` | Enable the local fault-injection endpoint for testing. | `false` | `FLEETINT_FLAGS="--enable-fault-injection"` | not exposed by chart by default |
