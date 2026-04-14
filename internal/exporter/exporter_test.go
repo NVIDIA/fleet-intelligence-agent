@@ -182,7 +182,11 @@ func TestNew(t *testing.T) {
 		assert.Equal(t, mockMetrics, he.options.metricsStore)
 		assert.Equal(t, mockEvents, he.options.eventStore)
 		assert.Equal(t, mockRegistry, he.options.componentsRegistry)
-		assert.Equal(t, httpClient, he.options.httpClient)
+		require.NotNil(t, he.options.httpClient)
+		assert.NotSame(t, httpClient, he.options.httpClient)
+		require.NotNil(t, he.options.httpClient.CheckRedirect)
+		assert.Equal(t, http.ErrUseLastResponse, he.options.httpClient.CheckRedirect(&http.Request{}, nil))
+		assert.Nil(t, httpClient.CheckRedirect)
 		assert.Equal(t, dbRW, he.options.dbRW)
 		assert.Equal(t, dbRO, he.options.dbRO)
 
