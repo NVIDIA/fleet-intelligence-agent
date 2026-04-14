@@ -407,7 +407,7 @@ func TestHTTPWriter_sendOTLPRequest_DoesNotFollowRedirect(t *testing.T) {
 	assert.Contains(t, err.Error(), "HTTP 307")
 }
 
-func TestHTTPWriter_sendOTLPRequest_IgnoresJWTTokenFromRedirectedHost(t *testing.T) {
+func TestHTTPWriter_sendOTLPRequest_RejectsRedirectedHost(t *testing.T) {
 	newToken := "poisoned-jwt-token"
 
 	redirectTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -434,8 +434,9 @@ func TestHTTPWriter_sendOTLPRequest_IgnoresJWTTokenFromRedirectedHost(t *testing
 	ctx := context.Background()
 	token, err := writer.sendOTLPRequest(ctx, reqData, "metrics", "test-collection-id", "test-machine-id", server.URL, "test-token")
 
-	require.NoError(t, err)
+	require.Error(t, err)
 	assert.Empty(t, token)
+	assert.Contains(t, err.Error(), "response origin mismatch")
 }
 
 func TestHTTPWriter_Send_ContextCancellation(t *testing.T) {

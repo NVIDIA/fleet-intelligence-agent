@@ -240,6 +240,18 @@ func (w *httpWriter) sendOTLPRequest(ctx context.Context, reqData []byte, dataTy
 	}
 	defer resp.Body.Close()
 
+	if resp.Request == nil || resp.Request.URL == nil || req.URL == nil {
+		return "", fmt.Errorf("failed to validate response origin")
+	}
+	if resp.Request.URL.Scheme != req.URL.Scheme || resp.Request.URL.Host != req.URL.Host {
+		log.Logger.Warnw("rejecting response from mismatched origin",
+			"configured_origin", req.URL.Scheme+"://"+req.URL.Host,
+			"response_origin", resp.Request.URL.Scheme+"://"+resp.Request.URL.Host,
+			"endpoint", endpoint,
+			"data_type", dataType)
+		return "", fmt.Errorf("response origin mismatch")
+	}
+
 	// Check response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", &HTTPError{
@@ -252,22 +264,11 @@ func (w *httpWriter) sendOTLPRequest(ctx context.Context, reqData []byte, dataTy
 	// Check for JWT token refresh in response headers
 	var newToken string
 	if headerToken := resp.Header.Get("jwt_assertion"); headerToken != "" {
-		if resp.Request == nil || resp.Request.URL == nil || req.URL == nil {
-			log.Logger.Warnw("ignoring refreshed JWT token because request URL context is unavailable",
-				"endpoint", endpoint,
-				"data_type", dataType)
-		} else if resp.Request.URL.Scheme != req.URL.Scheme || resp.Request.URL.Host != req.URL.Host {
-			log.Logger.Warnw("ignoring refreshed JWT token from mismatched response origin",
-				"configured_endpoint", req.URL.String(),
-				"response_url", resp.Request.URL.String(),
-				"data_type", dataType)
-		} else {
-			newToken = headerToken
-			log.Logger.Infow("Received refreshed JWT token from response header",
-				"endpoint", endpoint,
-				"data_type", dataType,
-				"token_length", len(newToken))
-		}
+		newToken = headerToken
+		log.Logger.Infow("Received refreshed JWT token from response header",
+			"endpoint", endpoint,
+			"data_type", dataType,
+			"token_length", len(newToken))
 	}
 
 	return newToken, nil
