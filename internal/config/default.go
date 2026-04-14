@@ -37,14 +37,21 @@ const (
 
 	// DefaultListenHost is the default host to bind to (localhost only for security)
 	DefaultListenHost = "127.0.0.1"
+
+	// DefaultUnixSocketPath is the default unix socket path for the fleetint server.
+	// Using a unix socket instead of a TCP port restricts access via filesystem permissions,
+	// preventing unauthenticated network access even if a firewall rule is misconfigured.
+	DefaultUnixSocketPath = "/run/fleetint/fleetint.sock"
 )
 
 var (
-	// DefaultListenAddress combines the default host and port (for server binding)
-	DefaultListenAddress = fmt.Sprintf("%s:%d", DefaultListenHost, DefaultHealthPort)
+	// DefaultListenAddress is the default listen address (unix socket for security).
+	// Override with --listen-address 127.0.0.1:15133 to use TCP instead.
+	DefaultListenAddress = DefaultUnixSocketPath
 
-	// DefaultClientURL is the default URL for client commands to connect to the server
-	DefaultClientURL = fmt.Sprintf("http://localhost:%d", DefaultHealthPort)
+	// DefaultClientURL is the default URL for client commands to connect to the server.
+	// A bare absolute path is treated as a unix socket by ValidateLocalServerURL.
+	DefaultClientURL = DefaultUnixSocketPath
 
 	// DefaultRetentionPeriod - keep health data for 24 hours by default
 	DefaultRetentionPeriod = metav1.Duration{Duration: 24 * time.Hour}
