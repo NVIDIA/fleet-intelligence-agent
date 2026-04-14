@@ -194,12 +194,20 @@ func (c *exporterOptions) validate() error {
 
 // setDefaults sets default values for unspecified options
 func (c *exporterOptions) setDefaults() {
-	if c.httpClient == nil && c.timeout > 0 {
+	if c.httpClient == nil {
+		if c.timeout <= 0 {
+			return
+		}
 		c.httpClient = &http.Client{
 			Timeout: c.timeout,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
 		}
+	} else {
+		// Copy caller-supplied clients so redirect hardening does not mutate shared state.
+		clonedClient := *c.httpClient
+		c.httpClient = &clonedClient
+	}
+
+	c.httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
 	}
 }
