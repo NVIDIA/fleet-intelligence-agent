@@ -357,8 +357,12 @@ func TestExporterOptionsSetDefaults(t *testing.T) {
 
 		opts.setDefaults()
 
-		assert.Equal(t, existingClient, opts.httpClient)
+		require.NotNil(t, opts.httpClient)
+		assert.NotSame(t, existingClient, opts.httpClient)
 		assert.Equal(t, 1*time.Minute, opts.httpClient.Timeout)
+		require.NotNil(t, opts.httpClient.CheckRedirect)
+		assert.Equal(t, http.ErrUseLastResponse, opts.httpClient.CheckRedirect(&http.Request{}, nil))
+		assert.Nil(t, existingClient.CheckRedirect)
 	})
 
 	t.Run("does not set client when timeout is zero", func(t *testing.T) {
