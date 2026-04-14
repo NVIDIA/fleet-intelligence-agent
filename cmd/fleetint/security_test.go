@@ -134,6 +134,23 @@ func TestResolveToken_FromFile(t *testing.T) {
 	assert.NotContains(t, err.Error(), "mutually exclusive")
 }
 
+func TestResolveToken_RejectsOversizedTokenFile(t *testing.T) {
+	const maxTokenSize = 1 << 20
+
+	tmpFile := filepath.Join(t.TempDir(), "token")
+	file, err := os.Create(tmpFile)
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+	require.NoError(t, os.Truncate(tmpFile, maxTokenSize))
+
+	app := App()
+	app.Writer = &bytes.Buffer{}
+
+	err = app.Run([]string{"fleetint", "enroll", "--endpoint", "https://example.com", "--token-file", tmpFile})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeds maximum size")
+}
+
 // TestResolveToken_RequiresOne verifies that omitting both flags is an error.
 func TestResolveToken_RequiresOne(t *testing.T) {
 	app := App()

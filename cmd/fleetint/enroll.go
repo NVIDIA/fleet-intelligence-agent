@@ -54,7 +54,19 @@ func resolveToken(cliContext *cli.Context) (string, error) {
 		if tokenFile == "-" {
 			raw, err = io.ReadAll(io.LimitReader(os.Stdin, maxTokenSize))
 		} else {
-			raw, err = os.ReadFile(tokenFile)
+			var file *os.File
+			file, err = os.Open(tokenFile)
+			if err == nil {
+				defer file.Close()
+				var info os.FileInfo
+				info, err = file.Stat()
+				if err == nil && info.Size() >= maxTokenSize {
+					return "", fmt.Errorf("token file %q exceeds maximum size of %d bytes", tokenFile, maxTokenSize)
+				}
+				if err == nil {
+					raw, err = io.ReadAll(io.LimitReader(file, maxTokenSize))
+				}
+			}
 		}
 		if err != nil {
 			return "", fmt.Errorf("failed to read token from %q: %w", tokenFile, err)
