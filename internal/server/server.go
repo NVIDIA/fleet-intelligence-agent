@@ -391,13 +391,8 @@ func (s *Server) Stop() {
 			}
 		}
 		if s.listener != nil {
+			// Go's UnixListener.Close() automatically unlinks the socket file.
 			_ = s.listener.Close()
-			// Remove the socket file now that we've closed the listener we own.
-			if s.config != nil && strings.HasPrefix(s.config.Address, "/") {
-				if err := removeStaleSocket(s.config.Address); err != nil {
-					log.Logger.Warnw("failed to remove unix socket", "path", s.config.Address, "error", err)
-				}
-			}
 		}
 
 		// Stop health exporter if running
