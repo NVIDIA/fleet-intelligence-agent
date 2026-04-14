@@ -24,8 +24,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	stdos "os"
+	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-contrib/gzip"
@@ -70,6 +74,15 @@ type Server struct {
 
 	// faultInjector is the fault injector for testing
 	faultInjector pkgfaultinjector.Injector
+
+	// srv and listener are stored so Stop() can perform a graceful shutdown.
+	srv      *http.Server
+	listener net.Listener
+
+	// stopOnce ensures Stop() is idempotent. The defer in startServer and the
+	// signal handler in run.go both call Stop(), so without this guard
+	// components, databases, and the health exporter would be closed twice.
+	stopOnce sync.Once
 
 	machineID string
 }
@@ -360,49 +373,90 @@ func (s *Server) GetHealthExporter() exporter.Exporter {
 	return s.healthExporter
 }
 
-// Stop gracefully stops the server
+// Stop gracefully stops the server. It shuts down the HTTP listener first
+// (draining in-flight requests), then tears down components and databases,
+// and finally removes the unix socket file if one was used.
+// Stop is safe to call multiple times; the defer in startServer and the
+// signal handler in run.go both invoke it.
 func (s *Server) Stop() {
-	// Stop health exporter if running
-	if s.healthExporter != nil {
-		if err := s.healthExporter.Stop(); err != nil {
-			log.Logger.Errorw("failed to stop health exporter", "error", err)
-		}
-	}
-
-	// Stop DCGM health cache polling to prevent goroutine leak
-	if s.gpudInstance != nil && s.gpudInstance.DCGMHealthCache != nil {
-		s.gpudInstance.DCGMHealthCache.Stop()
-		log.Logger.Debugw("stopped DCGM health cache")
-	}
-
-	// Stop DCGM field value cache polling to prevent goroutine leak
-	if s.gpudInstance != nil && s.gpudInstance.DCGMFieldValueCache != nil {
-		s.gpudInstance.DCGMFieldValueCache.Stop()
-		log.Logger.Debugw("stopped DCGM field value cache")
-	}
-
-	if s.componentsRegistry != nil {
-		for _, component := range s.componentsRegistry.All() {
-			if err := component.Close(); err != nil {
-				log.Logger.Errorf("failed to close plugin %v: %v", component.Name(), err)
+	s.stopOnce.Do(func() {
+		// Gracefully shut down the HTTP server so in-flight requests complete
+		// before we close databases and components underneath them.
+		if s.srv != nil {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := s.srv.Shutdown(shutdownCtx); err != nil {
+				log.Logger.Warnw("HTTP server shutdown error, forcing close", "error", err)
+				_ = s.srv.Close()
 			}
 		}
-	}
+		if s.listener != nil {
+			// Go's UnixListener.Close() automatically unlinks the socket file.
+			_ = s.listener.Close()
+		}
 
-	if s.dbRW != nil {
-		if cerr := s.dbRW.Close(); cerr != nil {
-			log.Logger.Debugw("failed to close read-write db", "error", cerr)
-		} else {
-			log.Logger.Debugw("successfully closed read-write db")
+		// Stop health exporter if running
+		if s.healthExporter != nil {
+			if err := s.healthExporter.Stop(); err != nil {
+				log.Logger.Errorw("failed to stop health exporter", "error", err)
+			}
 		}
-	}
-	if s.dbRO != nil {
-		if cerr := s.dbRO.Close(); cerr != nil {
-			log.Logger.Debugw("failed to close read-only db", "error", cerr)
-		} else {
-			log.Logger.Debugw("successfully closed read-only db")
+
+		// Stop DCGM health cache polling to prevent goroutine leak
+		if s.gpudInstance != nil && s.gpudInstance.DCGMHealthCache != nil {
+			s.gpudInstance.DCGMHealthCache.Stop()
+			log.Logger.Debugw("stopped DCGM health cache")
 		}
+
+		// Stop DCGM field value cache polling to prevent goroutine leak
+		if s.gpudInstance != nil && s.gpudInstance.DCGMFieldValueCache != nil {
+			s.gpudInstance.DCGMFieldValueCache.Stop()
+			log.Logger.Debugw("stopped DCGM field value cache")
+		}
+
+		if s.componentsRegistry != nil {
+			for _, component := range s.componentsRegistry.All() {
+				if err := component.Close(); err != nil {
+					log.Logger.Errorf("failed to close plugin %v: %v", component.Name(), err)
+				}
+			}
+		}
+
+		if s.dbRW != nil {
+			if cerr := s.dbRW.Close(); cerr != nil {
+				log.Logger.Debugw("failed to close read-write db", "error", cerr)
+			} else {
+				log.Logger.Debugw("successfully closed read-write db")
+			}
+		}
+		if s.dbRO != nil {
+			if cerr := s.dbRO.Close(); cerr != nil {
+				log.Logger.Debugw("failed to close read-only db", "error", cerr)
+			} else {
+				log.Logger.Debugw("successfully closed read-only db")
+			}
+		}
+	})
+}
+
+// removeStaleSocket removes path only if it is an existing unix socket.
+// It refuses to delete regular files, directories, or symlinks so that a
+// misconfigured --listen-address cannot cause data loss.
+func removeStaleSocket(path string) error {
+	info, err := stdos.Lstat(path)
+	if err != nil {
+		if stdos.IsNotExist(err) {
+			return nil
+		}
+		return err
 	}
+	if info.Mode()&stdos.ModeSymlink != 0 {
+		return fmt.Errorf("%q is a symlink, not a socket", path)
+	}
+	if info.Mode()&stdos.ModeSocket == 0 {
+		return fmt.Errorf("%q exists but is not a unix socket", path)
+	}
+	return stdos.Remove(path)
 }
 
 // startServer creates and starts the HTTP server
@@ -451,10 +505,7 @@ func (s *Server) startServer(ctx context.Context, nvmlInstance nvidianvml.Instan
 		log.Logger.Debugw("fault injection endpoint disabled")
 	}
 
-	log.Logger.Infow("fleetint started serving with HTTP", "address", s.config.Address)
-
-	srv := &http.Server{
-		Addr:              s.config.Address,
+	s.srv = &http.Server{
 		Handler:           router,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
@@ -462,7 +513,47 @@ func (s *Server) startServer(ctx context.Context, nvmlInstance nvidianvml.Instan
 		IdleTimeout:       120 * time.Second,
 	}
 
-	if err := srv.ListenAndServe(); err != nil {
+	if strings.HasPrefix(s.config.Address, "/") {
+		socketPath := s.config.Address
+		// Probe the existing socket: if a daemon is already listening, refuse
+		// to start rather than stealing its socket path.
+		if conn, err := net.DialTimeout("unix", socketPath, 2*time.Second); err == nil {
+			_ = conn.Close()
+			log.Logger.Errorw("another instance is already listening on this socket", "path", socketPath)
+			stdos.Exit(1)
+		}
+		// Remove a stale socket left by a previous (dead) run.
+		if err := removeStaleSocket(socketPath); err != nil {
+			log.Logger.Errorw("refusing to overwrite non-socket file", "path", socketPath, "error", err)
+			stdos.Exit(1)
+		}
+		if err := stdos.MkdirAll(filepath.Dir(socketPath), 0o750); err != nil {
+			log.Logger.Errorw("failed to create socket directory", "path", socketPath, "error", err)
+			stdos.Exit(1)
+		}
+		var err error
+		s.listener, err = net.Listen("unix", socketPath)
+		if err != nil {
+			log.Logger.Errorw("failed to listen on unix socket", "path", socketPath, "error", err)
+			stdos.Exit(1)
+		}
+		// Restrict the socket to owner only; only root (or a group member if chgrp'd) can connect.
+		if err := stdos.Chmod(socketPath, 0o600); err != nil {
+			_ = s.listener.Close()
+			log.Logger.Errorw("failed to set socket permissions", "path", socketPath, "error", err)
+			stdos.Exit(1)
+		}
+		log.Logger.Infow("fleetint started serving with Unix socket", "path", socketPath)
+		if err := s.srv.Serve(s.listener); err != nil && err != http.ErrServerClosed {
+			log.Logger.Warnw("fleetint serve failed", "path", socketPath, "error", err)
+			stdos.Exit(1)
+		}
+		return
+	}
+
+	log.Logger.Infow("fleetint started serving with HTTP", "address", s.config.Address)
+	s.srv.Addr = s.config.Address
+	if err := s.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Logger.Warnw("fleetint serve failed", "address", s.config.Address, "error", err)
 		stdos.Exit(1)
 	}

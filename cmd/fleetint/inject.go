@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/urfave/cli"
 
@@ -106,13 +105,13 @@ func injectCommand(c *cli.Context) error {
 	}
 
 	// Make the POST request to the inject-fault endpoint
-	url, err := endpoint.JoinPath(serverURL, "inject-fault")
+	url, err := endpoint.JoinPath(endpoint.AgentBaseURL(serverURL), "inject-fault")
 	if err != nil {
 		return fmt.Errorf("failed to construct inject-fault URL: %w", err)
 	}
 	fmt.Printf("Injecting fault into %s component at %s...\n", component, url)
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := endpoint.NewAgentHTTPClient(serverURL)
 	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to make request to %s: %w", url, err)
@@ -180,13 +179,13 @@ func clearComponentFault(component string, serverURL *url.URL) error {
 	}
 
 	// Make the POST request to the inject-fault endpoint with clear action
-	url, err := endpoint.JoinPath(serverURL, "inject-fault")
+	url, err := endpoint.JoinPath(endpoint.AgentBaseURL(serverURL), "inject-fault")
 	if err != nil {
 		return fmt.Errorf("failed to construct inject-fault URL: %w", err)
 	}
 	fmt.Printf("Clearing fault from %s component at %s...\n", component, url)
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := endpoint.NewAgentHTTPClient(serverURL)
 	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to make request to %s: %w", url, err)

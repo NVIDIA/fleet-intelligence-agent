@@ -18,6 +18,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"time"
 
@@ -52,8 +53,14 @@ func compactCommand(cliContext *cli.Context) error {
 		}
 	}
 
-	portOpen := netutil.IsPortOpen(config.DefaultHealthPort) // fleetint uses port 15133
-	if portOpen {
+	// Check both transports: the daemon may have been started with the default
+	// unix socket or with an explicit --listen-address on TCP. Either would
+	// make it unsafe to compact the database.
+	if conn, err := net.DialTimeout("unix", config.DefaultUnixSocketPath, 2*time.Second); err == nil {
+		conn.Close()
+		return fmt.Errorf("fleetint is running on socket %s (must be stopped before running compact)", config.DefaultUnixSocketPath)
+	}
+	if netutil.IsPortOpen(config.DefaultHealthPort) {
 		return fmt.Errorf("fleetint is running on port %d (must be stopped before running compact)", config.DefaultHealthPort)
 	}
 

@@ -21,12 +21,12 @@ limitations under the License.
 package kmsg
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -43,8 +43,27 @@ import (
 var (
 	ErrWatcherAlreadyStarted = errors.New("watcher already started")
 
-	kmsgFilePath = cmp.Or(strings.TrimSpace(os.Getenv("KMSG_FILE_PATH")), "/dev/kmsg")
+	kmsgFilePath = resolveKmsgFilePath()
 )
+
+// resolveKmsgFilePath reads KMSG_FILE_PATH from the environment but only accepts
+// paths that begin with /dev/ to prevent an attacker who controls the environment
+// from redirecting the agent (which runs as root) to read arbitrary files.
+func resolveKmsgFilePath() string {
+	p := strings.TrimSpace(os.Getenv("KMSG_FILE_PATH"))
+	if p == "" {
+		return "/dev/kmsg"
+	}
+	// filepath.Clean normalises traversal sequences (e.g. /dev/../etc/passwd)
+	// so the prefix check cannot be bypassed.
+	cleaned := filepath.Clean(p)
+	if !strings.HasPrefix(cleaned, "/dev/") {
+		log.Logger.Warnw("KMSG_FILE_PATH is not under /dev/, ignoring override and using default",
+			"value", p, "default", "/dev/kmsg")
+		return "/dev/kmsg"
+	}
+	return cleaned
+}
 
 type Watcher interface {
 	// Watch starts a goroutine to read from kmsg and provide a channel of messages.

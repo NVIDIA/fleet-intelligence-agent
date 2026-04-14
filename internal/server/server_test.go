@@ -17,6 +17,7 @@ package server
 
 import (
 	"context"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -329,6 +330,77 @@ func TestServerStopWithDatabases(t *testing.T) {
 	// Verify databases are closed by trying to use them
 	_, err = dbRW.Exec("SELECT 1")
 	assert.Error(t, err, "database should be closed")
+}
+
+// TestServerStopIdempotent verifies Stop() can be called multiple times safely.
+func TestServerStopIdempotent(t *testing.T) {
+	ctx := context.Background()
+	cfg := &config.Config{State: ""} // in-memory
+
+	dbRW, dbRO, err := initializeDatabases(ctx, cfg)
+	require.NoError(t, err)
+
+	s := &Server{
+		config: cfg,
+		dbRW:   dbRW,
+		dbRO:   dbRO,
+	}
+
+	assert.NotPanics(t, func() {
+		s.Stop()
+		s.Stop() // second call must not panic or double-close
+		s.Stop() // third call for good measure
+	})
+}
+
+// TestRemoveStaleSocket verifies the socket cleanup logic.
+func TestRemoveStaleSocket(t *testing.T) {
+	t.Run("nonexistent_is_noop", func(t *testing.T) {
+		err := removeStaleSocket("/nonexistent/path.sock")
+		assert.NoError(t, err)
+	})
+
+	t.Run("regular_file_rejected", func(t *testing.T) {
+		f := filepath.Join(t.TempDir(), "not-a-socket")
+		require.NoError(t, os.WriteFile(f, []byte("data"), 0o600))
+
+		err := removeStaleSocket(f)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not a unix socket")
+		// File must still exist
+		_, statErr := os.Stat(f)
+		assert.NoError(t, statErr, "regular file must not be deleted")
+	})
+
+	t.Run("symlink_rejected", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(dir, "target")
+		require.NoError(t, os.WriteFile(target, []byte("data"), 0o600))
+		link := filepath.Join(dir, "link")
+		require.NoError(t, os.Symlink(target, link))
+
+		err := removeStaleSocket(link)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "symlink")
+	})
+
+	t.Run("actual_socket_removed", func(t *testing.T) {
+		dir := t.TempDir()
+		sockPath := filepath.Join(dir, "test.sock")
+
+		// Create a socket and keep the listener open so the file persists.
+		ln, err := net.Listen("unix", sockPath)
+		require.NoError(t, err)
+
+		err = removeStaleSocket(sockPath)
+		assert.NoError(t, err)
+
+		// Socket file should be gone
+		_, err = os.Lstat(sockPath)
+		assert.True(t, os.IsNotExist(err))
+
+		_ = ln.Close()
+	})
 }
 
 // TestServerGetHealthExporter tests the GetHealthExporter method.

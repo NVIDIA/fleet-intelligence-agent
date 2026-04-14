@@ -127,17 +127,26 @@ func statusCommand(cliContext *cli.Context) error {
 	}
 	fmt.Printf("%s successfully checked fleetint status\n", cmdutil.CheckMark)
 
-	// Check server health
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
+	// Check server health. If the default unix socket fails, fall back to the
+	// legacy TCP address so upgrades don't break existing --listen-address
+	// overrides or monitoring scripts.
+	client := endpoint.NewAgentHTTPClient(validatedServerURL)
 
-	healthURL, err := endpoint.JoinPath(validatedServerURL, "healthz")
+	healthURL, err := endpoint.JoinPath(endpoint.AgentBaseURL(validatedServerURL), "healthz")
 	if err != nil {
 		return fmt.Errorf("failed to construct health URL: %w", err)
 	}
 
 	resp, err := client.Get(healthURL)
+	if err != nil && validatedServerURL.Scheme == "unix" {
+		tcpFallback := fmt.Sprintf("http://localhost:%d", config.DefaultHealthPort)
+		tcpURL, parseErr := endpoint.ValidateLocalServerURL(tcpFallback)
+		if parseErr == nil {
+			tcpClient := endpoint.NewAgentHTTPClient(tcpURL)
+			tcpHealthURL, _ := endpoint.JoinPath(endpoint.AgentBaseURL(tcpURL), "healthz")
+			resp, err = tcpClient.Get(tcpHealthURL)
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)
 	}

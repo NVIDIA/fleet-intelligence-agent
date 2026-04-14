@@ -203,9 +203,12 @@ func App() *cli.App {
 					Required: true,
 				},
 				&cli.StringFlag{
-					Name:     "token",
-					Usage:    "authentication token (required)",
-					Required: true,
+					Name:  "token",
+					Usage: "authentication token (mutually exclusive with --token-file)",
+				},
+				&cli.StringFlag{
+					Name:  "token-file",
+					Usage: "path to a file containing the authentication token; use '-' to read from stdin (mutually exclusive with --token)",
 				},
 				&cli.BoolFlag{
 					Name:  "force",
