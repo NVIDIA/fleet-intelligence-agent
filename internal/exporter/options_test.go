@@ -174,6 +174,19 @@ func TestWithTimeout(t *testing.T) {
 	}
 }
 
+func TestExporterOptions_setDefaults_DisablesRedirects(t *testing.T) {
+	opts := &exporterOptions{
+		timeout: 30 * time.Second,
+	}
+
+	opts.setDefaults()
+
+	require.NotNil(t, opts.httpClient)
+	assert.Equal(t, 30*time.Second, opts.httpClient.Timeout)
+	require.NotNil(t, opts.httpClient.CheckRedirect)
+	assert.Equal(t, http.ErrUseLastResponse, opts.httpClient.CheckRedirect(&http.Request{}, nil))
+}
+
 func TestWithDatabaseConnections(t *testing.T) {
 	tests := []struct {
 		name        string

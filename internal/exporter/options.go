@@ -197,6 +197,9 @@ func (c *exporterOptions) setDefaults() {
 	if c.httpClient == nil && c.timeout > 0 {
 		c.httpClient = &http.Client{
 			Timeout: c.timeout,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		}
 	}
 }
