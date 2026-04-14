@@ -178,7 +178,7 @@ sudo fleetint run --offline-mode --path=/tmp/fleetint --duration=00:05:00 --form
 
 **Options:**
 - `--offline-mode`: Disable HTTP API server and export to files
-- `--path`: Absolute path to the output directory. Must not be inside restricted system directories (`/etc`, `/usr`, `/sys`, `/bin`, `/boot`, `/dev`, `/lib`, `/proc`, `/run`, `/sbin`, `/var`).
+- `--path`: Absolute path to the output directory. Must not be inside restricted system directories (`/etc`, `/usr`, `/sys`, `/bin`, `/boot`, `/dev`, `/lib`, `/proc`, `/run`, `/sbin`).
 - `--duration`: How long to collect data (format: HH:MM:SS)
 - `--format`: Output format (`csv` or `json`)
 

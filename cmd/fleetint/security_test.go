@@ -69,13 +69,14 @@ func TestValidateOfflinePath(t *testing.T) {
 		{name: "relative", path: "relative/path", wantErr: "must be an absolute path"},
 		{name: "etc", path: "/etc/fleetint", wantErr: "restricted system directory"},
 		{name: "usr", path: "/usr/local/share/fleetint", wantErr: "restricted system directory"},
-		{name: "var", path: "/var/lib/fleetint", wantErr: "restricted system directory"},
 		{name: "sys", path: "/sys/fs/cgroup", wantErr: "restricted system directory"},
 		{name: "proc_subdir", path: "/proc/version", wantErr: "restricted"},
 		{name: "bin_subdir", path: "/bin/subdir", wantErr: "restricted"},
 		{name: "traversal_into_etc", path: "/opt/../etc/fleetint", wantErr: "restricted system directory"},
 		{name: "valid_opt", path: "/opt/fleetint-data"},
 		{name: "valid_data", path: "/data/gpu-health"},
+		{name: "valid_var_data", path: "/var/data/fleetint"},
+		{name: "valid_var_opt", path: "/var/opt/fleetint"},
 	}
 
 	for _, tc := range tests {

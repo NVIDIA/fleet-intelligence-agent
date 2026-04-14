@@ -44,9 +44,11 @@ import (
 
 // restrictedOfflinePaths lists directories into which the agent must never write output.
 // These are system-owned paths where writing as root could corrupt the OS.
+// /var is intentionally not blocked wholesale because subdirectories like
+// /var/data or /var/opt are legitimate output locations for customers.
 var restrictedOfflinePaths = []string{
 	"/bin", "/boot", "/dev", "/etc", "/lib", "/lib64",
-	"/proc", "/run", "/sbin", "/sys", "/usr", "/var",
+	"/proc", "/run", "/sbin", "/sys", "/usr",
 }
 
 // validateOfflinePath ensures the --path flag points to a safe, absolute directory.
