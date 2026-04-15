@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
 	"github.com/gin-gonic/gin"
 
@@ -58,6 +59,17 @@ func newGlobalHandler(cfg *config.Config, componentsRegistry components.Registry
 	}
 }
 
+// clampStartTime ensures startTime is not older than the configured retention
+// period. Queries that reach further back would scan data that has already been
+// purged (or is about to be), wasting I/O and memory.
+func (g *globalHandler) clampStartTime(startTime time.Time) time.Time {
+	earliest := time.Now().Add(-g.cfg.RetentionPeriod.Duration)
+	if startTime.Before(earliest) {
+		return earliest
+	}
+	return startTime
+}
+
 func (g *globalHandler) getReqComponents(c *gin.Context) ([]string, error) {
 	componentsStr := c.Query("components")
 	if componentsStr == "" {
@@ -73,7 +85,8 @@ func (g *globalHandler) getReqComponents(c *gin.Context) ([]string, error) {
 func (g *globalHandler) getHealthStates(c *gin.Context) {
 	components, err := g.getReqComponents(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse components: " + err.Error()})
+		log.Logger.Warnw("failed to parse components", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid components parameter"})
 		return
 	}
 
@@ -105,7 +118,7 @@ func (g *globalHandler) getEvents(c *gin.Context) {
 	if startTimeStr != "" {
 		startTimeInt, err := strconv.ParseInt(startTimeStr, 10, 64)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse since time: " + err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid 'since' parameter: must be a Unix timestamp"})
 			return
 		}
 		startTime = time.Unix(startTimeInt, 0)
@@ -113,10 +126,12 @@ func (g *globalHandler) getEvents(c *gin.Context) {
 		// Default to events from the last hour
 		startTime = time.Now().Add(-time.Hour)
 	}
+	startTime = g.clampStartTime(startTime)
 
 	components, err := g.getReqComponents(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse components: " + err.Error()})
+		log.Logger.Warnw("failed to parse components", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid components parameter"})
 		return
 	}
 
@@ -137,7 +152,8 @@ func (g *globalHandler) getEvents(c *gin.Context) {
 		}
 		events, err := comp.Events(c.Request.Context(), startTime)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get events for " + comp.Name() + ": " + err.Error()})
+			log.Logger.Warnw("failed to get events", "component", comp.Name(), "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve events"})
 			return
 		}
 		allEvents[comp.Name()] = events
@@ -150,7 +166,8 @@ func (g *globalHandler) getEvents(c *gin.Context) {
 func (g *globalHandler) getInfo(c *gin.Context) {
 	components, err := g.getReqComponents(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse components: " + err.Error()})
+		log.Logger.Warnw("failed to parse components", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid components parameter"})
 		return
 	}
 
@@ -188,10 +205,10 @@ func (g *globalHandler) getMetrics(c *gin.Context) {
 	if startTimeStr != "" {
 		startTimeInt, err := strconv.ParseInt(startTimeStr, 10, 64)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse start time: " + err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid 'startTime' parameter: must be a Unix timestamp"})
 			return
 		}
-		startTime := time.Unix(startTimeInt, 0)
+		startTime := g.clampStartTime(time.Unix(startTimeInt, 0))
 		opts = append(opts, pkgmetrics.WithSince(startTime))
 	}
 
@@ -202,7 +219,8 @@ func (g *globalHandler) getMetrics(c *gin.Context) {
 
 	metrics, err := g.metricsStore.Read(c.Request.Context(), opts...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get metrics: " + err.Error()})
+		log.Logger.Warnw("failed to read metrics", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve metrics"})
 		return
 	}
 

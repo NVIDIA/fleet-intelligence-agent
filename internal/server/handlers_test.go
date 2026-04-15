@@ -33,6 +33,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
@@ -45,6 +46,7 @@ type MockComponent struct {
 	healthStates apiv1.HealthStates
 	events       apiv1.Events
 	eventsError  error
+	lastSince    time.Time
 }
 
 func (m *MockComponent) Name() string {
@@ -64,6 +66,7 @@ func (m *MockComponent) LastHealthStates() apiv1.HealthStates {
 }
 
 func (m *MockComponent) Events(ctx context.Context, since time.Time) (apiv1.Events, error) {
+	m.lastSince = since
 	if m.eventsError != nil {
 		return nil, m.eventsError
 	}
@@ -123,6 +126,7 @@ func (m *MockRegistry) Deregister(name string) components.Component {
 type MockMetricsStore struct {
 	metrics []pkgmetrics.Metric
 	readErr error
+	lastOp  pkgmetrics.Op
 }
 
 func (m *MockMetricsStore) Record(ctx context.Context, metrics ...pkgmetrics.Metric) error {
@@ -130,6 +134,8 @@ func (m *MockMetricsStore) Record(ctx context.Context, metrics ...pkgmetrics.Met
 }
 
 func (m *MockMetricsStore) Read(ctx context.Context, opts ...pkgmetrics.OpOption) (pkgmetrics.Metrics, error) {
+	m.lastOp = pkgmetrics.Op{}
+	_ = m.lastOp.ApplyOpts(opts)
 	if m.readErr != nil {
 		return nil, m.readErr
 	}
@@ -138,6 +144,19 @@ func (m *MockMetricsStore) Read(ctx context.Context, opts ...pkgmetrics.OpOption
 
 func (m *MockMetricsStore) Purge(ctx context.Context, before time.Time) (int, error) {
 	return 0, nil
+}
+
+type erroringFaultInjector struct {
+	kmsgWriter pkgkmsgwriter.KmsgWriter
+	err        error
+}
+
+func (e *erroringFaultInjector) KmsgWriter() pkgkmsgwriter.KmsgWriter {
+	return e.kmsgWriter
+}
+
+func (e *erroringFaultInjector) InjectEvent(ctx context.Context, registry interface{}, eventToInject *pkgfaultinjector.EventToInject) error {
+	return e.err
 }
 
 // TestHealthz tests the healthz handler.
@@ -192,7 +211,9 @@ func TestGetHealthStates(t *testing.T) {
 		},
 	}
 
-	handler := newGlobalHandler(&config.Config{}, mockRegistry, nil, nil)
+	handler := newGlobalHandler(&config.Config{
+		RetentionPeriod: metav1.Duration{Duration: 5 * time.Minute},
+	}, mockRegistry, nil, nil)
 
 	tests := []struct {
 		name           string
@@ -265,7 +286,9 @@ func TestGetEvents(t *testing.T) {
 		},
 	}
 
-	handler := newGlobalHandler(&config.Config{}, mockRegistry, nil, nil)
+	handler := newGlobalHandler(&config.Config{
+		RetentionPeriod: metav1.Duration{Duration: 5 * time.Minute},
+	}, mockRegistry, nil, nil)
 
 	tests := []struct {
 		name           string
@@ -304,6 +327,20 @@ func TestGetEvents(t *testing.T) {
 			},
 		},
 		{
+			name:           "clamps_events_since_to_retention",
+			queryParams:    fmt.Sprintf("?since=%d", time.Now().Add(-24*time.Hour).Unix()),
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, body []byte) {
+				var events map[string]interface{}
+				err := json.Unmarshal(body, &events)
+				require.NoError(t, err)
+				assert.NotNil(t, events)
+				component := mockRegistry.Get("component1").(*MockComponent)
+				retention := handler.cfg.RetentionPeriod.Duration
+				assert.WithinDuration(t, time.Now().Add(-retention), component.lastSince, 2*time.Second)
+			},
+		},
+		{
 			name:           "invalid_since_time",
 			queryParams:    "?since=invalid",
 			expectedStatus: http.StatusBadRequest,
@@ -311,7 +348,7 @@ func TestGetEvents(t *testing.T) {
 				var response map[string]string
 				err := json.Unmarshal(body, &response)
 				require.NoError(t, err)
-				assert.Contains(t, response["error"], "failed to parse since time")
+				assert.Contains(t, response["error"], "invalid 'since' parameter")
 			},
 		},
 	}
@@ -418,6 +455,20 @@ func TestGetMetrics(t *testing.T) {
 			checkResponse:  nil,
 		},
 		{
+			name: "clamps_metrics_start_time_to_retention",
+			metricsStore: &MockMetricsStore{
+				metrics: mockMetrics,
+			},
+			queryParams:    fmt.Sprintf("?startTime=%d", time.Now().Add(-24*time.Hour).Unix()),
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, body []byte) {
+				var metrics []pkgmetrics.Metric
+				err := json.Unmarshal(body, &metrics)
+				require.NoError(t, err)
+				assert.Len(t, metrics, 1)
+			},
+		},
+		{
 			name: "get_metrics_with_components",
 			metricsStore: &MockMetricsStore{
 				metrics: mockMetrics,
@@ -437,7 +488,7 @@ func TestGetMetrics(t *testing.T) {
 				var response map[string]string
 				err := json.Unmarshal(body, &response)
 				require.NoError(t, err)
-				assert.Contains(t, response["error"], "failed to parse start time")
+				assert.Contains(t, response["error"], "invalid 'startTime' parameter")
 			},
 		},
 		{
@@ -451,14 +502,16 @@ func TestGetMetrics(t *testing.T) {
 				var response map[string]string
 				err := json.Unmarshal(body, &response)
 				require.NoError(t, err)
-				assert.Contains(t, response["error"], "failed to get metrics")
+				assert.Contains(t, response["error"], "failed to retrieve metrics")
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := newGlobalHandler(&config.Config{}, &MockRegistry{}, tt.metricsStore, nil)
+			handler := newGlobalHandler(&config.Config{
+				RetentionPeriod: metav1.Duration{Duration: 5 * time.Minute},
+			}, &MockRegistry{}, tt.metricsStore, nil)
 
 			router := gin.New()
 			router.GET("/metrics", handler.getMetrics)
@@ -471,6 +524,9 @@ func TestGetMetrics(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, w.Code)
 			if tt.checkResponse != nil {
 				tt.checkResponse(t, w.Body.Bytes())
+			}
+			if tt.name == "clamps_metrics_start_time_to_retention" {
+				assert.WithinDuration(t, time.Now().Add(-handler.cfg.RetentionPeriod.Duration), tt.metricsStore.lastOp.Since, 2*time.Second)
 			}
 		})
 	}
@@ -744,6 +800,31 @@ func TestInjectFault(t *testing.T) {
 				require.NoError(t, err)
 				assert.Contains(t, response, "message")
 				assert.Contains(t, response["message"], "fault injector not enabled")
+			},
+		},
+		{
+			name: "internal_event_injection_error_is_sanitized",
+			faultInjector: &erroringFaultInjector{
+				kmsgWriter: pkgkmsgwriter.NewWriter("/dev/null"),
+				err:        fmt.Errorf("secret backend failure"),
+			},
+			requestBody: map[string]interface{}{
+				"event": map[string]interface{}{
+					"component": "component1",
+					"name":      "test-event",
+					"type":      "info",
+					"message":   "test message",
+				},
+			},
+			remoteAddr:     "127.0.0.1:54321",
+			expectedStatus: http.StatusInternalServerError,
+			checkResponse: func(t *testing.T, body []byte) {
+				var response map[string]interface{}
+				err := json.Unmarshal(body, &response)
+				require.NoError(t, err)
+				assert.Contains(t, response, "message")
+				assert.Equal(t, "failed to inject event", response["message"])
+				assert.NotContains(t, fmt.Sprint(response["message"]), "secret backend failure")
 			},
 		},
 	}
