@@ -203,10 +203,10 @@ sudo journalctl -u fleetintd -f
 
 The fleetint API server listens on a Unix socket (`/run/fleetint/fleetint.sock`) by default. When started with a TCP address (e.g. `--listen-address=127.0.0.1:15133`), the REST endpoints are also available over plain HTTP.
 
-**Using curl with the default Unix socket:**
+**Using curl with the default Unix socket** (requires sudo since the socket is owner-only):
 
 ```bash
-curl --unix-socket /run/fleetint/fleetint.sock http://localhost/healthz
+sudo curl --unix-socket /run/fleetint/fleetint.sock http://localhost/healthz
 ```
 
 **Using curl with TCP** (requires `--listen-address=127.0.0.1:15133`):
@@ -215,7 +215,7 @@ curl --unix-socket /run/fleetint/fleetint.sock http://localhost/healthz
 curl http://localhost:15133/healthz
 ```
 
-The examples below use the TCP form for brevity. Substitute `--unix-socket /run/fleetint/fleetint.sock http://localhost` for the hostname when using the default socket.
+The examples below use the TCP form for brevity. For the default socket, prefix with `sudo` and substitute `--unix-socket /run/fleetint/fleetint.sock http://localhost` for the hostname.
 
 ### Health Check
 
