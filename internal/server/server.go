@@ -562,6 +562,17 @@ func (s *Server) startServer(ctx context.Context, nvmlInstance nvidianvml.Instan
 // installMiddlewares installs basic middleware for the router
 func (s *Server) installMiddlewares(router *gin.Engine) {
 	router.Use(gin.Recovery())
+	router.Use(securityHeaders())
+}
+
+// securityHeaders returns middleware that sets standard security response headers.
+func securityHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("Cache-Control", "no-store")
+		c.Next()
+	}
 }
 
 // healthz returns a simple health check handler
