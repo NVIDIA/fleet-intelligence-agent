@@ -97,7 +97,7 @@ func GetSystemManufacturer(ctx context.Context) (string, error) {
 		return "", nil
 	}
 
-	output, err := exec.CommandContext(ctx, "sudo", dmidecodePath, "-s", "system-manufacturer").CombinedOutput()
+	output, err := exec.CommandContext(ctx, dmidecodePath, "-s", "system-manufacturer").CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to read dmidecode for system manufacturer: %w\n\noutput:\n%s", err, strings.TrimSpace(string(output)))
 	}

@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	pkgfile "github.com/NVIDIA/fleet-intelligence-sdk/pkg/file"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
@@ -516,33 +517,35 @@ func (m *Manager) getEvidences(nonce string) (*AttestationSDKResponse, error) {
 	ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "nvattest", "collect-evidence", "--gpu-evidence-source=corelib", "--nonce", nonce, "--gpu-architecture", "blackwell", "--format", "json")
+	nvattestPath, err := pkgfile.LocateExecutable("nvattest")
+	if err != nil {
+		return nil, fmt.Errorf("failed to locate attestation CLI: %w", err)
+	}
+	cmd := exec.CommandContext(ctx, nvattestPath, "collect-evidence", "--gpu-evidence-source=corelib", "--nonce", nonce, "--gpu-architecture", "blackwell", "--format", "json")
 
 	// Capture stdout (JSON) and stderr (logs) separately
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
+	runErr := cmd.Run()
 
-	log.Logger.Debugw("Attestation CLI completed", "exit_error", err, "stdout", stdout.String(), "stderr", stderr.String())
+	log.Logger.Debugw("Attestation CLI completed", "exit_error", runErr, "stdout", stdout.String(), "stderr", stderr.String())
 
-	if err != nil {
+	if runErr != nil {
 		// If stdout is empty, it means the command failed completely (e.g. command not found)
 		if stdout.Len() == 0 {
-			// SDKResponse is nil
-			return nil, fmt.Errorf("attestation CLI execution failed: %w (stderr: %s)", err, stderr.String())
+			return nil, fmt.Errorf("attestation CLI execution failed: %w (stderr: %s)", runErr, stderr.String())
 		}
 		// If stdout has content, we continue to try parsing the JSON response
-		log.Logger.Warnw("Attestation CLI returned error exit code but has output, attempting to parse", "error", err)
+		log.Logger.Warnw("Attestation CLI returned error exit code but has output, attempting to parse", "error", runErr)
 	}
 
 	// Parse the JSON response from stdout (clean JSON without log messages)
 	var response AttestationSDKResponse
 	if parseErr := json.Unmarshal(stdout.Bytes(), &response); parseErr != nil {
 		log.Logger.Debugw("Failed to parse attestation CLI JSON response", "parse_error", parseErr)
-		// SDKResponse is nil
-		return nil, fmt.Errorf("failed to parse CLI response: %w (stderr: %s), stdout: %s, error: %s", parseErr, stderr.String(), stdout.String(), err.Error())
+		return nil, fmt.Errorf("failed to parse CLI response: %w (stderr: %s, stdout: %s, exec: %v)", parseErr, stderr.String(), stdout.String(), runErr)
 	}
 
 	log.Logger.Infow("Successfully called attestation SDK",

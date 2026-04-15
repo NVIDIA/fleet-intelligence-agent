@@ -7,9 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/file"
 )
 
 type OpOption func(*Op)
@@ -198,9 +199,6 @@ func WithRestartConfig(config RestartConfig) OpOption {
 }
 
 func commandExists(name string) bool {
-	p, err := exec.LookPath(name)
-	if err != nil {
-		return false
-	}
-	return p != ""
+	_, err := file.LocateExecutable(name)
+	return err == nil
 }
