@@ -47,9 +47,13 @@ func PerformEnrollment(ctx context.Context, enrollEndpoint, sakToken string) (st
 	// Use the provided enrollment endpoint directly
 	enrollURL := enrollEndpoint
 
-	// Create HTTP client with timeout
+	// Create HTTP client with timeout. Disable redirects so a compromised
+	// backend cannot bounce us to an internal service (SSRF).
 	client := &http.Client{
 		Timeout: 30 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 	}
 
 	// Create HTTP request with empty body

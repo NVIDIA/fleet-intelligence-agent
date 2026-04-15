@@ -16,6 +16,9 @@
 package endpoint
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -128,12 +131,39 @@ func TestNewAgentHTTPClient(t *testing.T) {
 		assert.Equal(t, 5*time.Second, client.Timeout)
 	})
 
+	t.Run("tcp_client_does_not_follow_redirects", func(t *testing.T) {
+		var redirectTargetCalled atomic.Bool
+		redirectTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			redirectTargetCalled.Store(true)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer redirectTarget.Close()
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, redirectTarget.URL, http.StatusFound)
+		}))
+		defer server.Close()
+
+		u, err := ValidateLocalServerURL(server.URL)
+		require.NoError(t, err)
+		client := NewAgentHTTPClient(u)
+
+		resp, err := client.Get(server.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusFound, resp.StatusCode)
+		assert.Equal(t, redirectTarget.URL, resp.Header.Get("Location"))
+		assert.False(t, redirectTargetCalled.Load())
+	})
+
 	t.Run("unix_client_has_timeout_and_transport", func(t *testing.T) {
 		u, err := ValidateLocalServerURL("/run/fleetint/fleetint.sock")
 		require.NoError(t, err)
 		client := NewAgentHTTPClient(u)
 		assert.NotNil(t, client)
 		assert.Equal(t, 5*time.Second, client.Timeout)
+		assert.NotNil(t, client.CheckRedirect, "unix client should disable redirects")
 		assert.NotNil(t, client.Transport, "unix client should have a custom transport")
 	})
 }
