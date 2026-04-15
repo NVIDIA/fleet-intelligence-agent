@@ -322,8 +322,14 @@ func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", jwtToken))
 
-	// Make the HTTP request
-	client := &http.Client{Timeout: 30 * time.Second}
+	// Make the HTTP request. Disable redirects so a compromised backend
+	// cannot bounce us to an internal service (SSRF).
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Logger.Debugw("failed to make POST request in nonce endpoint request", "error", err)
@@ -343,6 +349,10 @@ func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time
 		"status", resp.Status,
 		"content_type", resp.Header.Get("Content-Type"))
 
+	if resp.StatusCode != http.StatusOK {
+		return "", time.Time{}, fmt.Errorf("nonce endpoint returned HTTP %d", resp.StatusCode)
+	}
+
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		log.Logger.Debugw("failed to decode response in nonce endpoint request", "error", err)
 		return "", time.Time{}, err
@@ -350,9 +360,10 @@ func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time
 
 	if response.Error != "" {
 		log.Logger.Debugw("error from server in nonce endpoint request", "error", response.Error)
-	} else {
-		log.Logger.Debugw("Nonce received from server", "nonce_refresh_timestamp", response.NonceRefreshTimestamp)
+		return "", time.Time{}, fmt.Errorf("nonce endpoint returned error: %s", response.Error)
 	}
+
+	log.Logger.Debugw("Nonce received from server", "nonce_refresh_timestamp", response.NonceRefreshTimestamp)
 
 	return response.Nonce, response.NonceRefreshTimestamp, nil
 }
