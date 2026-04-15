@@ -39,13 +39,19 @@ func TestClient_Enroll(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c, err := New(server.URL)
-	require.NoError(t, err)
-	c = NewWithHTTPClient(mustParseURL(t, server.URL), server.Client())
+	c := NewWithHTTPClient(mustParseURL(t, server.URL), server.Client())
 
 	jwt, err := c.Enroll(context.Background(), "sak-token")
 	require.NoError(t, err)
 	require.Equal(t, "jwt-token", jwt)
+}
+
+func TestNew(t *testing.T) {
+	t.Parallel()
+
+	c, err := New("https://backend.example.com")
+	require.NoError(t, err)
+	require.NotNil(t, c)
 }
 
 func TestClient_UpsertNode(t *testing.T) {

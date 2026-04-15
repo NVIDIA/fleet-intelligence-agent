@@ -18,6 +18,7 @@ package sink
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestationloop"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestationloop/mapper"
@@ -38,9 +39,18 @@ func NewBackendSink(client backendclient.Client, jwt func(context.Context) (stri
 }
 
 func (s *backendSink) Export(ctx context.Context, result attestationloop.Result) error {
+	if s.jwt == nil {
+		return fmt.Errorf("attestation backend export requires jwt provider")
+	}
+	if s.client == nil {
+		return fmt.Errorf("attestation backend export requires backend client")
+	}
 	jwt, err := s.jwt(ctx)
 	if err != nil {
 		return err
+	}
+	if jwt == "" {
+		return fmt.Errorf("attestation backend export received empty jwt")
 	}
 	return s.client.SubmitAttestation(ctx, result.NodeID, mapper.ToAttestationRequest(result), jwt)
 }

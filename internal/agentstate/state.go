@@ -20,15 +20,15 @@ import "context"
 
 // State provides local persisted metadata/state access for backend workflows.
 type State interface {
-	GetBackendBaseURL(ctx context.Context) (string, error)
+	GetBackendBaseURL(ctx context.Context) (value string, ok bool, err error)
 	SetBackendBaseURL(ctx context.Context, value string) error
 
-	GetJWT(ctx context.Context) (string, error)
+	GetJWT(ctx context.Context) (value string, ok bool, err error)
 	SetJWT(ctx context.Context, value string) error
 
-	GetSAK(ctx context.Context) (string, error)
+	GetSAK(ctx context.Context) (value string, ok bool, err error)
 	SetSAK(ctx context.Context, value string) error
 
-	GetNodeID(ctx context.Context) (string, error)
+	GetNodeID(ctx context.Context) (value string, ok bool, err error)
 	SetNodeID(ctx context.Context, value string) error
 }

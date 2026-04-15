@@ -18,6 +18,7 @@ package backendclient
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ErrNotImplemented is returned by skeleton backend client methods.
@@ -30,8 +31,25 @@ type HTTPStatusError struct {
 }
 
 func (e *HTTPStatusError) Error() string {
-	if e.Body != "" {
-		return fmt.Sprintf("backend request failed with status %d: %s", e.StatusCode, e.Body)
+	body := sanitizeErrorBody(e.Body)
+	if body != "" {
+		return fmt.Sprintf("backend request failed with status %d: %s", e.StatusCode, body)
 	}
 	return fmt.Sprintf("backend request failed with status %d", e.StatusCode)
+}
+
+func sanitizeErrorBody(body string) string {
+	const maxLen = 200
+
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return ""
+	}
+	body = strings.ReplaceAll(body, "\n", " ")
+	body = strings.ReplaceAll(body, "\r", " ")
+	body = strings.Join(strings.Fields(body), " ")
+	if len(body) <= maxLen {
+		return body
+	}
+	return body[:maxLen] + "...(truncated)"
 }

@@ -23,6 +23,43 @@ import (
 
 // ToNodeUpsertRequest maps an inventory snapshot to the backend node-upsert contract.
 func ToNodeUpsertRequest(s inventory.Snapshot) backendclient.NodeUpsertRequest {
+	gpus := make([]backendclient.GPUDevice, 0, len(s.Resources.GPUInfo.GPUs))
+	for _, gpu := range s.Resources.GPUInfo.GPUs {
+		gpus = append(gpus, backendclient.GPUDevice{
+			UUID:         gpu.UUID,
+			BusID:        gpu.BusID,
+			SN:           gpu.SN,
+			MinorID:      gpu.MinorID,
+			BoardID:      gpu.BoardID,
+			VBIOSVersion: gpu.VBIOSVersion,
+			ChassisSN:    gpu.ChassisSN,
+			GPUIndex:     gpu.GPUIndex,
+		})
+	}
+
+	blockDevices := make([]backendclient.BlockDevice, 0, len(s.Resources.DiskInfo.BlockDevices))
+	for _, disk := range s.Resources.DiskInfo.BlockDevices {
+		blockDevices = append(blockDevices, backendclient.BlockDevice{
+			Name:       disk.Name,
+			Type:       disk.Type,
+			Size:       disk.Size,
+			WWN:        disk.WWN,
+			MountPoint: disk.MountPoint,
+			FSType:     disk.FSType,
+			PartUUID:   disk.PartUUID,
+			Parents:    append([]string(nil), disk.Parents...),
+		})
+	}
+
+	interfaces := make([]backendclient.NICInterface, 0, len(s.Resources.NICInfo.PrivateIPInterfaces))
+	for _, nic := range s.Resources.NICInfo.PrivateIPInterfaces {
+		interfaces = append(interfaces, backendclient.NICInterface{
+			Interface: nic.Interface,
+			MAC:       nic.MAC,
+			IP:        nic.IP,
+		})
+	}
+
 	return backendclient.NodeUpsertRequest{
 		Hostname:                s.Hostname,
 		MachineID:               s.MachineID,
@@ -48,6 +85,20 @@ func ToNodeUpsertRequest(s inventory.Snapshot) backendclient.NodeUpsertRequest {
 			},
 			MemoryInfo: backendclient.MemoryInfo{
 				TotalBytes: s.Resources.MemoryInfo.TotalBytes,
+			},
+			GPUInfo: backendclient.GPUInfo{
+				Product:      s.Resources.GPUInfo.Product,
+				Manufacturer: s.Resources.GPUInfo.Manufacturer,
+				Architecture: s.Resources.GPUInfo.Architecture,
+				Memory:       s.Resources.GPUInfo.Memory,
+				GPUs:         gpus,
+			},
+			DiskInfo: backendclient.DiskInfo{
+				ContainerRootDisk: s.Resources.DiskInfo.ContainerRootDisk,
+				BlockDevices:      blockDevices,
+			},
+			NICInfo: backendclient.NICInfo{
+				PrivateIPInterfaces: interfaces,
 			},
 		},
 	}
