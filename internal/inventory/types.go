@@ -114,13 +114,13 @@ type Source interface {
 
 // Sink exports inventory snapshots to an external destination.
 type Sink interface {
-	Export(ctx context.Context, snap Snapshot) error
+	Export(ctx context.Context, snap *Snapshot) error
 }
 
 // StateStore is the inventory package view of local transient store state.
 type StateStore interface {
-	PutInventory(ctx context.Context, snap Snapshot) error
-	GetInventory(ctx context.Context) (Snapshot, bool, error)
+	PutInventory(ctx context.Context, snap *Snapshot) error
+	GetInventory(ctx context.Context) (*Snapshot, bool, error)
 	MarkInventoryExported(ctx context.Context, hash string, at time.Time) error
 	LastExportedInventoryHash(ctx context.Context) (string, error)
 }

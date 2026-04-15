@@ -22,8 +22,11 @@ import (
 )
 
 // ToAttestationRequest maps an attestation result to the backend attestation contract.
-func ToAttestationRequest(r attestationloop.Result) backendclient.AttestationRequest {
-	req := backendclient.AttestationRequest{
+func ToAttestationRequest(r *attestationloop.Result) *backendclient.AttestationRequest {
+	if r == nil {
+		return nil
+	}
+	req := &backendclient.AttestationRequest{
 		AttestationData: backendclient.AttestationData{
 			NonceRefreshTimestamp: r.NonceRefreshTimestamp,
 			Success:               r.Success,

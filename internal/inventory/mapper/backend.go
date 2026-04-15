@@ -22,7 +22,10 @@ import (
 )
 
 // ToNodeUpsertRequest maps an inventory snapshot to the backend node-upsert contract.
-func ToNodeUpsertRequest(s inventory.Snapshot) backendclient.NodeUpsertRequest {
+func ToNodeUpsertRequest(s *inventory.Snapshot) *backendclient.NodeUpsertRequest {
+	if s == nil {
+		return nil
+	}
 	gpus := make([]backendclient.GPUDevice, 0, len(s.Resources.GPUInfo.GPUs))
 	for _, gpu := range s.Resources.GPUInfo.GPUs {
 		gpus = append(gpus, backendclient.GPUDevice{
@@ -60,7 +63,7 @@ func ToNodeUpsertRequest(s inventory.Snapshot) backendclient.NodeUpsertRequest {
 		})
 	}
 
-	return backendclient.NodeUpsertRequest{
+	return &backendclient.NodeUpsertRequest{
 		Hostname:                s.Hostname,
 		MachineID:               s.MachineID,
 		SystemUUID:              s.SystemUUID,

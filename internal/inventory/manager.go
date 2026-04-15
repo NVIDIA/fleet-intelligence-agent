@@ -61,7 +61,7 @@ func (m *manager) CollectOnce(ctx context.Context) (*Snapshot, error) {
 		return nil, fmt.Errorf("inventory source returned nil snapshot")
 	}
 	if m.store != nil {
-		if err := m.store.PutInventory(ctx, *snap); err != nil {
+		if err := m.store.PutInventory(ctx, snap); err != nil {
 			return nil, err
 		}
 	}

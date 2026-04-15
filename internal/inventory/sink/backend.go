@@ -38,12 +38,15 @@ func NewBackendSink(client backendclient.Client, jwt func(context.Context) (stri
 	}
 }
 
-func (s *backendSink) Export(ctx context.Context, snap inventory.Snapshot) error {
+func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) error {
 	if s.jwt == nil {
 		return fmt.Errorf("inventory backend export requires jwt provider")
 	}
 	if s.client == nil {
 		return fmt.Errorf("inventory backend export requires backend client")
+	}
+	if snap == nil {
+		return fmt.Errorf("inventory backend export requires inventory snapshot")
 	}
 	jwt, err := s.jwt(ctx)
 	if err != nil {

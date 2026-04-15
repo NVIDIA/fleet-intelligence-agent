@@ -29,14 +29,14 @@ import (
 type MemoryStore struct {
 	mu sync.RWMutex
 
-	inventory            inventory.Snapshot
-	hasInventory         bool
-	lastInventoryHash    string
-	lastInventorySyncTS  time.Time
+	inventory           *inventory.Snapshot
+	hasInventory        bool
+	lastInventoryHash   string
+	lastInventorySyncTS time.Time
 
-	attestation              attestationloop.Result
-	hasAttestation           bool
-	exportedAttestationKeys  map[string]time.Time
+	attestation             *attestationloop.Result
+	hasAttestation          bool
+	exportedAttestationKeys map[string]time.Time
 }
 
 // NewMemoryStore creates an empty in-memory state store.
@@ -46,18 +46,26 @@ func NewMemoryStore() *MemoryStore {
 	}
 }
 
-func (s *MemoryStore) PutInventory(_ context.Context, snap inventory.Snapshot) error {
+func (s *MemoryStore) PutInventory(_ context.Context, snap *inventory.Snapshot) error {
+	if snap == nil {
+		return nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.inventory = snap
+	cloned := *snap
+	s.inventory = &cloned
 	s.hasInventory = true
 	return nil
 }
 
-func (s *MemoryStore) GetInventory(_ context.Context) (inventory.Snapshot, bool, error) {
+func (s *MemoryStore) GetInventory(_ context.Context) (*inventory.Snapshot, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.inventory, s.hasInventory, nil
+	if !s.hasInventory || s.inventory == nil {
+		return nil, false, nil
+	}
+	cloned := *s.inventory
+	return &cloned, true, nil
 }
 
 func (s *MemoryStore) MarkInventoryExported(_ context.Context, hash string, at time.Time) error {
@@ -74,18 +82,26 @@ func (s *MemoryStore) LastExportedInventoryHash(_ context.Context) (string, erro
 	return s.lastInventoryHash, nil
 }
 
-func (s *MemoryStore) PutAttestation(_ context.Context, result attestationloop.Result) error {
+func (s *MemoryStore) PutAttestation(_ context.Context, result *attestationloop.Result) error {
+	if result == nil {
+		return nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.attestation = result
+	cloned := *result
+	s.attestation = &cloned
 	s.hasAttestation = true
 	return nil
 }
 
-func (s *MemoryStore) GetAttestation(_ context.Context) (attestationloop.Result, bool, error) {
+func (s *MemoryStore) GetAttestation(_ context.Context) (*attestationloop.Result, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.attestation, s.hasAttestation, nil
+	if !s.hasAttestation || s.attestation == nil {
+		return nil, false, nil
+	}
+	cloned := *s.attestation
+	return &cloned, true, nil
 }
 
 func (s *MemoryStore) MarkAttestationExported(_ context.Context, key string, at time.Time) error {

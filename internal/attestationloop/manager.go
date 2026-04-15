@@ -104,7 +104,7 @@ func (m *manager) CollectOnce(ctx context.Context) (*Result, error) {
 		result.SDKResponse = *sdkResp
 	}
 	if m.store != nil {
-		if err := m.store.PutAttestation(ctx, *result); err != nil {
+		if err := m.store.PutAttestation(ctx, result); err != nil {
 			return nil, err
 		}
 	}

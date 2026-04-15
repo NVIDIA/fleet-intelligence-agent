@@ -59,13 +59,13 @@ type EvidenceCollector interface {
 
 // Sink exports attestation results to an external destination.
 type Sink interface {
-	Export(ctx context.Context, result Result) error
+	Export(ctx context.Context, result *Result) error
 }
 
 // StateStore is the attestation loop view of local transient store state.
 type StateStore interface {
-	PutAttestation(ctx context.Context, result Result) error
-	GetAttestation(ctx context.Context) (Result, bool, error)
+	PutAttestation(ctx context.Context, result *Result) error
+	GetAttestation(ctx context.Context) (*Result, bool, error)
 	MarkAttestationExported(ctx context.Context, key string, at time.Time) error
 	WasAttestationExported(ctx context.Context, key string) (bool, error)
 }

@@ -70,7 +70,7 @@ func TestClient_UpsertNode(t *testing.T) {
 	defer server.Close()
 
 	c := NewWithHTTPClient(mustParseURL(t, server.URL), server.Client())
-	err := c.UpsertNode(context.Background(), "node-1", NodeUpsertRequest{Hostname: "node-1"}, "jwt-token")
+	err := c.UpsertNode(context.Background(), "node-1", &NodeUpsertRequest{Hostname: "node-1"}, "jwt-token")
 	require.NoError(t, err)
 }
 
@@ -107,7 +107,7 @@ func TestClient_SubmitAttestation(t *testing.T) {
 	defer server.Close()
 
 	c := NewWithHTTPClient(mustParseURL(t, server.URL), server.Client())
-	err := c.SubmitAttestation(context.Background(), "node-1", AttestationRequest{}, "jwt-token")
+	err := c.SubmitAttestation(context.Background(), "node-1", &AttestationRequest{}, "jwt-token")
 	require.NoError(t, err)
 }
 

@@ -38,12 +38,15 @@ func NewBackendSink(client backendclient.Client, jwt func(context.Context) (stri
 	}
 }
 
-func (s *backendSink) Export(ctx context.Context, result attestationloop.Result) error {
+func (s *backendSink) Export(ctx context.Context, result *attestationloop.Result) error {
 	if s.jwt == nil {
 		return fmt.Errorf("attestation backend export requires jwt provider")
 	}
 	if s.client == nil {
 		return fmt.Errorf("attestation backend export requires backend client")
+	}
+	if result == nil {
+		return fmt.Errorf("attestation backend export requires attestation result")
 	}
 	jwt, err := s.jwt(ctx)
 	if err != nil {
