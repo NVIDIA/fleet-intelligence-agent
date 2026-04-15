@@ -19,6 +19,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 )
 
 // JWTProvider retrieves the current backend JWT.
@@ -38,6 +40,7 @@ type manager struct {
 	jwtProvider    JWTProvider
 	nonceProvider  NonceProvider
 	collector      EvidenceCollector
+	submitter      Submitter
 	store          StateStore
 	interval       time.Duration
 }
@@ -48,6 +51,7 @@ func NewManager(
 	jwtProvider JWTProvider,
 	nonceProvider NonceProvider,
 	collector EvidenceCollector,
+	submitter Submitter,
 	store StateStore,
 	interval time.Duration,
 ) Manager {
@@ -56,6 +60,7 @@ func NewManager(
 		jwtProvider:    jwtProvider,
 		nonceProvider:  nonceProvider,
 		collector:      collector,
+		submitter:      submitter,
 		store:          store,
 		interval:       interval,
 	}
@@ -69,7 +74,7 @@ func (m *manager) Run(ctx context.Context) error {
 }
 
 func (m *manager) CollectOnce(ctx context.Context) (*Result, error) {
-	if m.nodeIDProvider == nil || m.jwtProvider == nil || m.nonceProvider == nil || m.collector == nil {
+	if m.nodeIDProvider == nil || m.jwtProvider == nil || m.nonceProvider == nil || m.collector == nil || m.submitter == nil {
 		return nil, fmt.Errorf("attestation loop dependencies are incomplete")
 	}
 
@@ -89,16 +94,19 @@ func (m *manager) CollectOnce(ctx context.Context) (*Result, error) {
 		if err := m.jwtProvider.SetJWT(ctx, refreshedJWT); err != nil {
 			return nil, err
 		}
+		jwt = refreshedJWT
 	}
 	sdkResp, err := m.collector.Collect(ctx, nonce)
-	if err != nil {
-		return nil, err
-	}
 	result := &Result{
 		CollectedAt:           time.Now().UTC(),
 		NodeID:                nodeID,
 		NonceRefreshTimestamp: refreshTS,
-		Success:               true,
+	}
+	if err != nil {
+		result.Success = false
+		result.ErrorMessage = err.Error()
+	} else {
+		result.Success = true
 	}
 	if sdkResp != nil {
 		result.SDKResponse = *sdkResp
@@ -108,5 +116,35 @@ func (m *manager) CollectOnce(ctx context.Context) (*Result, error) {
 			return nil, err
 		}
 	}
+	if err := m.submitter.Submit(ctx, result, jwt); err != nil {
+		return nil, err
+	}
 	return result, nil
+}
+
+type backendSubmitter struct {
+	client BackendClient
+}
+
+// BackendClient is the backend client view required by the attestation workflow.
+type BackendClient interface {
+	SubmitAttestation(ctx context.Context, nodeID string, req *backendclient.AttestationRequest, jwt string) error
+}
+
+// NewBackendSubmitter creates a backend submitter backed by the agent backend client.
+func NewBackendSubmitter(client BackendClient) Submitter {
+	return &backendSubmitter{client: client}
+}
+
+func (s *backendSubmitter) Submit(ctx context.Context, result *Result, jwt string) error {
+	if s.client == nil {
+		return fmt.Errorf("attestation submission requires backend client")
+	}
+	if result == nil {
+		return fmt.Errorf("attestation submission requires result")
+	}
+	if jwt == "" {
+		return fmt.Errorf("attestation submission requires jwt")
+	}
+	return s.client.SubmitAttestation(ctx, result.NodeID, toAttestationRequest(result), jwt)
 }

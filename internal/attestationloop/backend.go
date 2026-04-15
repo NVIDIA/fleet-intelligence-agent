@@ -13,16 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package mapper contains attestation loop payload mappers.
-package mapper
+package attestationloop
 
-import (
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestationloop"
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
-)
+import "github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 
-// ToAttestationRequest maps an attestation result to the backend attestation contract.
-func ToAttestationRequest(r *attestationloop.Result) *backendclient.AttestationRequest {
+func toAttestationRequest(r *Result) *backendclient.AttestationRequest {
 	if r == nil {
 		return nil
 	}

@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package attestationloop owns attestation collection and sync state orchestration.
+// Package attestationloop owns the backend attestation workflow.
 package attestationloop
 
 import (
@@ -57,15 +57,13 @@ type EvidenceCollector interface {
 	Collect(ctx context.Context, nonce string) (*SDKResponse, error)
 }
 
-// Sink exports attestation results to an external destination.
-type Sink interface {
-	Export(ctx context.Context, result *Result) error
+// Submitter submits attestation results to the backend.
+type Submitter interface {
+	Submit(ctx context.Context, result *Result, jwt string) error
 }
 
 // StateStore is the attestation loop view of local transient store state.
 type StateStore interface {
 	PutAttestation(ctx context.Context, result *Result) error
 	GetAttestation(ctx context.Context) (*Result, bool, error)
-	MarkAttestationExported(ctx context.Context, key string, at time.Time) error
-	WasAttestationExported(ctx context.Context, key string) (bool, error)
 }
