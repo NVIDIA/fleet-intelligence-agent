@@ -17,7 +17,9 @@ package inventory
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -28,16 +30,20 @@ type Manager interface {
 }
 
 type manager struct {
+	mu       sync.RWMutex
 	source   Source
-	store    StateStore
+	sink     Sink
 	interval time.Duration
+
+	lastSnapshot     *Snapshot
+	lastExportedHash string
 }
 
-// NewManager creates an inventory manager skeleton.
-func NewManager(source Source, store StateStore, interval time.Duration) Manager {
+// NewManager creates an inventory manager.
+func NewManager(source Source, sink Sink, interval time.Duration) Manager {
 	return &manager{
 		source:   source,
-		store:    store,
+		sink:     sink,
 		interval: interval,
 	}
 }
@@ -46,7 +52,24 @@ func (m *manager) Run(ctx context.Context) error {
 	if _, err := m.CollectOnce(ctx); err != nil {
 		return err
 	}
-	return fmt.Errorf("inventory manager run loop not implemented")
+
+	if m.interval <= 0 {
+		return nil
+	}
+
+	ticker := time.NewTicker(m.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if _, err := m.CollectOnce(ctx); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (m *manager) CollectOnce(ctx context.Context) (*Snapshot, error) {
@@ -60,10 +83,29 @@ func (m *manager) CollectOnce(ctx context.Context) (*Snapshot, error) {
 	if snap == nil {
 		return nil, fmt.Errorf("inventory source returned nil snapshot")
 	}
-	if m.store != nil {
-		if err := m.store.PutInventory(ctx, snap); err != nil {
+	hash, err := ComputeHash(snap)
+	if err != nil {
+		return nil, err
+	}
+	snap.InventoryHash = hash
+
+	m.mu.Lock()
+	cloned := *snap
+	m.lastSnapshot = &cloned
+	shouldExport := m.sink != nil && m.lastExportedHash != hash
+	m.mu.Unlock()
+
+	if shouldExport {
+		if err := m.sink.Export(ctx, snap); err != nil {
+			if errors.Is(err, ErrNotReady) {
+				return snap, nil
+			}
 			return nil, err
 		}
+		m.mu.Lock()
+		m.lastExportedHash = hash
+		m.mu.Unlock()
 	}
+
 	return snap, nil
 }

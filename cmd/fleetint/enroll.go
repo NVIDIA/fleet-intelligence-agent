@@ -23,12 +23,18 @@ import (
 	"strings"
 
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
+	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 	"github.com/urfave/cli"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/enrollment"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory"
+	inventorysink "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/sink"
+	inventorysource "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/source"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
 var (
@@ -36,6 +42,7 @@ var (
 		return enrollment.PerformEnrollment(context.Background(), enrollEndpoint, sakToken)
 	}
 	storeEnrollmentConfig = storeConfigInMetadata
+	performInventorySync  = syncInventoryOnce
 )
 
 // resolveToken returns the SAK token from --token, --token-file, or stdin.
@@ -138,14 +145,17 @@ func enrollCommand(cliContext *cli.Context) error {
 	}
 
 	// Store endpoints and JWT token in metadata table
-	if err := storeEnrollmentConfig(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken); err != nil {
+	if err := storeEnrollmentConfig(baseURL.String(), enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken); err != nil {
 		return fmt.Errorf("failed to store configuration: %w", err)
+	}
+	if err := performInventorySync(context.Background()); err != nil {
+		fmt.Fprintf(writerFromContext(cliContext), "Post-enroll inventory sync failed: %v\n", err)
 	}
 
 	return nil
 }
 
-func storeConfigInMetadata(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken string) error {
+func storeConfigInMetadata(baseURL, enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken string) error {
 	stateFile, err := config.DefaultStateFile()
 	if err != nil {
 		return fmt.Errorf("failed to get state file path: %w", err)
@@ -168,6 +178,9 @@ func storeConfigInMetadata(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceE
 	if err := pkgmetadata.SetMetadata(context.Background(), dbRW, pkgmetadata.MetadataKeyToken, jwtToken); err != nil {
 		return fmt.Errorf("failed to set JWT token: %w", err)
 	}
+	if err := pkgmetadata.SetMetadata(context.Background(), dbRW, "backend_base_url", baseURL); err != nil {
+		return fmt.Errorf("failed to set backend base URL: %w", err)
+	}
 	if err := pkgmetadata.SetMetadata(context.Background(), dbRW, "enroll_endpoint", enrollEndpoint); err != nil {
 		return fmt.Errorf("failed to set enroll endpoint: %w", err)
 	}
@@ -185,4 +198,28 @@ func storeConfigInMetadata(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceE
 	}
 
 	return nil
+}
+
+type machineInfoCollectorFunc func(context.Context) (*machineinfo.MachineInfo, error)
+
+func (f machineInfoCollectorFunc) Collect(ctx context.Context) (*machineinfo.MachineInfo, error) {
+	return f(ctx)
+}
+
+func syncInventoryOnce(ctx context.Context) error {
+	state := agentstate.NewSQLite()
+	sink := inventorysink.NewBackendSink(state)
+
+	nvmlInstance, err := nvidianvml.New()
+	if err != nil {
+		return fmt.Errorf("initialize nvml for inventory sync: %w", err)
+	}
+	defer func() { _ = nvmlInstance.Shutdown() }()
+
+	src := inventorysource.NewMachineInfoSource(machineInfoCollectorFunc(func(context.Context) (*machineinfo.MachineInfo, error) {
+		return machineinfo.GetMachineInfo(nvmlInstance)
+	}))
+	manager := inventory.NewManager(src, sink, 0)
+	_, err = manager.CollectOnce(ctx)
+	return err
 }

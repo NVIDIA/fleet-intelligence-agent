@@ -18,8 +18,12 @@ package inventory
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrNotReady indicates inventory export cannot proceed because backend state is not ready yet.
+var ErrNotReady = errors.New("inventory backend not ready")
 
 // Snapshot is the agent-owned inventory state model.
 type Snapshot struct {
@@ -115,12 +119,4 @@ type Source interface {
 // Sink exports inventory snapshots to an external destination.
 type Sink interface {
 	Export(ctx context.Context, snap *Snapshot) error
-}
-
-// StateStore is the inventory package view of local transient store state.
-type StateStore interface {
-	PutInventory(ctx context.Context, snap *Snapshot) error
-	GetInventory(ctx context.Context) (*Snapshot, bool, error)
-	MarkInventoryExported(ctx context.Context, hash string, at time.Time) error
-	LastExportedInventoryHash(ctx context.Context) (string, error)
 }

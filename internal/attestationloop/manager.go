@@ -18,6 +18,7 @@ package attestationloop
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
@@ -36,13 +37,15 @@ type Manager interface {
 }
 
 type manager struct {
+	mu             sync.RWMutex
 	nodeIDProvider func(context.Context) (string, error)
 	jwtProvider    JWTProvider
 	nonceProvider  NonceProvider
 	collector      EvidenceCollector
 	submitter      Submitter
-	store          StateStore
 	interval       time.Duration
+
+	lastResult *Result
 }
 
 // NewManager creates an attestation loop manager skeleton.
@@ -52,7 +55,6 @@ func NewManager(
 	nonceProvider NonceProvider,
 	collector EvidenceCollector,
 	submitter Submitter,
-	store StateStore,
 	interval time.Duration,
 ) Manager {
 	return &manager{
@@ -61,7 +63,6 @@ func NewManager(
 		nonceProvider:  nonceProvider,
 		collector:      collector,
 		submitter:      submitter,
-		store:          store,
 		interval:       interval,
 	}
 }
@@ -111,11 +112,10 @@ func (m *manager) CollectOnce(ctx context.Context) (*Result, error) {
 	if sdkResp != nil {
 		result.SDKResponse = *sdkResp
 	}
-	if m.store != nil {
-		if err := m.store.PutAttestation(ctx, result); err != nil {
-			return nil, err
-		}
-	}
+	m.mu.Lock()
+	cloned := *result
+	m.lastResult = &cloned
+	m.mu.Unlock()
 	if err := m.submitter.Submit(ctx, result, jwt); err != nil {
 		return nil, err
 	}

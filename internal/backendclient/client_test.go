@@ -18,9 +18,11 @@ package backendclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -146,6 +148,141 @@ func TestClient_EnrollMapsHTTPStatus(t *testing.T) {
 	_, err := c.Enroll(context.Background(), "sak-token")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "incorrect")
+}
+
+func TestClient_ValidationErrors(t *testing.T) {
+	t.Parallel()
+
+	c := NewWithHTTPClient(mustParseURL(t, "https://backend.example.com"), nil)
+
+	_, err := c.Enroll(context.Background(), "")
+	require.ErrorContains(t, err, "sakToken cannot be empty")
+
+	err = c.UpsertNode(context.Background(), "", &NodeUpsertRequest{}, "jwt")
+	require.ErrorContains(t, err, "nodeID cannot be empty")
+	err = c.UpsertNode(context.Background(), "node-1", nil, "jwt")
+	require.ErrorContains(t, err, "cannot be nil")
+	err = c.UpsertNode(context.Background(), "node-1", &NodeUpsertRequest{}, "")
+	require.ErrorContains(t, err, "jwt cannot be empty")
+
+	_, err = c.GetNonce(context.Background(), "", "jwt")
+	require.ErrorContains(t, err, "nodeID cannot be empty")
+	_, err = c.GetNonce(context.Background(), "node-1", "")
+	require.ErrorContains(t, err, "jwt cannot be empty")
+
+	err = c.SubmitAttestation(context.Background(), "", &AttestationRequest{}, "jwt")
+	require.ErrorContains(t, err, "nodeID cannot be empty")
+	err = c.SubmitAttestation(context.Background(), "node-1", nil, "jwt")
+	require.ErrorContains(t, err, "cannot be nil")
+	err = c.SubmitAttestation(context.Background(), "node-1", &AttestationRequest{}, "")
+	require.ErrorContains(t, err, "jwt cannot be empty")
+
+	_, err = c.RefreshToken(context.Background(), "")
+	require.ErrorContains(t, err, "jwt cannot be empty")
+}
+
+func TestClient_ResponseValidationAndErrors(t *testing.T) {
+	t.Parallel()
+
+	t.Run("missing jwt assertion in enroll", func(t *testing.T) {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]string{})
+		}))
+		defer server.Close()
+
+		c := NewWithHTTPClient(mustParseURL(t, server.URL), server.Client())
+		_, err := c.Enroll(context.Background(), "sak-token")
+		require.ErrorContains(t, err, "missing jwtAssertion")
+	})
+
+	t.Run("missing nonce field", func(t *testing.T) {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]string{})
+		}))
+		defer server.Close()
+
+		c := NewWithHTTPClient(mustParseURL(t, server.URL), server.Client())
+		_, err := c.GetNonce(context.Background(), "node-1", "jwt-token")
+		require.ErrorContains(t, err, "missing nonce")
+	})
+
+	t.Run("missing refresh jwt assertion", func(t *testing.T) {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]string{})
+		}))
+		defer server.Close()
+
+		c := NewWithHTTPClient(mustParseURL(t, server.URL), server.Client())
+		_, err := c.RefreshToken(context.Background(), "jwt-token")
+		require.ErrorContains(t, err, "missing jwtAssertion")
+	})
+
+	t.Run("invalid json response", func(t *testing.T) {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("{invalid"))
+		}))
+		defer server.Close()
+
+		c := NewWithHTTPClient(mustParseURL(t, server.URL), server.Client())
+		err := c.UpsertNode(context.Background(), "node-1", &NodeUpsertRequest{Hostname: "node-1"}, "jwt-token")
+		require.NoError(t, err)
+
+		_, err = c.GetNonce(context.Background(), "node-1", "jwt-token")
+		require.ErrorContains(t, err, "failed to parse backend response")
+	})
+
+	t.Run("http client error", func(t *testing.T) {
+		c := NewWithHTTPClient(mustParseURL(t, "https://backend.example.com"), &http.Client{
+			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return nil, errors.New("network boom")
+			}),
+		})
+		err := c.UpsertNode(context.Background(), "node-1", &NodeUpsertRequest{Hostname: "node-1"}, "jwt-token")
+		require.ErrorContains(t, err, "failed to make backend request")
+	})
+
+	t.Run("oversized response body", func(t *testing.T) {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(strings.Repeat("a", maxResponseBodyBytes+10)))
+		}))
+		defer server.Close()
+
+		c := NewWithHTTPClient(mustParseURL(t, server.URL), server.Client())
+		_, err := c.GetNonce(context.Background(), "node-1", "jwt-token")
+		require.ErrorContains(t, err, "response too large")
+	})
+}
+
+func TestMapEnrollErrorStatuses(t *testing.T) {
+	t.Parallel()
+
+	cases := map[int]string{
+		http.StatusBadRequest:         "correct format",
+		http.StatusUnauthorized:       "incorrect",
+		http.StatusForbidden:          "incorrect/expired",
+		http.StatusNotFound:           "not found",
+		http.StatusTooManyRequests:    "retry after some time",
+		http.StatusBadGateway:         "temporary issue",
+		http.StatusServiceUnavailable: "unavailable",
+		http.StatusGatewayTimeout:     "slow to respond",
+	}
+
+	for status, want := range cases {
+		got := mapEnrollError(&HTTPStatusError{StatusCode: status})
+		require.ErrorContains(t, got, want)
+	}
+
+	other := &HTTPStatusError{StatusCode: http.StatusTeapot}
+	require.Equal(t, other, mapEnrollError(other))
+
+	plain := errors.New("plain")
+	require.Equal(t, plain, mapEnrollError(plain))
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
 }
 
 func mustParseURL(t *testing.T, raw string) *url.URL {

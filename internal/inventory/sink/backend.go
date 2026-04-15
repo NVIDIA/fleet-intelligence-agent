@@ -20,40 +20,52 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/mapper"
 )
 
 type backendSink struct {
-	client backendclient.Client
-	jwt    func(context.Context) (string, error)
+	state         agentstate.State
+	clientFactory func(rawBaseURL string) (backendclient.Client, error)
 }
 
-// NewBackendSink creates the backend inventory sink skeleton.
-func NewBackendSink(client backendclient.Client, jwt func(context.Context) (string, error)) inventory.Sink {
+// NewBackendSink creates the backend inventory sink.
+func NewBackendSink(state agentstate.State) inventory.Sink {
 	return &backendSink{
-		client: client,
-		jwt:    jwt,
+		state:         state,
+		clientFactory: backendclient.New,
 	}
 }
 
 func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) error {
-	if s.jwt == nil {
-		return fmt.Errorf("inventory backend export requires jwt provider")
+	if s.state == nil {
+		return fmt.Errorf("inventory backend export requires agent state")
 	}
-	if s.client == nil {
-		return fmt.Errorf("inventory backend export requires backend client")
+	if s.clientFactory == nil {
+		return fmt.Errorf("inventory backend export requires backend client factory")
 	}
 	if snap == nil {
 		return fmt.Errorf("inventory backend export requires inventory snapshot")
 	}
-	jwt, err := s.jwt(ctx)
+	baseURL, ok, err := s.state.GetBackendBaseURL(ctx)
 	if err != nil {
 		return err
 	}
-	if jwt == "" {
-		return fmt.Errorf("inventory backend export received empty jwt")
+	if !ok || baseURL == "" {
+		return inventory.ErrNotReady
 	}
-	return s.client.UpsertNode(ctx, snap.NodeID, mapper.ToNodeUpsertRequest(snap), jwt)
+	jwt, ok, err := s.state.GetJWT(ctx)
+	if err != nil {
+		return err
+	}
+	if !ok || jwt == "" {
+		return inventory.ErrNotReady
+	}
+	client, err := s.clientFactory(baseURL)
+	if err != nil {
+		return fmt.Errorf("create backend client: %w", err)
+	}
+	return client.UpsertNode(ctx, snap.NodeID, mapper.ToNodeUpsertRequest(snap), jwt)
 }

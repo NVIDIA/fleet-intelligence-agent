@@ -17,6 +17,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -52,10 +53,12 @@ func TestEnrollCommandBlocksOnFailedPrecheck(t *testing.T) {
 	originalRunPrecheck := runPrecheck
 	originalPerformEnrollment := performEnrollment
 	originalStoreConfig := storeEnrollmentConfig
+	originalInventorySync := performInventorySync
 	t.Cleanup(func() {
 		runPrecheck = originalRunPrecheck
 		performEnrollment = originalPerformEnrollment
 		storeEnrollmentConfig = originalStoreConfig
+		performInventorySync = originalInventorySync
 	})
 
 	enrollmentCalled := false
@@ -70,9 +73,10 @@ func TestEnrollCommandBlocksOnFailedPrecheck(t *testing.T) {
 		enrollmentCalled = true
 		return "jwt-token", nil
 	}
-	storeEnrollmentConfig = func(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken string) error {
+	storeEnrollmentConfig = func(baseURL, enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken string) error {
 		return nil
 	}
+	performInventorySync = func(context.Context) error { return nil }
 
 	out := &bytes.Buffer{}
 	app := App()
@@ -90,10 +94,12 @@ func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 	originalRunPrecheck := runPrecheck
 	originalPerformEnrollment := performEnrollment
 	originalStoreConfig := storeEnrollmentConfig
+	originalInventorySync := performInventorySync
 	t.Cleanup(func() {
 		runPrecheck = originalRunPrecheck
 		performEnrollment = originalPerformEnrollment
 		storeEnrollmentConfig = originalStoreConfig
+		performInventorySync = originalInventorySync
 	})
 
 	enrollmentCalled := false
@@ -108,9 +114,10 @@ func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 		enrollmentCalled = true
 		return "jwt-token", nil
 	}
-	storeEnrollmentConfig = func(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken string) error {
+	storeEnrollmentConfig = func(baseURL, enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken string) error {
 		return nil
 	}
+	performInventorySync = func(context.Context) error { return nil }
 
 	app := App()
 	app.Writer = &bytes.Buffer{}
@@ -130,6 +137,7 @@ func TestStoreConfigInMetadataSecuresFreshStateFile(t *testing.T) {
 	t.Setenv("HOME", tmpHome)
 
 	err := storeConfigInMetadata(
+		"https://example.com",
 		"https://example.com/api/v1/health/enroll",
 		"https://example.com/api/v1/health/metrics",
 		"https://example.com/api/v1/health/logs",

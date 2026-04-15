@@ -61,9 +61,3 @@ type EvidenceCollector interface {
 type Submitter interface {
 	Submit(ctx context.Context, result *Result, jwt string) error
 }
-
-// StateStore is the attestation loop view of local transient store state.
-type StateStore interface {
-	PutAttestation(ctx context.Context, result *Result) error
-	GetAttestation(ctx context.Context) (*Result, bool, error)
-}

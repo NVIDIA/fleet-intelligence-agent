@@ -19,13 +19,15 @@ package source
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
 // MachineInfoCollector is the local machine inventory collector dependency.
 type MachineInfoCollector interface {
-	Collect(ctx context.Context) (*inventory.Snapshot, error)
+	Collect(ctx context.Context) (*machineinfo.MachineInfo, error)
 }
 
 type machineInfoSource struct {
@@ -41,5 +43,98 @@ func (s *machineInfoSource) Collect(ctx context.Context) (*inventory.Snapshot, e
 	if s.collector == nil {
 		return nil, fmt.Errorf("machine info collector is required")
 	}
-	return s.collector.Collect(ctx)
+	info, err := s.collector.Collect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if info == nil {
+		return nil, fmt.Errorf("machine info collector returned nil machine info")
+	}
+
+	snap := &inventory.Snapshot{
+		CollectedAt:             time.Now().UTC(),
+		NodeID:                  info.MachineID,
+		Hostname:                info.Hostname,
+		MachineID:               info.MachineID,
+		SystemUUID:              info.SystemUUID,
+		BootID:                  info.BootID,
+		OperatingSystem:         info.OperatingSystem,
+		OSImage:                 info.OSImage,
+		KernelVersion:           info.KernelVersion,
+		FleetintVersion:         info.FleetintVersion,
+		GPUDriverVersion:        info.GPUDriverVersion,
+		CUDAVersion:             info.CUDAVersion,
+		DCGMVersion:             info.DCGMVersion,
+		ContainerRuntimeVersion: info.ContainerRuntimeVersion,
+	}
+
+	if info.CPUInfo != nil {
+		snap.Resources.CPUInfo = inventory.CPUInfo{
+			Type:         info.CPUInfo.Type,
+			Manufacturer: info.CPUInfo.Manufacturer,
+			Architecture: info.CPUInfo.Architecture,
+			LogicalCores: info.CPUInfo.LogicalCores,
+		}
+	}
+	if info.MemoryInfo != nil {
+		snap.Resources.MemoryInfo = inventory.MemoryInfo{
+			TotalBytes: info.MemoryInfo.TotalBytes,
+		}
+	}
+	if info.GPUInfo != nil {
+		snap.Resources.GPUInfo = inventory.GPUInfo{
+			Product:      info.GPUInfo.Product,
+			Manufacturer: info.GPUInfo.Manufacturer,
+			Architecture: info.GPUInfo.Architecture,
+			Memory:       info.GPUInfo.Memory,
+		}
+		if len(info.GPUInfo.GPUs) > 0 {
+			snap.Resources.GPUInfo.GPUs = make([]inventory.GPUDevice, 0, len(info.GPUInfo.GPUs))
+			for _, gpu := range info.GPUInfo.GPUs {
+				snap.Resources.GPUInfo.GPUs = append(snap.Resources.GPUInfo.GPUs, inventory.GPUDevice{
+					UUID:         gpu.UUID,
+					BusID:        gpu.BusID,
+					SN:           gpu.SN,
+					MinorID:      gpu.MinorID,
+					BoardID:      int(gpu.BoardID),
+					VBIOSVersion: gpu.VBIOSVersion,
+					ChassisSN:    gpu.ChassisSN,
+					GPUIndex:     gpu.GPUIndex,
+				})
+			}
+		}
+	}
+	if info.DiskInfo != nil {
+		snap.Resources.DiskInfo = inventory.DiskInfo{
+			ContainerRootDisk: info.DiskInfo.ContainerRootDisk,
+		}
+		if len(info.DiskInfo.BlockDevices) > 0 {
+			snap.Resources.DiskInfo.BlockDevices = make([]inventory.BlockDevice, 0, len(info.DiskInfo.BlockDevices))
+			for _, disk := range info.DiskInfo.BlockDevices {
+				snap.Resources.DiskInfo.BlockDevices = append(snap.Resources.DiskInfo.BlockDevices, inventory.BlockDevice{
+					Name:       disk.Name,
+					Type:       disk.Type,
+					Size:       disk.Size,
+					WWN:        disk.WWN,
+					MountPoint: disk.MountPoint,
+					FSType:     disk.FSType,
+					PartUUID:   disk.PartUUID,
+					Parents:    append([]string(nil), disk.Parents...),
+				})
+			}
+		}
+	}
+	if info.NICInfo != nil && len(info.NICInfo.PrivateIPInterfaces) > 0 {
+		snap.Resources.NICInfo.PrivateIPInterfaces = make([]inventory.NICInterface, 0, len(info.NICInfo.PrivateIPInterfaces))
+		for _, nic := range info.NICInfo.PrivateIPInterfaces {
+			snap.Resources.NICInfo.PrivateIPInterfaces = append(snap.Resources.NICInfo.PrivateIPInterfaces, inventory.NICInterface{
+				Interface: nic.Interface,
+				MAC:       nic.MAC,
+				IP:        nic.IP,
+			})
+		}
+		snap.NetPrivateIP = info.NICInfo.PrivateIPInterfaces[0].IP
+	}
+
+	return snap, nil
 }
