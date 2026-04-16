@@ -31,7 +31,6 @@ import (
 	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 	"github.com/google/uuid"
 
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
@@ -52,15 +51,14 @@ func GenerateEventID() string {
 
 // HealthData represents the collected health data
 type HealthData struct {
-	CollectionID    string
-	MachineID       string
-	Timestamp       time.Time
-	MachineInfo     *machineinfo.MachineInfo
-	Metrics         pkgmetrics.Metrics
-	Events          eventstore.Events
-	ComponentData   map[string]interface{}
-	AttestationData *attestation.AttestationData
-	ConfigEntries   []config.ConfigEntry
+	CollectionID  string
+	MachineID     string
+	Timestamp     time.Time
+	MachineInfo   *machineinfo.MachineInfo
+	Metrics       pkgmetrics.Metrics
+	Events        eventstore.Events
+	ComponentData map[string]interface{}
+	ConfigEntries []config.ConfigEntry
 }
 
 // Collector defines the interface for collecting health data
@@ -70,17 +68,15 @@ type Collector interface {
 
 // collector implements the Collector interface
 type collector struct {
-	config                    *config.HealthExporterConfig
-	configEntries             []config.ConfigEntry // Cached config entries computed once at startup
-	metricsStore              pkgmetrics.Store
-	eventStore                eventstore.Store
-	componentsRegistry        components.Registry
-	nvmlInstance              nvidianvml.Instance
-	attestationManager        *attestation.Manager
-	lastAttestationCollection time.Time
-	machineID                 string            // Agent's stable identity from server initialization
-	dcgmGPUIndexes            map[string]string // UUID → DCGM device ID override for GPU indices
-	machineInfoProvider       machineInfoProvider
+	config              *config.HealthExporterConfig
+	configEntries       []config.ConfigEntry // Cached config entries computed once at startup
+	metricsStore        pkgmetrics.Store
+	eventStore          eventstore.Store
+	componentsRegistry  components.Registry
+	nvmlInstance        nvidianvml.Instance
+	machineID           string            // Agent's stable identity from server initialization
+	dcgmGPUIndexes      map[string]string // UUID → DCGM device ID override for GPU indices
+	machineInfoProvider machineInfoProvider
 }
 
 // New creates a new health data collector
@@ -92,7 +88,7 @@ func New(
 	eventStore eventstore.Store,
 	componentsRegistry components.Registry,
 	nvmlInstance nvidianvml.Instance,
-	attestationManager *attestation.Manager,
+	_ any,
 	machineID string,
 	dcgmGPUIndexes map[string]string,
 ) Collector {
@@ -120,7 +116,6 @@ func New(
 		eventStore:          eventStore,
 		componentsRegistry:  componentsRegistry,
 		nvmlInstance:        nvmlInstance,
-		attestationManager:  attestationManager,
 		machineID:           machineID,
 		dcgmGPUIndexes:      dcgmGPUIndexes,
 		machineInfoProvider: provider,
@@ -168,12 +163,6 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 		if err := c.collectComponentData(data); err != nil {
 			log.Logger.Errorw("Failed to collect component data", "error", err)
 		}
-	}
-
-	// Collect attestation data if provider is available
-	// Attestation is always enabled if manager is available
-	if err := c.collectAttestationData(data); err != nil {
-		log.Logger.Errorw("Failed to collect attestation data", "error", err)
 	}
 
 	// Collect config data
@@ -333,25 +322,6 @@ func (c *collector) collectComponentData(data *HealthData) error {
 
 	data.ComponentData = componentData
 	log.Logger.Debugw("Collected component data", "count", len(componentData))
-	return nil
-}
-
-// collectAttestationData collects attestation data from the attestation manager if available and updated
-func (c *collector) collectAttestationData(data *HealthData) error {
-	if c.attestationManager == nil {
-		log.Logger.Debugw("No attestation manager available, skipping attestation data collection")
-		return nil
-	}
-
-	// Get latest attestation data (success or failure info)
-	attestationData := c.attestationManager.GetAttestationData()
-	data.AttestationData = attestationData
-
-	// Update collection timestamp if data was newly updated
-	if c.attestationManager.IsAttestationDataUpdated(c.lastAttestationCollection) {
-		c.lastAttestationCollection = time.Now().UTC()
-	}
-
 	return nil
 }
 

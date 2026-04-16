@@ -21,6 +21,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 )
 
@@ -34,6 +37,8 @@ type JWTProvider interface {
 type Manager interface {
 	Run(ctx context.Context) error
 	CollectOnce(ctx context.Context) (*Result, error)
+	LastResult() *Result
+	IsResultUpdated(since time.Time) bool
 }
 
 type manager struct {
@@ -45,7 +50,8 @@ type manager struct {
 	submitter      Submitter
 	interval       time.Duration
 
-	lastResult *Result
+	lastResult  *Result
+	lastUpdated time.Time
 }
 
 // NewManager creates an attestation loop manager skeleton.
@@ -68,10 +74,29 @@ func NewManager(
 }
 
 func (m *manager) Run(ctx context.Context) error {
-	if _, err := m.CollectOnce(ctx); err != nil {
-		return err
+	if m.nodeIDProvider == nil || m.jwtProvider == nil || m.nonceProvider == nil || m.collector == nil || m.submitter == nil {
+		return fmt.Errorf("attestation loop dependencies are incomplete")
 	}
-	return fmt.Errorf("attestation loop run loop not implemented")
+	if _, err := m.CollectOnce(ctx); err != nil {
+		log.Logger.Warnw("initial attestation workflow failed", "error", err)
+	}
+	if m.interval <= 0 {
+		return nil
+	}
+
+	ticker := time.NewTicker(m.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			if _, err := m.CollectOnce(ctx); err != nil {
+				log.Logger.Warnw("periodic attestation workflow failed", "error", err)
+			}
+		}
+	}
 }
 
 func (m *manager) CollectOnce(ctx context.Context) (*Result, error) {
@@ -115,11 +140,28 @@ func (m *manager) CollectOnce(ctx context.Context) (*Result, error) {
 	m.mu.Lock()
 	cloned := *result
 	m.lastResult = &cloned
+	m.lastUpdated = time.Now().UTC()
 	m.mu.Unlock()
 	if err := m.submitter.Submit(ctx, result, jwt); err != nil {
 		return nil, err
 	}
 	return result, nil
+}
+
+func (m *manager) LastResult() *Result {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.lastResult == nil {
+		return nil
+	}
+	cloned := *m.lastResult
+	return &cloned
+}
+
+func (m *manager) IsResultUpdated(since time.Time) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.lastUpdated.After(since)
 }
 
 type backendSubmitter struct {
@@ -147,4 +189,51 @@ func (s *backendSubmitter) Submit(ctx context.Context, result *Result, jwt strin
 		return fmt.Errorf("attestation submission requires jwt")
 	}
 	return s.client.SubmitAttestation(ctx, result.NodeID, toAttestationRequest(result), jwt)
+}
+
+type stateJWTProvider struct {
+	state agentstate.State
+}
+
+// NewStateJWTProvider returns a JWT provider backed by persisted agent state.
+func NewStateJWTProvider(state agentstate.State) JWTProvider {
+	return &stateJWTProvider{state: state}
+}
+
+func (p *stateJWTProvider) GetJWT(ctx context.Context) (string, error) {
+	if p.state == nil {
+		return "", fmt.Errorf("jwt provider requires agent state")
+	}
+	value, ok, err := p.state.GetJWT(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !ok || value == "" {
+		return "", fmt.Errorf("jwt not available in agent state")
+	}
+	return value, nil
+}
+
+func (p *stateJWTProvider) SetJWT(ctx context.Context, value string) error {
+	if p.state == nil {
+		return fmt.Errorf("jwt provider requires agent state")
+	}
+	return p.state.SetJWT(ctx, value)
+}
+
+// NewStateNodeIDProvider returns a node ID provider backed by persisted agent state.
+func NewStateNodeIDProvider(state agentstate.State) func(context.Context) (string, error) {
+	return func(ctx context.Context) (string, error) {
+		if state == nil {
+			return "", fmt.Errorf("node ID provider requires agent state")
+		}
+		value, ok, err := state.GetNodeID(ctx)
+		if err != nil {
+			return "", err
+		}
+		if !ok || value == "" {
+			return "", fmt.Errorf("node ID not available in agent state")
+		}
+		return value, nil
+	}
 }

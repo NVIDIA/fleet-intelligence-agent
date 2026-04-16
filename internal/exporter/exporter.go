@@ -30,7 +30,6 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
@@ -46,13 +45,12 @@ var newBackendClient = backendclient.New
 
 // healthExporter implements the Exporter interface with improved architecture
 type healthExporter struct {
-	ctx                context.Context
-	cancel             context.CancelFunc
-	options            *exporterOptions
-	collector          collector.Collector
-	fileWriter         writer.FileWriter
-	httpWriter         writer.HTTPWriter
-	attestationManager *attestation.Manager
+	ctx        context.Context
+	cancel     context.CancelFunc
+	options    *exporterOptions
+	collector  collector.Collector
+	fileWriter writer.FileWriter
+	httpWriter writer.HTTPWriter
 
 	// Last export timestamp for tracking
 	lastExport time.Time
@@ -78,10 +76,6 @@ func New(ctx context.Context, opts ...ExporterOption) (Exporter, error) {
 	}
 	options.setDefaults()
 
-	// Create attestation manager (always enabled)
-	attestationManager := attestation.NewManager(cctx, options.nvmlInstance, &options.config.Attestation)
-	log.Logger.Infow("Attestation manager created", "interval", options.config.Attestation.Interval.Duration, "jitter_enabled", options.config.Attestation.JitterEnabled)
-
 	// Get all component names for config export
 	allComponentNames := registry.AllComponentNames()
 
@@ -93,7 +87,7 @@ func New(ctx context.Context, opts ...ExporterOption) (Exporter, error) {
 		options.eventStore,
 		options.componentsRegistry,
 		options.nvmlInstance,
-		attestationManager,
+		nil,
 		options.machineID,
 		options.dcgmGPUIndexes,
 	)
@@ -105,13 +99,12 @@ func New(ctx context.Context, opts ...ExporterOption) (Exporter, error) {
 	httpWriter := writer.NewHTTPWriter(options.httpClient, otlpConverter)
 
 	exporter := &healthExporter{
-		ctx:                cctx,
-		cancel:             cancel,
-		options:            options,
-		collector:          dataCollector,
-		fileWriter:         fileWriter,
-		httpWriter:         httpWriter,
-		attestationManager: attestationManager,
+		ctx:        cctx,
+		cancel:     cancel,
+		options:    options,
+		collector:  dataCollector,
+		fileWriter: fileWriter,
+		httpWriter: httpWriter,
 	}
 
 	// Set JWT refresh function on the HTTP writer
@@ -128,11 +121,6 @@ func (e *healthExporter) Start() error {
 	}
 
 	log.Logger.Infow("Starting health exporter")
-
-	// Start the attestation manager if enabled
-	if e.attestationManager != nil {
-		e.attestationManager.Start()
-	}
 
 	// Start the health export ticker
 	go func() {
@@ -160,9 +148,6 @@ func (e *healthExporter) Start() error {
 // Stop gracefully shuts down the exporter
 func (e *healthExporter) Stop() error {
 	log.Logger.Infow("Stopping health exporter")
-	if e.attestationManager != nil {
-		e.attestationManager.Stop()
-	}
 	e.cancel()
 	return nil
 }

@@ -28,7 +28,6 @@ import (
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
@@ -358,57 +357,6 @@ func TestOTLPConverter_Convert_WithMachineInfo(t *testing.T) {
 	}
 	assert.True(t, hasServiceName, "Should have service.name attribute")
 	assert.Equal(t, "4.2.3", findAttribute(t, rm.Resource.Attributes, "dcgmVersion").GetStringValue())
-}
-
-func TestOTLPConverter_Convert_WithAttestationData(t *testing.T) {
-	attestationData := &attestation.AttestationData{
-		Success: true,
-		SDKResponse: attestation.AttestationSDKResponse{
-			Evidences: []attestation.EvidenceItem{
-				{
-					Arch:          "BLACKWELL",
-					Certificate:   "test-cert",
-					DriverVersion: "575.28",
-					Evidence:      "test-evidence",
-					Nonce:         "test-nonce",
-					VBIOSVersion:  "96.00.AF.00.01",
-					Version:       "1.0",
-				},
-			},
-			ResultCode:    0,
-			ResultMessage: "Ok",
-		},
-		NonceRefreshTimestamp: time.Date(2025, 11, 5, 12, 0, 0, 0, time.UTC),
-	}
-
-	data := &collector.HealthData{
-		Timestamp:       time.Now(),
-		MachineID:       "test-machine",
-		AttestationData: attestationData,
-	}
-
-	converter := NewOTLPConverter()
-	otlpData := converter.Convert(data)
-
-	require.NotNil(t, otlpData)
-	require.NotNil(t, otlpData.Logs)
-
-	// Should NOT have attestation logs
-	rl := otlpData.Logs.ResourceLogs[0]
-	logs := rl.ScopeLogs[0].LogRecords
-	assert.Empty(t, logs, "Should not have attestation logs")
-
-	// Should have attestation data in resource attributes
-	rm := otlpData.Metrics.ResourceMetrics[0]
-	attrs := rm.Resource.Attributes
-	foundAttestation := false
-	for _, attr := range attrs {
-		if contains(attr.Key, "attestation") {
-			foundAttestation = true
-			break
-		}
-	}
-	assert.True(t, foundAttestation, "Should have attestation data in resource attributes")
 }
 
 func TestOTLPConverter_ConvertStructToOTLPAttributes(t *testing.T) {
@@ -748,55 +696,6 @@ func TestBuildGPUUUIDToIndexMap(t *testing.T) {
 	})
 }
 
-func TestOTLPConverter_GetAttestationEvidencesCount(t *testing.T) {
-	tests := []struct {
-		name          string
-		data          *collector.HealthData
-		expectedCount int
-	}{
-		{
-			name: "with_evidences",
-			data: &collector.HealthData{
-				AttestationData: &attestation.AttestationData{
-					SDKResponse: attestation.AttestationSDKResponse{
-						Evidences: []attestation.EvidenceItem{
-							{Arch: "BLACKWELL"},
-							{Arch: "HOPPER"},
-						},
-					},
-				},
-			},
-			expectedCount: 2,
-		},
-		{
-			name: "nil_attestation",
-			data: &collector.HealthData{
-				AttestationData: nil,
-			},
-			expectedCount: 0,
-		},
-		{
-			name: "empty_evidences",
-			data: &collector.HealthData{
-				AttestationData: &attestation.AttestationData{
-					SDKResponse: attestation.AttestationSDKResponse{
-						Evidences: []attestation.EvidenceItem{},
-					},
-				},
-			},
-			expectedCount: 0,
-		},
-	}
-
-	converter := &otlpConverter{}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			count := converter.getAttestationEvidencesCount(tt.data)
-			assert.Equal(t, tt.expectedCount, count)
-		})
-	}
-}
-
 func TestOTLPConverter_SummaryMetric(t *testing.T) {
 	data := &collector.HealthData{
 		Timestamp: time.Now(),
@@ -900,17 +799,6 @@ func TestOTLPConverter_Convert_AllData(t *testing.T) {
 		},
 		MachineInfo: &machineinfo.MachineInfo{
 			FleetintVersion: "0.1.5",
-		},
-		AttestationData: &attestation.AttestationData{
-			Success: true,
-			SDKResponse: attestation.AttestationSDKResponse{
-				Evidences: []attestation.EvidenceItem{
-					{Arch: "BLACKWELL", VBIOSVersion: "96.00"},
-				},
-				ResultCode:    0,
-				ResultMessage: "Ok",
-			},
-			NonceRefreshTimestamp: time.Now(),
 		},
 	}
 

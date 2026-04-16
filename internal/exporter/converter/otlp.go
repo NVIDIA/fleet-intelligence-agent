@@ -137,12 +137,6 @@ func (c *otlpConverter) createOTLPResource(data *collector.HealthData) *resource
 		attributes = append(attributes, machineInfoAttributes...)
 	}
 
-	// Add attestation data attributes if available using reflection
-	if data.AttestationData != nil {
-		attestationAttributes := convertStructToOTLPAttributesWithPrefix(data.AttestationData, "attestation")
-		attributes = append(attributes, attestationAttributes...)
-	}
-
 	return &resourcev1.Resource{
 		Attributes: attributes,
 	}
@@ -209,12 +203,6 @@ func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metr
 								Key: "component_data_count",
 								Value: &commonv1.AnyValue{
 									Value: &commonv1.AnyValue_IntValue{IntValue: int64(len(data.ComponentData))},
-								},
-							},
-							{
-								Key: "attestation_evidences_count",
-								Value: &commonv1.AnyValue{
-									Value: &commonv1.AnyValue_IntValue{IntValue: int64(c.getAttestationEvidencesCount(data))},
 								},
 							},
 						},
@@ -645,12 +633,4 @@ func convertStructToOTLPAttributesWithPrefix(v interface{}, prefix string) []*co
 	}
 
 	return attributes
-}
-
-// getAttestationEvidencesCount returns the count of attestation evidences
-func (c *otlpConverter) getAttestationEvidencesCount(data *collector.HealthData) int {
-	if data.AttestationData == nil {
-		return 0
-	}
-	return len(data.AttestationData.SDKResponse.Evidences)
 }

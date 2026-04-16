@@ -15,7 +15,16 @@
 
 package attestationloop
 
-import "github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
+)
+
+var newBackendClient = backendclient.New
 
 func toAttestationRequest(r *Result) *backendclient.AttestationRequest {
 	if r == nil {
@@ -49,4 +58,56 @@ func toAttestationRequest(r *Result) *backendclient.AttestationRequest {
 	}
 
 	return req
+}
+
+type stateBackendClientFactory struct {
+	state agentstate.State
+}
+
+func (f *stateBackendClientFactory) client(ctx context.Context) (backendclient.Client, error) {
+	if f.state == nil {
+		return nil, fmt.Errorf("backend client factory requires agent state")
+	}
+	baseURL, ok, err := f.state.GetBackendBaseURL(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !ok || baseURL == "" {
+		return nil, fmt.Errorf("backend base URL not available in agent state")
+	}
+	return newBackendClient(baseURL)
+}
+
+type stateNonceProvider struct {
+	factory *stateBackendClientFactory
+}
+
+// NewStateNonceProvider creates a nonce provider that resolves backend state dynamically.
+func NewStateNonceProvider(state agentstate.State) NonceProvider {
+	return &stateNonceProvider{factory: &stateBackendClientFactory{state: state}}
+}
+
+func (p *stateNonceProvider) GetNonce(ctx context.Context, nodeID, jwt string) (string, time.Time, string, error) {
+	client, err := p.factory.client(ctx)
+	if err != nil {
+		return "", time.Time{}, "", err
+	}
+	return NewBackendNonceProvider(client).GetNonce(ctx, nodeID, jwt)
+}
+
+type stateSubmitter struct {
+	factory *stateBackendClientFactory
+}
+
+// NewStateBackendSubmitter creates a submitter that resolves backend state dynamically.
+func NewStateBackendSubmitter(state agentstate.State) Submitter {
+	return &stateSubmitter{factory: &stateBackendClientFactory{state: state}}
+}
+
+func (s *stateSubmitter) Submit(ctx context.Context, result *Result, jwt string) error {
+	client, err := s.factory.client(ctx)
+	if err != nil {
+		return err
+	}
+	return NewBackendSubmitter(client).Submit(ctx, result, jwt)
 }

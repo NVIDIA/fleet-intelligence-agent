@@ -19,6 +19,8 @@ package attestationloop
 import (
 	"context"
 	"time"
+
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
 )
 
 // Result is the agent-owned attestation state model for the new backend sync loop.
@@ -60,4 +62,36 @@ type EvidenceCollector interface {
 // Submitter submits attestation results to the backend.
 type Submitter interface {
 	Submit(ctx context.Context, result *Result, jwt string) error
+}
+
+// LegacyAttestationData converts the workflow result into the legacy attestation payload shape
+// still consumed by the exporter collector path.
+func (r *Result) LegacyAttestationData() *attestation.AttestationData {
+	if r == nil {
+		return nil
+	}
+	data := &attestation.AttestationData{
+		NonceRefreshTimestamp: r.NonceRefreshTimestamp,
+		Success:               r.Success,
+		ErrorMessage:          r.ErrorMessage,
+		SDKResponse: attestation.AttestationSDKResponse{
+			ResultCode:    r.SDKResponse.ResultCode,
+			ResultMessage: r.SDKResponse.ResultMessage,
+		},
+	}
+	if len(r.SDKResponse.Evidences) > 0 {
+		data.SDKResponse.Evidences = make([]attestation.EvidenceItem, 0, len(r.SDKResponse.Evidences))
+		for _, ev := range r.SDKResponse.Evidences {
+			data.SDKResponse.Evidences = append(data.SDKResponse.Evidences, attestation.EvidenceItem{
+				Arch:          ev.Arch,
+				Certificate:   ev.Certificate,
+				DriverVersion: ev.DriverVersion,
+				Evidence:      ev.Evidence,
+				Nonce:         ev.Nonce,
+				VBIOSVersion:  ev.VBIOSVersion,
+				Version:       ev.Version,
+			})
+		}
+	}
+	return data
 }
