@@ -132,7 +132,7 @@ func syncInventoryOnce(ctx context.Context) error {
 			DisabledComponents:     disabledComponents,
 		},
 	)
-	manager := inventory.NewManager(src, sink, 0)
+	manager := inventory.NewManager(src, sink, inventory.InventoryConfig{})
 	_, err = manager.CollectOnce(ctx)
 	return err
 }

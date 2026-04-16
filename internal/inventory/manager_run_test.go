@@ -33,13 +33,13 @@ type nilSnapshotSource struct{}
 func (nilSnapshotSource) Collect(context.Context) (*Snapshot, error) { return nil, nil }
 
 func TestManagerCollectOnceErrors(t *testing.T) {
-	_, err := NewManager(nil, nil, 0).CollectOnce(context.Background())
+	_, err := NewManager(nil, nil, InventoryConfig{}).CollectOnce(context.Background())
 	require.ErrorContains(t, err, "inventory source is required")
 
-	_, err = NewManager(errSource{err: errors.New("boom")}, nil, 0).CollectOnce(context.Background())
+	_, err = NewManager(errSource{err: errors.New("boom")}, nil, InventoryConfig{}).CollectOnce(context.Background())
 	require.ErrorContains(t, err, "boom")
 
-	_, err = NewManager(nilSnapshotSource{}, nil, 0).CollectOnce(context.Background())
+	_, err = NewManager(nilSnapshotSource{}, nil, InventoryConfig{}).CollectOnce(context.Background())
 	require.ErrorContains(t, err, "nil snapshot")
 }
 
@@ -49,7 +49,7 @@ func TestManagerRunWithZeroInterval(t *testing.T) {
 	}
 	sink := &fakeSink{}
 
-	err := NewManager(src, sink, 0).Run(context.Background())
+	err := NewManager(src, sink, InventoryConfig{}).Run(context.Background())
 	require.NoError(t, err)
 	require.Len(t, sink.exported, 1)
 }
@@ -63,7 +63,7 @@ func TestManagerRunStopsOnContextCancel(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- NewManager(src, sink, 10*time.Millisecond).Run(ctx)
+		done <- NewManager(src, sink, InventoryConfig{Interval: 10 * time.Millisecond}).Run(ctx)
 	}()
 
 	time.Sleep(25 * time.Millisecond)
@@ -72,4 +72,48 @@ func TestManagerRunStopsOnContextCancel(t *testing.T) {
 	err := <-done
 	require.ErrorIs(t, err, context.Canceled)
 	require.NotEmpty(t, sink.exported)
+}
+
+func TestSleepWithContext(t *testing.T) {
+	require.NoError(t, sleepWithContext(context.Background(), 0))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.ErrorIs(t, sleepWithContext(ctx, 0), context.Canceled)
+
+	ctx, cancel = context.WithCancel(context.Background())
+	cancel()
+	require.ErrorIs(t, sleepWithContext(ctx, time.Hour), context.Canceled)
+}
+
+func TestInventoryJitterHelpers(t *testing.T) {
+	require.Equal(t, time.Duration(0), initialJitterCap(0))
+	require.Equal(t, 15*time.Second, initialJitterCap(time.Minute))
+	require.Equal(t, 30*time.Minute, initialJitterCap(4*time.Hour))
+
+	require.Equal(t, time.Duration(0), retryJitterCap(0))
+	require.Equal(t, 30*time.Second, retryJitterCap(time.Minute))
+	require.Equal(t, 5*time.Minute, retryJitterCap(20*time.Minute))
+
+	require.Equal(t, time.Duration(0), calculateJitter(0))
+	jitter := calculateJitter(50 * time.Millisecond)
+	require.GreaterOrEqual(t, jitter, time.Duration(0))
+	require.Less(t, jitter, 50*time.Millisecond)
+}
+
+func TestManagerRunUsesRetryIntervalWithoutJitter(t *testing.T) {
+	src := errSource{err: errors.New("boom")}
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := NewManager(src, nil, InventoryConfig{
+		Interval:      time.Hour,
+		RetryInterval: 5 * time.Millisecond,
+	}).Run(ctx)
+	elapsed := time.Since(start)
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.GreaterOrEqual(t, elapsed, 15*time.Millisecond)
+	require.Less(t, elapsed, 100*time.Millisecond)
 }

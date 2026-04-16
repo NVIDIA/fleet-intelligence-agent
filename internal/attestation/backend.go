@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package attestationloop
+package attestation
 
 import (
 	"context"
@@ -73,7 +73,7 @@ func (f *stateBackendClientFactory) client(ctx context.Context) (backendclient.C
 		return nil, err
 	}
 	if !ok || baseURL == "" {
-		return nil, fmt.Errorf("backend base URL not available in agent state")
+		return nil, fmt.Errorf("%w: backend base URL not available in agent state", ErrNotEnrolled)
 	}
 	return newBackendClient(baseURL)
 }

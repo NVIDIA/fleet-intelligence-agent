@@ -50,7 +50,10 @@ These environment variables are read by `fleetint run` at startup.
 | `FLEETINT_EVENTS_LOOKBACK` | Lookback window for events included in each export. | `1m` | `/etc/default/fleetint` | `env.FLEETINT_EVENTS_LOOKBACK` |
 | `FLEETINT_CHECK_INTERVAL` | Health check interval for monitored components. Valid range: `1s` to `24h`. | `1m` | `/etc/default/fleetint` | `env.FLEETINT_CHECK_INTERVAL` |
 | `FLEETINT_RETRY_MAX_ATTEMPTS` | Maximum retry attempts for failed exports. Minimum: `0`. | `3` | `/etc/default/fleetint` | `env.FLEETINT_RETRY_MAX_ATTEMPTS` |
-| `FLEETINT_ATTESTATION_JITTER_ENABLED` | Enable random startup jitter for attestation scheduling. | `true` | `/etc/default/fleetint` | `env.FLEETINT_ATTESTATION_JITTER_ENABLED` |
+| `FLEETINT_INVENTORY_ENABLED` | Enable or disable the inventory loop. | `true` | `/etc/default/fleetint` | `env.FLEETINT_INVENTORY_ENABLED` |
+| `FLEETINT_INVENTORY_INTERVAL` | Inventory loop interval override. Minimum: `1m`. | `1h` | `/etc/default/fleetint` | `env.FLEETINT_INVENTORY_INTERVAL` |
+| `FLEETINT_ATTESTATION_ENABLED` | Enable or disable the attestation loop. | `true` | `/etc/default/fleetint` | `env.FLEETINT_ATTESTATION_ENABLED` |
+| `FLEETINT_ATTESTATION_INITIAL_INTERVAL` | Initial attestation bootstrap interval before the first successful attestation. Minimum: `1m`. | `5m` | `/etc/default/fleetint` | `env.FLEETINT_ATTESTATION_INITIAL_INTERVAL` |
 | `FLEETINT_ATTESTATION_INTERVAL` | Attestation interval override. | `24h` | `/etc/default/fleetint` | `env.FLEETINT_ATTESTATION_INTERVAL` |
 | `HTTP_PROXY` | Proxy URL for outbound HTTP requests. | empty | `/etc/default/fleetint` | `env.HTTP_PROXY` |
 | `HTTPS_PROXY` | Proxy URL for outbound HTTPS requests. | empty | `/etc/default/fleetint` | `env.HTTPS_PROXY` |
@@ -58,7 +61,7 @@ These environment variables are read by `fleetint run` at startup.
 Notes:
 
 - Duration-valued environment variables use Go duration syntax such as `30s`, `1m`, `10m`, or `24h`.
-- These environment variables modify the health exporter configuration used by `fleetint run`.
+- These environment variables modify the telemetry exporter configuration and runtime loop intervals used by `fleetint run`.
 - `DCGM_URL` and `DCGM_URL_IS_UNIX_SOCKET` configure connectivity to DCGM HostEngine for DCGM-backed components.
 
 ### Bare Metal Example
@@ -95,6 +98,7 @@ env:
   FLEETINT_COLLECT_INTERVAL: "2m"
   FLEETINT_INCLUDE_EVENTS: "false"
   FLEETINT_CHECK_INTERVAL: "30s"
+  FLEETINT_INVENTORY_INTERVAL: "2m"
   HTTPS_PROXY: "http://proxy.example.com:3128"
 ```
 

@@ -96,7 +96,6 @@ func TestCollector_Collect_BasicFlow(t *testing.T) {
 		IncludeMetrics:       false,
 		IncludeEvents:        false,
 		IncludeComponentData: false,
-		Attestation:          config.AttestationConfig{},
 	}
 
 	collector := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil)
@@ -492,7 +491,6 @@ func TestCollector_AllFeaturesEnabled(t *testing.T) {
 		IncludeMetrics:       true,
 		IncludeEvents:        true,
 		IncludeComponentData: true,
-		Attestation:          config.AttestationConfig{},
 		MetricsLookback:      metav1.Duration{Duration: 5 * time.Minute},
 		EventsLookback:       metav1.Duration{Duration: 5 * time.Minute},
 	}

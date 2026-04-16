@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package attestationloop
+package attestation
 
 import (
 	"context"
@@ -181,22 +181,18 @@ func TestStateProvidersAndSubmitter(t *testing.T) {
 	require.Equal(t, "BLACKWELL", recording.lastReq.AttestationData.SDKResponse.Evidences[0].Arch)
 }
 
-func TestLegacyAttestationData(t *testing.T) {
-	result := &Result{
-		NonceRefreshTimestamp: time.Unix(20, 0).UTC(),
-		Success:               false,
-		ErrorMessage:          "boom",
-		SDKResponse: SDKResponse{
-			ResultCode:    9,
-			ResultMessage: "bad",
-			Evidences:     []EvidenceItem{{Arch: "BLACKWELL"}},
-		},
+func TestStateProvidersPropagateBackendClientConstructionErrors(t *testing.T) {
+	orig := newBackendClient
+	t.Cleanup(func() { newBackendClient = orig })
+
+	newBackendClient = func(string) (backendclient.Client, error) {
+		return nil, errors.New("construct failed")
 	}
-	legacy := result.LegacyAttestationData()
-	require.NotNil(t, legacy)
-	require.False(t, legacy.Success)
-	require.Equal(t, "boom", legacy.ErrorMessage)
-	require.Equal(t, 9, legacy.SDKResponse.ResultCode)
-	require.Len(t, legacy.SDKResponse.Evidences, 1)
-	require.Nil(t, (*Result)(nil).LegacyAttestationData())
+	state := &stubState{baseURL: "https://backend.example.com", baseOK: true}
+
+	_, _, _, err := NewStateNonceProvider(state).GetNonce(context.Background(), "node-1", "jwt-token")
+	require.ErrorContains(t, err, "construct failed")
+
+	err = NewStateBackendSubmitter(state).Submit(context.Background(), &Result{NodeID: "node-1"}, "jwt-token")
+	require.ErrorContains(t, err, "construct failed")
 }

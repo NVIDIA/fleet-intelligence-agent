@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package attestationloop
+package attestation
 
 import (
 	"context"
@@ -81,7 +81,7 @@ func TestCollectOnceSuccess(t *testing.T) {
 		&testNonceProvider{nonce: "abc123", refreshTS: refreshTS, refreshedJWT: "new-jwt"},
 		&testEvidenceCollector{resp: &SDKResponse{ResultCode: 200, ResultMessage: "ok"}},
 		submitter,
-		0,
+		AttestationConfig{},
 	)
 
 	result, err := manager.CollectOnce(context.Background())
@@ -103,7 +103,7 @@ func TestCollectOnceCollectorFailureStillSubmitsFailureResult(t *testing.T) {
 		&testNonceProvider{nonce: "abc123"},
 		&testEvidenceCollector{err: errors.New("collect failed")},
 		submitter,
-		0,
+		AttestationConfig{},
 	)
 
 	result, err := manager.CollectOnce(context.Background())
@@ -115,7 +115,7 @@ func TestCollectOnceCollectorFailureStillSubmitsFailureResult(t *testing.T) {
 }
 
 func TestCollectOnceMissingDependencies(t *testing.T) {
-	_, err := NewManager(nil, nil, nil, nil, nil, 0).CollectOnce(context.Background())
+	_, err := NewManager(nil, nil, nil, nil, nil, AttestationConfig{}).CollectOnce(context.Background())
 	require.Error(t, err)
 }
 
@@ -127,17 +127,39 @@ func TestManagerRunAndCachedResult(t *testing.T) {
 		&testNonceProvider{nonce: "abc123"},
 		&testEvidenceCollector{resp: &SDKResponse{ResultCode: 200}},
 		submitter,
-		5*time.Millisecond,
+		AttestationConfig{InitialInterval: 5 * time.Millisecond, Interval: 5 * time.Millisecond},
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	require.NoError(t, mgr.Run(ctx))
+	require.ErrorIs(t, mgr.Run(ctx), context.DeadlineExceeded)
 
 	last := mgr.LastResult()
 	require.NotNil(t, last)
 	require.Equal(t, "node-1", last.NodeID)
 	require.True(t, mgr.IsResultUpdated(time.Time{}))
+}
+
+func TestManagerRunUsesRetryIntervalOnFailure(t *testing.T) {
+	submitter := &testSubmitter{}
+	collector := &testEvidenceCollector{err: errors.New("collect failed")}
+	mgr := NewManager(
+		func(context.Context) (string, error) { return "node-1", nil },
+		&testJWTProvider{jwt: "jwt-token"},
+		&testNonceProvider{nonce: "abc123"},
+		collector,
+		submitter,
+		AttestationConfig{InitialInterval: 5 * time.Millisecond, Interval: time.Hour, RetryInterval: 5 * time.Millisecond},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	require.ErrorIs(t, mgr.Run(ctx), context.DeadlineExceeded)
+
+	last := mgr.LastResult()
+	require.NotNil(t, last)
+	require.False(t, last.Success)
+	require.Equal(t, "collect failed", last.ErrorMessage)
 }
 
 func TestManagerHelpersAndSubmitterErrors(t *testing.T) {
@@ -147,7 +169,7 @@ func TestManagerHelpersAndSubmitterErrors(t *testing.T) {
 		&testNonceProvider{nonce: "abc123"},
 		&testEvidenceCollector{resp: &SDKResponse{}},
 		&testSubmitter{},
-		0,
+		AttestationConfig{},
 	)
 	require.Nil(t, mgr.LastResult())
 	require.False(t, mgr.IsResultUpdated(time.Now().UTC()))
@@ -173,4 +195,56 @@ func TestStateJWTProviderAndNodeIDProviderErrors(t *testing.T) {
 	require.ErrorContains(t, err, "requires agent state")
 	_, err = NewStateNodeIDProvider(&stubState{})(context.Background())
 	require.ErrorContains(t, err, "node ID not available")
+}
+
+func TestSleepWithContext(t *testing.T) {
+	require.NoError(t, sleepWithContext(context.Background(), 0))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.ErrorIs(t, sleepWithContext(ctx, 0), context.Canceled)
+
+	ctx, cancel = context.WithCancel(context.Background())
+	cancel()
+	require.ErrorIs(t, sleepWithContext(ctx, time.Hour), context.Canceled)
+}
+
+func TestAttestationJitterHelpers(t *testing.T) {
+	require.Equal(t, time.Duration(0), initialJitterCap(0))
+	require.Equal(t, 75*time.Second, initialJitterCap(5*time.Minute))
+	require.Equal(t, 30*time.Minute, initialJitterCap(4*time.Hour))
+
+	require.Equal(t, time.Duration(0), retryJitterCap(0))
+	require.Equal(t, 150*time.Second, retryJitterCap(5*time.Minute))
+	require.Equal(t, 5*time.Minute, retryJitterCap(20*time.Minute))
+
+	require.Equal(t, time.Duration(0), calculateJitter(0))
+	jitter := calculateJitter(50 * time.Millisecond)
+	require.GreaterOrEqual(t, jitter, time.Duration(0))
+	require.Less(t, jitter, 50*time.Millisecond)
+}
+
+func TestManagerRunUsesInitialIntervalWithoutJitterWhenNotEnrolled(t *testing.T) {
+	mgr := NewManager(
+		func(context.Context) (string, error) { return "", ErrNotEnrolled },
+		&testJWTProvider{jwt: "jwt-token"},
+		&testNonceProvider{nonce: "abc123"},
+		&testEvidenceCollector{resp: &SDKResponse{ResultCode: 200}},
+		&testSubmitter{},
+		AttestationConfig{
+			InitialInterval: 5 * time.Millisecond,
+			Interval:        time.Hour,
+			RetryInterval:   time.Minute,
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err := mgr.Run(ctx)
+	elapsed := time.Since(start)
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.GreaterOrEqual(t, elapsed, 15*time.Millisecond)
+	require.Less(t, elapsed, 100*time.Millisecond)
 }

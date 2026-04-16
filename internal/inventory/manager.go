@@ -17,10 +17,14 @@ package inventory
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 	"sync"
 	"time"
+
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 )
 
 // Manager coordinates periodic inventory collection into a store.
@@ -30,44 +34,45 @@ type Manager interface {
 }
 
 type manager struct {
-	mu       sync.RWMutex
-	source   Source
-	sink     Sink
-	interval time.Duration
+	mu     sync.RWMutex
+	source Source
+	sink   Sink
+	config InventoryConfig
 
 	lastSnapshot     *Snapshot
 	lastExportedHash string
 }
 
 // NewManager creates an inventory manager.
-func NewManager(source Source, sink Sink, interval time.Duration) Manager {
+func NewManager(source Source, sink Sink, cfg InventoryConfig) Manager {
 	return &manager{
-		source:   source,
-		sink:     sink,
-		interval: interval,
+		source: source,
+		sink:   sink,
+		config: cfg,
 	}
 }
 
 func (m *manager) Run(ctx context.Context) error {
 	if _, err := m.CollectOnce(ctx); err != nil {
-		return err
+		log.Logger.Warnw("initial inventory collection failed", "error", err)
 	}
-
-	if m.interval <= 0 {
+	if m.config.Interval <= 0 {
 		return nil
 	}
-
-	ticker := time.NewTicker(m.interval)
-	defer ticker.Stop()
+	if m.config.JitterEnabled {
+		if err := sleepWithContext(ctx, calculateJitter(initialJitterCap(m.config.Interval))); err != nil {
+			return err
+		}
+	}
 
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			if _, err := m.CollectOnce(ctx); err != nil {
-				return err
-			}
+		_, err := m.CollectOnce(ctx)
+		nextInterval := m.config.Interval
+		if err != nil && m.config.RetryInterval > 0 && m.config.RetryInterval < nextInterval {
+			nextInterval = m.config.RetryInterval + calculateJitter(retryJitterCap(m.config.RetryInterval))
+		}
+		if err := sleepWithContext(ctx, nextInterval); err != nil {
+			return err
 		}
 	}
 }
@@ -108,4 +113,64 @@ func (m *manager) CollectOnce(ctx context.Context) (*Snapshot, error) {
 	}
 
 	return snap, nil
+}
+
+func sleepWithContext(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			return nil
+		}
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func calculateJitter(maxJitter time.Duration) time.Duration {
+	if maxJitter <= 0 {
+		return 0
+	}
+	maxMs := int64(maxJitter / time.Millisecond)
+	if maxMs <= 0 {
+		return 0
+	}
+	randomMs, err := rand.Int(rand.Reader, big.NewInt(maxMs))
+	if err != nil {
+		log.Logger.Warnw("failed to generate secure inventory jitter, using fallback", "error", err)
+		return time.Duration(time.Now().UnixNano()%maxMs) * time.Millisecond
+	}
+	return time.Duration(randomMs.Int64()) * time.Millisecond
+}
+
+func initialJitterCap(interval time.Duration) time.Duration {
+	if interval <= 0 {
+		return 0
+	}
+	jitter := interval / 4
+	const maxInitialJitter = 30 * time.Minute
+	if jitter > maxInitialJitter {
+		return maxInitialJitter
+	}
+	return jitter
+}
+
+func retryJitterCap(retryInterval time.Duration) time.Duration {
+	if retryInterval <= 0 {
+		return 0
+	}
+	jitter := retryInterval / 2
+	const maxRetryJitter = 5 * time.Minute
+	if jitter > maxRetryJitter {
+		return maxRetryJitter
+	}
+	return jitter
 }

@@ -129,3 +129,10 @@ type Source interface {
 type Sink interface {
 	Export(ctx context.Context, snap *Snapshot) error
 }
+
+// InventoryConfig controls periodic inventory scheduling.
+type InventoryConfig struct {
+	Interval      time.Duration
+	RetryInterval time.Duration
+	JitterEnabled bool
+}

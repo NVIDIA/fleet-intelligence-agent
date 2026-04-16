@@ -84,7 +84,7 @@ func TestManagerCollectOnceExportsOnlyWhenInventoryChanges(t *testing.T) {
 		},
 	}
 	sink := &fakeSink{}
-	mgr := NewManager(src, sink, 0)
+	mgr := NewManager(src, sink, InventoryConfig{})
 
 	snap1, err := mgr.CollectOnce(context.Background())
 	require.NoError(t, err)

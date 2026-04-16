@@ -13,11 +13,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package attestationloop
+package attestation
 
 import (
 	"context"
+	"crypto/rand"
+	"errors"
 	"fmt"
+	"math/big"
 	"sync"
 	"time"
 
@@ -48,7 +51,7 @@ type manager struct {
 	nonceProvider  NonceProvider
 	collector      EvidenceCollector
 	submitter      Submitter
-	interval       time.Duration
+	config         AttestationConfig
 
 	lastResult  *Result
 	lastUpdated time.Time
@@ -61,7 +64,7 @@ func NewManager(
 	nonceProvider NonceProvider,
 	collector EvidenceCollector,
 	submitter Submitter,
-	interval time.Duration,
+	cfg AttestationConfig,
 ) Manager {
 	return &manager{
 		nodeIDProvider: nodeIDProvider,
@@ -69,7 +72,7 @@ func NewManager(
 		nonceProvider:  nonceProvider,
 		collector:      collector,
 		submitter:      submitter,
-		interval:       interval,
+		config:         cfg,
 	}
 }
 
@@ -77,24 +80,41 @@ func (m *manager) Run(ctx context.Context) error {
 	if m.nodeIDProvider == nil || m.jwtProvider == nil || m.nonceProvider == nil || m.collector == nil || m.submitter == nil {
 		return fmt.Errorf("attestation loop dependencies are incomplete")
 	}
-	if _, err := m.CollectOnce(ctx); err != nil {
-		log.Logger.Warnw("initial attestation workflow failed", "error", err)
-	}
-	if m.interval <= 0 {
+	if m.config.Interval <= 0 {
 		return nil
 	}
+	startupInterval := m.config.Interval
+	if m.config.InitialInterval > 0 {
+		startupInterval = m.config.InitialInterval
+	}
+	if m.config.JitterEnabled {
+		jitter := calculateJitter(initialJitterCap(startupInterval))
+		log.Logger.Infow("adding initial attestation startup jitter", "jitter_duration", jitter)
+		if err := sleepWithContext(ctx, jitter); err != nil {
+			return err
+		}
+	}
 
-	ticker := time.NewTicker(m.interval)
-	defer ticker.Stop()
-
+	firstSuccess := false
 	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-ticker.C:
-			if _, err := m.CollectOnce(ctx); err != nil {
-				log.Logger.Warnw("periodic attestation workflow failed", "error", err)
+		_, err := m.CollectOnce(ctx)
+		nextInterval := m.config.Interval
+		if err == nil {
+			firstSuccess = true
+		} else {
+			log.Logger.Warnw("attestation workflow failed", "error", err)
+			switch {
+			case !firstSuccess && errors.Is(err, ErrNotEnrolled) && m.config.InitialInterval > 0:
+				nextInterval = m.config.InitialInterval
+			case m.config.RetryInterval > 0 && (nextInterval <= 0 || m.config.RetryInterval < nextInterval):
+				nextInterval = m.config.RetryInterval
+				if m.config.JitterEnabled {
+					nextInterval += calculateJitter(retryJitterCap(m.config.RetryInterval))
+				}
 			}
+		}
+		if err := sleepWithContext(ctx, nextInterval); err != nil {
+			return err
 		}
 	}
 }
@@ -164,6 +184,66 @@ func (m *manager) IsResultUpdated(since time.Time) bool {
 	return m.lastUpdated.After(since)
 }
 
+func sleepWithContext(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			return nil
+		}
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func calculateJitter(maxJitter time.Duration) time.Duration {
+	if maxJitter <= 0 {
+		return 0
+	}
+	maxMs := int64(maxJitter / time.Millisecond)
+	if maxMs <= 0 {
+		return 0
+	}
+	randomMs, err := rand.Int(rand.Reader, big.NewInt(maxMs))
+	if err != nil {
+		log.Logger.Warnw("failed to generate secure attestation jitter, using fallback", "error", err)
+		return time.Duration(time.Now().UnixNano()%maxMs) * time.Millisecond
+	}
+	return time.Duration(randomMs.Int64()) * time.Millisecond
+}
+
+func initialJitterCap(interval time.Duration) time.Duration {
+	if interval <= 0 {
+		return 0
+	}
+	jitter := interval / 4
+	const maxInitialJitter = 30 * time.Minute
+	if jitter > maxInitialJitter {
+		return maxInitialJitter
+	}
+	return jitter
+}
+
+func retryJitterCap(retryInterval time.Duration) time.Duration {
+	if retryInterval <= 0 {
+		return 0
+	}
+	jitter := retryInterval / 2
+	const maxRetryJitter = 5 * time.Minute
+	if jitter > maxRetryJitter {
+		return maxRetryJitter
+	}
+	return jitter
+}
+
 type backendSubmitter struct {
 	client BackendClient
 }
@@ -209,7 +289,7 @@ func (p *stateJWTProvider) GetJWT(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if !ok || value == "" {
-		return "", fmt.Errorf("jwt not available in agent state")
+		return "", fmt.Errorf("%w: jwt not available in agent state", ErrNotEnrolled)
 	}
 	return value, nil
 }
@@ -232,7 +312,7 @@ func NewStateNodeIDProvider(state agentstate.State) func(context.Context) (strin
 			return "", err
 		}
 		if !ok || value == "" {
-			return "", fmt.Errorf("node ID not available in agent state")
+			return "", fmt.Errorf("%w: node ID not available in agent state", ErrNotEnrolled)
 		}
 		return value, nil
 	}

@@ -65,17 +65,36 @@ type Config struct {
 	// SECURITY: Only accessible from localhost (127.0.0.0/8 or ::1). Disabled by default.
 	EnableFaultInjection bool `json:"enable_fault_injection"`
 
+	// Inventory controls the periodic inventory loop.
+	Inventory *InventoryConfig `json:"inventory,omitempty"`
+
+	// Attestation controls the periodic attestation loop.
+	Attestation *AttestationConfig `json:"attestation,omitempty"`
+
 	// Health Exporter Configuration
 	HealthExporter *HealthExporterConfig `json:"health_exporter,omitempty"`
 }
 
-// AttestationConfig holds configuration for the attestation process
-type AttestationConfig struct {
-	// Interval is how often to run attestation (default: 24 hours)
-	Interval metav1.Duration `json:"interval"`
+// InventoryConfig holds configuration for the periodic inventory loop.
+type InventoryConfig struct {
+	// Enabled controls whether the periodic inventory loop runs.
+	Enabled bool `json:"enabled"`
 
-	// JitterEnabled controls whether to add random jitter to attestation schedule
-	JitterEnabled bool `json:"jitter_enabled"`
+	// Interval is how often to collect and export inventory.
+	Interval metav1.Duration `json:"interval"`
+}
+
+// AttestationConfig holds configuration for the periodic attestation loop.
+type AttestationConfig struct {
+	// Enabled controls whether the periodic attestation loop runs.
+	Enabled bool `json:"enabled"`
+
+	// InitialInterval is how often to check enrollment and attempt the first attestation run
+	// before switching to the steady-state interval after the first successful attestation.
+	InitialInterval metav1.Duration `json:"initial_interval"`
+
+	// Interval is how often to run attestation.
+	Interval metav1.Duration `json:"interval"`
 }
 
 // HealthExporterConfig holds configuration for the health data exporter
@@ -85,9 +104,6 @@ type HealthExporterConfig struct {
 
 	// LogsEndpoint is the specific endpoint for sending logs/events data
 	LogsEndpoint string `json:"logs_endpoint"`
-
-	// Attestation configuration
-	Attestation AttestationConfig `json:"attestation"`
 
 	// AuthToken is the authentication token for HTTP requests
 	AuthToken string `json:"auth_token,omitempty"`
@@ -151,6 +167,21 @@ func (config *Config) Validate() error {
 		return fmt.Errorf("retention_period must be at least 1 minute, got %v", config.RetentionPeriod.Duration)
 	}
 
+	if err := validateLoopConfig("inventory", config.Inventory); err != nil {
+		return err
+	}
+	if err := validateLoopConfig("attestation", config.Attestation); err != nil {
+		return err
+	}
+	if config.Attestation != nil && config.Attestation.Enabled {
+		if config.Attestation.InitialInterval.Duration <= 0 {
+			return errors.New("attestation.initial_interval is required when attestation is enabled")
+		}
+		if config.Attestation.InitialInterval.Duration < time.Minute {
+			return fmt.Errorf("attestation.initial_interval must be at least 1 minute, got %v", config.Attestation.InitialInterval.Duration)
+		}
+	}
+
 	// Validate health exporter configuration if present
 	if config.HealthExporter != nil {
 		// Validate health check interval
@@ -181,6 +212,51 @@ func (config *Config) Validate() error {
 	}
 
 	return nil
+}
+
+func validateLoopConfig(name string, cfg interface {
+	GetEnabled() bool
+	GetInterval() time.Duration
+}) error {
+	if cfg == nil || !cfg.GetEnabled() {
+		return nil
+	}
+	if cfg.GetInterval() <= 0 {
+		return fmt.Errorf("%s.interval is required when %s is enabled", name, name)
+	}
+	if cfg.GetInterval() < time.Minute {
+		return fmt.Errorf("%s.interval must be at least 1 minute, got %v", name, cfg.GetInterval())
+	}
+	return nil
+}
+
+func (c *InventoryConfig) GetEnabled() bool {
+	return c != nil && c.Enabled
+}
+
+func (c *InventoryConfig) GetInterval() time.Duration {
+	if c == nil {
+		return 0
+	}
+	return c.Interval.Duration
+}
+
+func (c *AttestationConfig) GetEnabled() bool {
+	return c != nil && c.Enabled
+}
+
+func (c *AttestationConfig) GetInterval() time.Duration {
+	if c == nil {
+		return 0
+	}
+	return c.Interval.Duration
+}
+
+func (c *AttestationConfig) GetInitialInterval() time.Duration {
+	if c == nil {
+		return 0
+	}
+	return c.InitialInterval.Duration
 }
 
 // ShouldEnable returns true if the component should be enabled.
@@ -356,13 +432,6 @@ func extractHealthExporterEntries(cfg *HealthExporterConfig) []ConfigEntry {
 				strValue = fmt.Sprintf("%d", int64(duration.Seconds()))
 			} else if d, ok := value.Interface().(time.Duration); ok {
 				strValue = fmt.Sprintf("%d", int64(d.Seconds()))
-			} else if att, ok := value.Interface().(AttestationConfig); ok {
-				// Handle nested AttestationConfig - add individual fields
-				entries = append(entries,
-					ConfigEntry{Key: "health_exporter.attestation_interval", Value: fmt.Sprintf("%d", int64(att.Interval.Seconds()))},
-					ConfigEntry{Key: "health_exporter.attestation_jitter_enabled", Value: fmt.Sprintf("%t", att.JitterEnabled)},
-				)
-				continue
 			}
 		default:
 			strValue = fmt.Sprintf("%v", value.Interface())
