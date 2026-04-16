@@ -35,8 +35,6 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
-const initialMachineInfoWait = 5 * time.Second
-
 // GenerateCollectionID generates a unique identifier for a data collection cycle
 func GenerateCollectionID() string {
 	bytes := make([]byte, 16)
@@ -51,14 +49,14 @@ func GenerateEventID() string {
 
 // HealthData represents the collected health data
 type HealthData struct {
-	CollectionID  string
-	MachineID     string
-	Timestamp     time.Time
-	MachineInfo   *machineinfo.MachineInfo
-	Metrics       pkgmetrics.Metrics
-	Events        eventstore.Events
-	ComponentData map[string]interface{}
-	ConfigEntries []config.ConfigEntry
+	CollectionID   string
+	MachineID      string
+	Timestamp      time.Time
+	MachineInfo    *machineinfo.MachineInfo
+	GPUUUIDToIndex map[string]string
+	Metrics        pkgmetrics.Metrics
+	Events         eventstore.Events
+	ComponentData  map[string]interface{}
 }
 
 // Collector defines the interface for collecting health data
@@ -68,15 +66,13 @@ type Collector interface {
 
 // collector implements the Collector interface
 type collector struct {
-	config              *config.HealthExporterConfig
-	configEntries       []config.ConfigEntry // Cached config entries computed once at startup
-	metricsStore        pkgmetrics.Store
-	eventStore          eventstore.Store
-	componentsRegistry  components.Registry
-	nvmlInstance        nvidianvml.Instance
-	machineID           string            // Agent's stable identity from server initialization
-	dcgmGPUIndexes      map[string]string // UUID → DCGM device ID override for GPU indices
-	machineInfoProvider machineInfoProvider
+	config             *config.HealthExporterConfig
+	metricsStore       pkgmetrics.Store
+	eventStore         eventstore.Store
+	componentsRegistry components.Registry
+	nvmlInstance       nvidianvml.Instance
+	machineID          string            // Agent's stable identity from server initialization
+	dcgmGPUIndexes     map[string]string // UUID → DCGM device ID override for GPU indices
 }
 
 // New creates a new health data collector
@@ -92,33 +88,14 @@ func New(
 	machineID string,
 	dcgmGPUIndexes map[string]string,
 ) Collector {
-	// Compute config entries once at startup (no dynamic config reload)
-	var configEntries []config.ConfigEntry
-	if fullConfig != nil {
-		configEntries = fullConfig.ToConfigEntries(allComponentNames)
-		log.Logger.Infow("Config entries computed at startup", "entries_count", len(configEntries))
-	}
-
-	var provider machineInfoProvider
-	if cfg != nil && cfg.IncludeMachineInfo && nvmlInstance != nil {
-		var opts []machineinfo.MachineInfoOption
-		if len(dcgmGPUIndexes) > 0 {
-			opts = append(opts, machineinfo.WithDCGMGPUIndexes(dcgmGPUIndexes))
-		}
-		provider = newCachedMachineInfoProvider(nvmlInstance, 0, opts...)
-		provider.RefreshAsync(context.Background())
-	}
-
 	return &collector{
-		config:              cfg,
-		configEntries:       configEntries,
-		metricsStore:        metricsStore,
-		eventStore:          eventStore,
-		componentsRegistry:  componentsRegistry,
-		nvmlInstance:        nvmlInstance,
-		machineID:           machineID,
-		dcgmGPUIndexes:      dcgmGPUIndexes,
-		machineInfoProvider: provider,
+		config:             cfg,
+		metricsStore:       metricsStore,
+		eventStore:         eventStore,
+		componentsRegistry: componentsRegistry,
+		nvmlInstance:       nvmlInstance,
+		machineID:          machineID,
+		dcgmGPUIndexes:     dcgmGPUIndexes,
 	}
 }
 
@@ -134,14 +111,10 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 	}
 
 	data := &HealthData{
-		CollectionID: collectionID,
-		MachineID:    c.machineID,
-		Timestamp:    time.Now().UTC(),
-	}
-
-	// Collect machine info if enabled
-	if c.config.IncludeMachineInfo {
-		c.collectMachineInfo(ctx, data)
+		CollectionID:   collectionID,
+		MachineID:      c.machineID,
+		Timestamp:      time.Now().UTC(),
+		GPUUUIDToIndex: cloneStringMap(c.dcgmGPUIndexes),
 	}
 
 	// Collect metrics if enabled
@@ -165,29 +138,7 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 		}
 	}
 
-	// Collect config data
-	if err := c.collectConfigData(data); err != nil {
-		log.Logger.Errorw("Failed to collect config data", "error", err)
-	}
-
 	return data, nil
-}
-
-// collectMachineInfo reads cached machine info and triggers a best-effort refresh.
-func (c *collector) collectMachineInfo(ctx context.Context, data *HealthData) {
-	if c.machineInfoProvider == nil {
-		return
-	}
-
-	if _, ok := c.machineInfoProvider.Get(); !ok {
-		c.machineInfoProvider.WaitForInitialRefresh(ctx, initialMachineInfoWait)
-	}
-
-	if machineInfo, ok := c.machineInfoProvider.Get(); ok {
-		data.MachineInfo = machineInfo
-	}
-
-	c.machineInfoProvider.RefreshAsync(ctx)
 }
 
 // collectMetrics collects metrics data from the metrics store
@@ -325,15 +276,14 @@ func (c *collector) collectComponentData(data *HealthData) error {
 	return nil
 }
 
-// collectConfigData returns cached agent configuration entries
-// Config entries are computed once at startup since there's no dynamic config reload
-func (c *collector) collectConfigData(data *HealthData) error {
-	if len(c.configEntries) == 0 {
-		log.Logger.Debugw("No config entries available, skipping config data collection")
+func cloneStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
 		return nil
 	}
 
-	// Return cached config entries (computed once at startup)
-	data.ConfigEntries = c.configEntries
-	return nil
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }

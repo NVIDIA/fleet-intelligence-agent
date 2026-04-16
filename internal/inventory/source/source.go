@@ -31,12 +31,26 @@ type MachineInfoCollector interface {
 }
 
 type machineInfoSource struct {
-	collector MachineInfoCollector
+	collector   MachineInfoCollector
+	agentConfig inventory.AgentConfig
 }
 
 // NewMachineInfoSource wraps the machine inventory collector as an inventory source.
 func NewMachineInfoSource(collector MachineInfoCollector) inventory.Source {
 	return &machineInfoSource{collector: collector}
+}
+
+// NewMachineInfoSourceWithAgentConfig wraps the machine inventory collector and attaches useful
+// agent configuration that should travel with inventory rather than OTLP telemetry.
+func NewMachineInfoSourceWithAgentConfig(collector MachineInfoCollector, agentConfig *inventory.AgentConfig) inventory.Source {
+	var cfg inventory.AgentConfig
+	if agentConfig != nil {
+		cfg = *agentConfig
+	}
+	return &machineInfoSource{
+		collector:   collector,
+		agentConfig: cfg,
+	}
 }
 
 func (s *machineInfoSource) Collect(ctx context.Context) (*inventory.Snapshot, error) {
@@ -66,6 +80,7 @@ func (s *machineInfoSource) Collect(ctx context.Context) (*inventory.Snapshot, e
 		CUDAVersion:             info.CUDAVersion,
 		DCGMVersion:             info.DCGMVersion,
 		ContainerRuntimeVersion: info.ContainerRuntimeVersion,
+		AgentConfig:             s.agentConfig,
 	}
 
 	if info.CPUInfo != nil {

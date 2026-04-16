@@ -44,7 +44,16 @@ type Snapshot struct {
 	ContainerRuntimeVersion string
 	NetPrivateIP            string
 	NetPublicIP             string
+	AgentConfig             AgentConfig
 	Resources               Resources
+}
+
+type AgentConfig struct {
+	TotalComponents        int64
+	APIVersion             string
+	RetentionPeriodSeconds int64
+	EnabledComponents      []string
+	DisabledComponents     []string
 }
 
 type Resources struct {

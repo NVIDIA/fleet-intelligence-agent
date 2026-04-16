@@ -33,6 +33,7 @@ import (
 	inventorysink "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/sink"
 	inventorysource "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/source"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/registry"
 )
 
 var (
@@ -105,6 +106,13 @@ func (f machineInfoCollectorFunc) Collect(ctx context.Context) (*machineinfo.Mac
 func syncInventoryOnce(ctx context.Context) error {
 	state := agentstate.NewSQLite()
 	sink := inventorysink.NewBackendSink(state)
+	allComponents := registry.AllComponentNames()
+
+	cfg, err := config.Default(ctx)
+	if err != nil {
+		return fmt.Errorf("load default config for inventory sync: %w", err)
+	}
+	apiVersion, retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
 
 	nvmlInstance, err := nvidianvml.New()
 	if err != nil {
@@ -112,9 +120,18 @@ func syncInventoryOnce(ctx context.Context) error {
 	}
 	defer func() { _ = nvmlInstance.Shutdown() }()
 
-	src := inventorysource.NewMachineInfoSource(machineInfoCollectorFunc(func(context.Context) (*machineinfo.MachineInfo, error) {
-		return machineinfo.GetMachineInfo(nvmlInstance)
-	}))
+	src := inventorysource.NewMachineInfoSourceWithAgentConfig(
+		machineInfoCollectorFunc(func(context.Context) (*machineinfo.MachineInfo, error) {
+			return machineinfo.GetMachineInfo(nvmlInstance)
+		}),
+		&inventory.AgentConfig{
+			TotalComponents:        int64(len(allComponents)),
+			APIVersion:             apiVersion,
+			RetentionPeriodSeconds: retentionPeriodSeconds,
+			EnabledComponents:      enabledComponents,
+			DisabledComponents:     disabledComponents,
+		},
+	)
 	manager := inventory.NewManager(src, sink, 0)
 	_, err = manager.CollectOnce(ctx)
 	return err

@@ -45,6 +45,13 @@ func TestToNodeUpsertRequest(t *testing.T) {
 		NetPrivateIP:            "10.0.0.10",
 		NetPublicIP:             "203.0.113.10",
 		InventoryHash:           "hash-1",
+		AgentConfig: inventory.AgentConfig{
+			TotalComponents:        30,
+			APIVersion:             "v1",
+			RetentionPeriodSeconds: 86400,
+			EnabledComponents:      []string{"cpu", "gpu"},
+			DisabledComponents:     []string{"disk"},
+		},
 		Resources: inventory.Resources{
 			CPUInfo: inventory.CPUInfo{
 				Type:         "Xeon",
@@ -99,6 +106,11 @@ func TestToNodeUpsertRequest(t *testing.T) {
 	require.Equal(t, "machine-id", req.MachineID)
 	require.Equal(t, "203.0.113.10", req.NetPublicIP)
 	require.Equal(t, "hash-1", req.InventoryHash)
+	require.Equal(t, int64(30), req.AgentConfig.TotalComponents)
+	require.Equal(t, "v1", req.AgentConfig.APIVersion)
+	require.Equal(t, int64(86400), req.AgentConfig.RetentionPeriodSeconds)
+	require.Equal(t, []string{"cpu", "gpu"}, req.AgentConfig.EnabledComponents)
+	require.Equal(t, []string{"disk"}, req.AgentConfig.DisabledComponents)
 	require.Equal(t, int64(64), req.Resources.CPUInfo.LogicalCores)
 	require.Equal(t, uint64(1024), req.Resources.MemoryInfo.TotalBytes)
 	require.Len(t, req.Resources.GPUInfo.GPUs, 1)

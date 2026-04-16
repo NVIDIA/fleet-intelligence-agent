@@ -16,6 +16,8 @@
 package converter
 
 import (
+	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -308,21 +310,12 @@ func TestOTLPConverter_Convert_WithComponentData(t *testing.T) {
 	assert.True(t, found, "Should find component data log")
 }
 
-func TestOTLPConverter_Convert_WithMachineInfo(t *testing.T) {
+func TestOTLPConverter_Convert_IgnoresMachineInfoInResource(t *testing.T) {
 	data := &collector.HealthData{
 		Timestamp: time.Now(),
 		MachineID: "test-machine",
 		MachineInfo: &machineinfo.MachineInfo{
-			FleetintVersion: "0.1.5",
-			DCGMVersion:     "4.2.3",
-			OSImage:         "Ubuntu 22.04",
-			KernelVersion:   "5.15.0",
-			CPUInfo: &apiv1.MachineCPUInfo{
-				Type:         "Intel",
-				Manufacturer: "Intel",
-				Architecture: "x86_64",
-				LogicalCores: 8,
-			},
+			DCGMVersion: "4.2.3",
 		},
 	}
 
@@ -332,31 +325,13 @@ func TestOTLPConverter_Convert_WithMachineInfo(t *testing.T) {
 	require.NotNil(t, otlpData)
 	require.NotNil(t, otlpData.Metrics)
 
-	// Check resource has machine info attributes
 	rm := otlpData.Metrics.ResourceMetrics[0]
 	assert.NotNil(t, rm.Resource)
 	assert.Greater(t, len(rm.Resource.Attributes), 0)
 
-	// Verify machine info is embedded in resource attributes
-	// The attributes may have different keys based on how machine info is flattened
-	attrCount := len(rm.Resource.Attributes)
-	assert.Greater(t, attrCount, 2, "Should have multiple resource attributes including machine info")
-
-	// Check that some attributes exist (the exact key names may vary)
-	attrKeys := make([]string, 0, len(rm.Resource.Attributes))
 	for _, attr := range rm.Resource.Attributes {
-		attrKeys = append(attrKeys, attr.Key)
+		assert.NotEqual(t, "dcgmVersion", attr.Key)
 	}
-	// Should have at least service.name and machine.id
-	hasServiceName := false
-	for _, key := range attrKeys {
-		if key == "service.name" {
-			hasServiceName = true
-			break
-		}
-	}
-	assert.True(t, hasServiceName, "Should have service.name attribute")
-	assert.Equal(t, "4.2.3", findAttribute(t, rm.Resource.Attributes, "dcgmVersion").GetStringValue())
 }
 
 func TestOTLPConverter_ConvertStructToOTLPAttributes(t *testing.T) {
@@ -647,13 +622,9 @@ func TestOTLPConverter_ConvertLabelsToOTLPAttributes_EnrichesGPUIndex(t *testing
 func TestBuildGPUUUIDToIndexMap(t *testing.T) {
 	t.Run("builds map from machine info", func(t *testing.T) {
 		data := &collector.HealthData{
-			MachineInfo: &machineinfo.MachineInfo{
-				GPUInfo: &apiv1.MachineGPUInfo{
-					GPUs: []apiv1.MachineGPUInstance{
-						{UUID: "GPU-abc-123", GPUIndex: "0"},
-						{UUID: "GPU-def-456", GPUIndex: "1"},
-					},
-				},
+			GPUUUIDToIndex: map[string]string{
+				"GPU-abc-123": "0",
+				"GPU-def-456": "1",
 			},
 		}
 
@@ -669,9 +640,9 @@ func TestBuildGPUUUIDToIndexMap(t *testing.T) {
 		assert.Empty(t, m)
 	})
 
-	t.Run("returns empty map when GPU info is nil", func(t *testing.T) {
+	t.Run("returns empty map when mapping is nil", func(t *testing.T) {
 		data := &collector.HealthData{
-			MachineInfo: &machineinfo.MachineInfo{},
+			GPUUUIDToIndex: nil,
 		}
 		m := buildGPUUUIDToIndexMap(data)
 		assert.Empty(t, m)
@@ -679,14 +650,10 @@ func TestBuildGPUUUIDToIndexMap(t *testing.T) {
 
 	t.Run("skips entries with empty uuid or index", func(t *testing.T) {
 		data := &collector.HealthData{
-			MachineInfo: &machineinfo.MachineInfo{
-				GPUInfo: &apiv1.MachineGPUInfo{
-					GPUs: []apiv1.MachineGPUInstance{
-						{UUID: "GPU-abc-123", GPUIndex: "0"},
-						{UUID: "", GPUIndex: "1"},
-						{UUID: "GPU-ghi-789", GPUIndex: ""},
-					},
-				},
+			GPUUUIDToIndex: map[string]string{
+				"GPU-abc-123": "0",
+				"":            "1",
+				"GPU-ghi-789": "",
 			},
 		}
 
@@ -780,6 +747,37 @@ func TestOTLPConverter_Interface(t *testing.T) {
 	assert.NotNil(t, converter)
 }
 
+func TestResolveOTLPHostname(t *testing.T) {
+	origHostEnv, hadHostEnv := os.LookupEnv("HOSTNAME")
+	origOSHostname := osHostname
+	t.Cleanup(func() {
+		osHostname = origOSHostname
+		if hadHostEnv {
+			_ = os.Setenv("HOSTNAME", origHostEnv)
+		} else {
+			_ = os.Unsetenv("HOSTNAME")
+		}
+	})
+
+	t.Run("falls back to hostname env", func(t *testing.T) {
+		_ = os.Setenv("HOSTNAME", "pod-host-a")
+		osHostname = func() (string, error) { return "os-host-a", nil }
+		assert.Equal(t, "pod-host-a", resolveOTLPHostname())
+	})
+
+	t.Run("falls back to os hostname", func(t *testing.T) {
+		_ = os.Unsetenv("HOSTNAME")
+		osHostname = func() (string, error) { return "os-host-a", nil }
+		assert.Equal(t, "os-host-a", resolveOTLPHostname())
+	})
+
+	t.Run("returns empty on hostname error", func(t *testing.T) {
+		_ = os.Unsetenv("HOSTNAME")
+		osHostname = func() (string, error) { return "", errors.New("boom") }
+		assert.Equal(t, "", resolveOTLPHostname())
+	})
+}
+
 func TestOTLPConverter_Convert_AllData(t *testing.T) {
 	// Test with all data types combined
 	data := &collector.HealthData{
@@ -796,9 +794,6 @@ func TestOTLPConverter_Convert_AllData(t *testing.T) {
 				"health": "healthy",
 				"reason": "All OK",
 			},
-		},
-		MachineInfo: &machineinfo.MachineInfo{
-			FleetintVersion: "0.1.5",
 		},
 	}
 
@@ -818,7 +813,6 @@ func TestOTLPConverter_Convert_AllData(t *testing.T) {
 	rl := otlpData.Logs.ResourceLogs[0]
 	assert.Greater(t, len(rl.ScopeLogs[0].LogRecords), 0)
 
-	// Verify resource has attributes from machine info
 	assert.Greater(t, len(rm.Resource.Attributes), 0)
 }
 

@@ -22,6 +22,7 @@ import (
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/stretchr/testify/require"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
 
@@ -111,4 +112,31 @@ func TestMachineInfoSourceCollect(t *testing.T) {
 	require.Equal(t, "/dev/nvme0n1", snap.Resources.DiskInfo.ContainerRootDisk)
 	require.Len(t, snap.Resources.DiskInfo.BlockDevices, 1)
 	require.Equal(t, "eth0", snap.Resources.NICInfo.PrivateIPInterfaces[0].Interface)
+}
+
+func TestMachineInfoSourceCollectWithAgentConfig(t *testing.T) {
+	src := NewMachineInfoSourceWithAgentConfig(
+		fakeMachineInfoCollector{
+			info: &machineinfo.MachineInfo{
+				MachineID: "machine-id",
+				Hostname:  "host-a",
+			},
+		},
+		&inventory.AgentConfig{
+			TotalComponents:        42,
+			APIVersion:             "v1",
+			RetentionPeriodSeconds: 86400,
+			EnabledComponents:      []string{"cpu", "gpu"},
+			DisabledComponents:     []string{"disk"},
+		},
+	)
+
+	snap, err := src.Collect(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, snap)
+	require.Equal(t, int64(42), snap.AgentConfig.TotalComponents)
+	require.Equal(t, "v1", snap.AgentConfig.APIVersion)
+	require.Equal(t, int64(86400), snap.AgentConfig.RetentionPeriodSeconds)
+	require.Equal(t, []string{"cpu", "gpu"}, snap.AgentConfig.EnabledComponents)
+	require.Equal(t, []string{"disk"}, snap.AgentConfig.DisabledComponents)
 }

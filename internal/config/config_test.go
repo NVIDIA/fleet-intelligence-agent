@@ -822,3 +822,19 @@ func TestGetComponentLists(t *testing.T) {
 		assert.Equal(t, "[]", string(disabledJSON))
 	})
 }
+
+func TestInventoryAgentConfig(t *testing.T) {
+	allComponents := []string{"cpu", "disk", "memory", "gpu"}
+	cfg := &Config{
+		APIVersion:      "v1",
+		RetentionPeriod: metav1.Duration{Duration: 24 * time.Hour},
+		Components:      []string{"*", "-memory", "-disk"},
+	}
+
+	apiVersion, retentionPeriodSeconds, enabled, disabled := cfg.InventoryAgentConfig(allComponents)
+
+	assert.Equal(t, "v1", apiVersion)
+	assert.Equal(t, int64(86400), retentionPeriodSeconds)
+	assert.ElementsMatch(t, []string{"cpu", "gpu"}, enabled)
+	assert.ElementsMatch(t, []string{"memory", "disk"}, disabled)
+}

@@ -64,7 +64,14 @@ func ToNodeUpsertRequest(s *inventory.Snapshot) *backendclient.NodeUpsertRequest
 	}
 
 	return &backendclient.NodeUpsertRequest{
-		Hostname:                s.Hostname,
+		Hostname: s.Hostname,
+		AgentConfig: backendclient.AgentConfig{
+			TotalComponents:        s.AgentConfig.TotalComponents,
+			APIVersion:             s.AgentConfig.APIVersion,
+			RetentionPeriodSeconds: s.AgentConfig.RetentionPeriodSeconds,
+			EnabledComponents:      append([]string(nil), s.AgentConfig.EnabledComponents...),
+			DisabledComponents:     append([]string(nil), s.AgentConfig.DisabledComponents...),
+		},
 		MachineID:               s.MachineID,
 		SystemUUID:              s.SystemUUID,
 		BootID:                  s.BootID,
