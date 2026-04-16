@@ -370,16 +370,29 @@ func (m *Manager) getNonce(jwtToken string, machineId string) (string, time.Time
 }
 
 func (m *Manager) getValidatedNonceEndpoint(ctx context.Context) (string, error) {
-	nonceEndpoint := m.getNonceEndpointFromMetadata(ctx)
-	if nonceEndpoint == "" {
-		return "", fmt.Errorf("nonce endpoint not found in metadata")
+	baseEndpoint := m.getEndpointFromMetadata(ctx)
+	if baseEndpoint != "" {
+		validated, err := endpoint.ValidateBackendEndpoint(baseEndpoint)
+		if err != nil {
+			return "", fmt.Errorf("invalid backend endpoint: %w", err)
+		}
+
+		joined, err := endpoint.JoinPath(validated, "api", "v1", "health", "nonce")
+		if err != nil {
+			return "", fmt.Errorf("failed to construct nonce endpoint: %w", err)
+		}
+		return joined, nil
 	}
 
-	validated, err := endpoint.ValidateBackendEndpoint(nonceEndpoint)
+	legacyNonceEndpoint := m.getLegacyNonceEndpointFromMetadata(ctx)
+	if legacyNonceEndpoint == "" {
+		return "", fmt.Errorf("backend endpoint not found in metadata")
+	}
+
+	validated, err := endpoint.ValidateBackendEndpoint(legacyNonceEndpoint)
 	if err != nil {
 		return "", fmt.Errorf("invalid nonce endpoint: %w", err)
 	}
-
 	return validated.String(), nil
 }
 
@@ -421,8 +434,8 @@ func (m *Manager) getEndpointFromMetadata(ctx context.Context) string {
 	}
 	defer dbRO.Close()
 
-	// Load endpoint from metadata
-	if endpoint, err := pkgmetadata.ReadMetadata(ctx, dbRO, pkgmetadata.MetadataKeyEndpoint); err == nil && endpoint != "" {
+	// Load backend base URL from metadata
+	if endpoint, err := pkgmetadata.ReadMetadata(ctx, dbRO, "backend_base_url"); err == nil && endpoint != "" {
 		return endpoint
 	}
 
@@ -430,8 +443,7 @@ func (m *Manager) getEndpointFromMetadata(ctx context.Context) string {
 	return ""
 }
 
-// getNonceEndpointFromMetadata retrieves the nonce endpoint from the metadata database
-func (m *Manager) getNonceEndpointFromMetadata(ctx context.Context) string {
+func (m *Manager) getLegacyNonceEndpointFromMetadata(ctx context.Context) string {
 	stateFile, err := defaultStateFileFn()
 	if err != nil {
 		log.Logger.Debugw("failed to get state file path", "error", err)
@@ -445,12 +457,11 @@ func (m *Manager) getNonceEndpointFromMetadata(ctx context.Context) string {
 	}
 	defer dbRO.Close()
 
-	// Load nonce endpoint from metadata
 	if endpoint, err := pkgmetadata.ReadMetadata(ctx, dbRO, "nonce_endpoint"); err == nil && endpoint != "" {
 		return endpoint
 	}
 
-	log.Logger.Debugw("Nonce endpoint not found in metadata")
+	log.Logger.Debugw("legacy nonce endpoint not found in metadata")
 	return ""
 }
 

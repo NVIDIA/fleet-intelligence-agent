@@ -31,8 +31,8 @@ import (
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/enrollment"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/converter"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/writer"
@@ -41,6 +41,8 @@ import (
 
 // Ensure healthExporter implements the Exporter interface
 var _ Exporter = (*healthExporter)(nil)
+
+var newBackendClient = backendclient.New
 
 // healthExporter implements the Exporter interface with improved architecture
 type healthExporter struct {
@@ -267,17 +269,35 @@ func (e *healthExporter) refreshConfigFromMetadata(ctx context.Context) {
 		return
 	}
 
-	// Load metrics endpoint (update even if empty to handle un-enrollment)
-	if metricsEndpoint, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "metrics_endpoint"); err == nil {
-		if metricsEndpoint != "" {
-			validated, validateErr := endpoint.ValidateBackendEndpoint(metricsEndpoint)
-			if validateErr != nil {
-				log.Logger.Errorw("ignoring invalid metrics endpoint from metadata", "error", validateErr)
-				metricsEndpoint = ""
+	metricsEndpoint := ""
+	logsEndpoint := ""
+	baseURL, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "backend_base_url")
+	if err != nil {
+		log.Logger.Errorw("failed to read backend base URL from metadata", "error", err)
+		baseURL = ""
+	}
+	if baseURL != "" {
+		validated, validateErr := endpoint.ValidateBackendEndpoint(baseURL)
+		if validateErr != nil {
+			log.Logger.Errorw("ignoring invalid backend base URL from metadata", "error", validateErr)
+		} else {
+			if joined, joinErr := endpoint.JoinPath(validated, "api", "v1", "health", "metrics"); joinErr == nil {
+				metricsEndpoint = joined
 			} else {
-				metricsEndpoint = validated.String()
+				log.Logger.Errorw("failed to derive metrics endpoint from backend base URL", "error", joinErr)
+			}
+			if joined, joinErr := endpoint.JoinPath(validated, "api", "v1", "health", "logs"); joinErr == nil {
+				logsEndpoint = joined
+			} else {
+				log.Logger.Errorw("failed to derive logs endpoint from backend base URL", "error", joinErr)
 			}
 		}
+	} else {
+		metricsEndpoint = e.readValidatedEndpoint(ctx, "metrics_endpoint")
+		logsEndpoint = e.readValidatedEndpoint(ctx, "logs_endpoint")
+	}
+
+	{
 		if e.options.config.MetricsEndpoint != metricsEndpoint {
 			e.options.config.MetricsEndpoint = metricsEndpoint
 			if metricsEndpoint == "" {
@@ -286,21 +306,9 @@ func (e *healthExporter) refreshConfigFromMetadata(ctx context.Context) {
 				log.Logger.Infow("updated metrics endpoint from metadata", "metrics_endpoint", metricsEndpoint)
 			}
 		}
-	} else {
-		log.Logger.Errorw("failed to read metrics endpoint from metadata", "error", err)
 	}
 
-	// Load logs endpoint (update even if empty to handle un-enrollment)
-	if logsEndpoint, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "logs_endpoint"); err == nil {
-		if logsEndpoint != "" {
-			validated, validateErr := endpoint.ValidateBackendEndpoint(logsEndpoint)
-			if validateErr != nil {
-				log.Logger.Errorw("ignoring invalid logs endpoint from metadata", "error", validateErr)
-				logsEndpoint = ""
-			} else {
-				logsEndpoint = validated.String()
-			}
-		}
+	{
 		if e.options.config.LogsEndpoint != logsEndpoint {
 			e.options.config.LogsEndpoint = logsEndpoint
 			if logsEndpoint == "" {
@@ -309,8 +317,6 @@ func (e *healthExporter) refreshConfigFromMetadata(ctx context.Context) {
 				log.Logger.Infow("updated logs endpoint from metadata", "logs_endpoint", logsEndpoint)
 			}
 		}
-	} else {
-		log.Logger.Errorw("failed to read logs endpoint from metadata", "error", err)
 	}
 
 	// Load auth token (update even if empty to handle un-enrollment)
@@ -355,14 +361,24 @@ func (e *healthExporter) refreshJWTToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("no SAK token available for JWT refresh")
 	}
 
-	// Read enroll endpoint from metadata (stored during enrollment)
-	enrollEndpoint, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "enroll_endpoint")
-	if err != nil || enrollEndpoint == "" {
-		return "", fmt.Errorf("no enroll endpoint available for JWT refresh")
+	baseURL, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "backend_base_url")
+	if err == nil && baseURL != "" {
+		// use configured base URL
+	} else {
+		baseURL, err = e.readLegacyBackendBaseURL(ctx)
+		if err != nil {
+			return "", err
+		}
+		if baseURL == "" {
+			return "", fmt.Errorf("no backend base URL available for JWT refresh")
+		}
 	}
 
-	// Perform enrollment to get new JWT token using the shared function
-	newJWT, err := enrollment.PerformEnrollment(ctx, enrollEndpoint, sakToken)
+	client, err := newBackendClient(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to create backend client for JWT refresh: %w", err)
+	}
+	newJWT, err := client.Enroll(ctx, sakToken)
 	if err != nil {
 		return "", fmt.Errorf("failed to refresh JWT token: %w", err)
 	}
@@ -377,4 +393,32 @@ func (e *healthExporter) refreshJWTToken(ctx context.Context) (string, error) {
 
 	log.Logger.Infow("Successfully refreshed JWT token")
 	return newJWT, nil
+}
+
+func (e *healthExporter) readValidatedEndpoint(ctx context.Context, key string) string {
+	value, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, key)
+	if err != nil || value == "" {
+		return ""
+	}
+	validated, err := endpoint.ValidateBackendEndpoint(value)
+	if err != nil {
+		log.Logger.Errorw("ignoring invalid legacy endpoint from metadata", "key", key, "error", err)
+		return ""
+	}
+	return validated.String()
+}
+
+func (e *healthExporter) readLegacyBackendBaseURL(ctx context.Context) (string, error) {
+	for _, key := range []string{"enroll_endpoint", "metrics_endpoint", "logs_endpoint", "nonce_endpoint"} {
+		value, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, key)
+		if err != nil || value == "" {
+			continue
+		}
+		baseURL, err := endpoint.DeriveBackendBaseURL(value)
+		if err != nil {
+			return "", fmt.Errorf("invalid legacy %s for JWT refresh: %w", key, err)
+		}
+		return baseURL, nil
+	}
+	return "", nil
 }

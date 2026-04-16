@@ -24,6 +24,7 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
 )
 
 const metadataKeyBackendBaseURL = "backend_base_url"
@@ -38,7 +39,29 @@ func NewSQLite() State {
 }
 
 func (s *sqliteState) GetBackendBaseURL(ctx context.Context) (string, bool, error) {
-	return s.getMetadata(ctx, metadataKeyBackendBaseURL)
+	db, err := s.openReadOnly()
+	if err != nil {
+		return "", false, err
+	}
+	defer db.Close()
+
+	if value, err := pkgmetadata.ReadMetadata(ctx, db, metadataKeyBackendBaseURL); err == nil && value != "" {
+		return value, true, nil
+	}
+
+	for _, key := range []string{"enroll_endpoint", "metrics_endpoint", "logs_endpoint", "nonce_endpoint"} {
+		value, err := pkgmetadata.ReadMetadata(ctx, db, key)
+		if err != nil || value == "" {
+			continue
+		}
+		baseURL, err := endpoint.DeriveBackendBaseURL(value)
+		if err != nil {
+			return "", false, fmt.Errorf("derive backend base URL from metadata %q: %w", key, err)
+		}
+		return baseURL, true, nil
+	}
+
+	return "", false, nil
 }
 
 func (s *sqliteState) SetBackendBaseURL(ctx context.Context, value string) error {

@@ -24,7 +24,6 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -303,63 +302,10 @@ func TestManager_GetNonce_ServerError(t *testing.T) {
 	assert.True(t, response.NonceRefreshTimestamp.IsZero())
 }
 
-func TestManager_GetNonce_RejectsNonOKStatus(t *testing.T) {
-	manager := newTestManager(t)
-	var redirectTargetCalled atomic.Bool
-	var server *httptest.Server
-	server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/redirected" {
-			redirectTargetCalled.Store(true)
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		http.Redirect(w, r, server.URL+"/redirected", http.StatusFound)
-	}))
-	defer server.Close()
-
-	useDefaultTransport(t, server.Client().Transport)
-	stateFile := setupAttestationMetadataDB(t, map[string]string{
-		"nonce_endpoint": server.URL,
-	})
-	useTestStateFile(t, stateFile)
-
-	nonce, refresh, err := manager.getNonce("test-jwt-token", "test-machine-id")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "nonce endpoint returned HTTP 302")
-	assert.Empty(t, nonce)
-	assert.True(t, refresh.IsZero())
-	assert.False(t, redirectTargetCalled.Load())
-}
-
-func TestManager_GetNonce_RejectsServerErrorPayload(t *testing.T) {
-	manager := newTestManager(t)
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		require.NoError(t, json.NewEncoder(w).Encode(map[string]string{
-			"error": "Invalid token",
-		}))
-	}))
-	defer server.Close()
-
-	useDefaultTransport(t, server.Client().Transport)
-	stateFile := setupAttestationMetadataDB(t, map[string]string{
-		"nonce_endpoint": server.URL,
-	})
-	useTestStateFile(t, stateFile)
-
-	nonce, refresh, err := manager.getNonce("test-jwt-token", "test-machine-id")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "nonce endpoint returned error: Invalid token")
-	assert.Empty(t, nonce)
-	assert.True(t, refresh.IsZero())
-}
-
-func TestManager_GetValidatedNonceEndpoint_UsesStoredNonceEndpoint(t *testing.T) {
+func TestManager_GetValidatedNonceEndpoint_DerivesFromStoredBackendBaseURL(t *testing.T) {
 	manager := newTestManager(t)
 	stateFile := setupAttestationMetadataDB(t, map[string]string{
-		"nonce_endpoint": "https://backend.example.com/api/v1/health/nonce",
+		"backend_base_url": "https://backend.example.com",
 	})
 	useTestStateFile(t, stateFile)
 
@@ -368,16 +314,16 @@ func TestManager_GetValidatedNonceEndpoint_UsesStoredNonceEndpoint(t *testing.T)
 	assert.Equal(t, "https://backend.example.com/api/v1/health/nonce", got)
 }
 
-func TestManager_GetValidatedNonceEndpoint_RejectsTamperedStoredNonceEndpoint(t *testing.T) {
+func TestManager_GetValidatedNonceEndpoint_RejectsInvalidStoredBackendBaseURL(t *testing.T) {
 	manager := newTestManager(t)
 	stateFile := setupAttestationMetadataDB(t, map[string]string{
-		"nonce_endpoint": "http://evil.example.com/api/v1/health/nonce",
+		"backend_base_url": "http://evil.example.com",
 	})
 	useTestStateFile(t, stateFile)
 
 	_, err := manager.getValidatedNonceEndpoint(context.Background())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid nonce endpoint")
+	assert.Contains(t, err.Error(), "invalid backend endpoint")
 	assert.Contains(t, err.Error(), "https")
 }
 

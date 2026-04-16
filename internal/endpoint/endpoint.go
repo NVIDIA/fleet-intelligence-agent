@@ -121,6 +121,23 @@ func ValidateBackendEndpoint(raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
+// DeriveBackendBaseURL converts a legacy HTTPS endpoint URL into its backend base URL.
+// For example, "https://backend.example.com/api/v1/health/metrics" becomes
+// "https://backend.example.com".
+func DeriveBackendBaseURL(raw string) (string, error) {
+	parsed, err := parseURL(raw)
+	if err != nil {
+		return "", err
+	}
+	if err := requireScheme(parsed, "https"); err != nil {
+		return "", err
+	}
+	return (&url.URL{
+		Scheme: parsed.Scheme,
+		Host:   parsed.Host,
+	}).String(), nil
+}
+
 // JoinPath appends path elements to a validated base URL.
 func JoinPath(base *url.URL, elems ...string) (string, error) {
 	return url.JoinPath(base.String(), elems...)

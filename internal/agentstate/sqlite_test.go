@@ -85,6 +85,21 @@ func TestSQLiteStateMissingValue(t *testing.T) {
 	require.Empty(t, value)
 }
 
+func TestSQLiteStateGetBackendBaseURLFallsBackToLegacyEndpoints(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	state := newTestSQLiteState(t)
+
+	err := state.setMetadata(ctx, "metrics_endpoint", "https://backend.example.com/api/v1/health/metrics")
+	require.NoError(t, err)
+
+	value, ok, err := state.GetBackendBaseURL(ctx)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "https://backend.example.com", value)
+}
+
 func TestSQLiteStateStateFileErrors(t *testing.T) {
 	t.Parallel()
 
