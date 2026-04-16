@@ -24,6 +24,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -193,6 +194,16 @@ type testNonceResponse struct {
 	Error                 string    `json:"error,omitempty"`
 }
 
+func useDefaultTransport(t *testing.T, transport http.RoundTripper) {
+	t.Helper()
+
+	orig := http.DefaultTransport
+	http.DefaultTransport = transport
+	t.Cleanup(func() {
+		http.DefaultTransport = orig
+	})
+}
+
 func TestManager_GetNonce_MockHTTP(t *testing.T) {
 	// Test the nonce parsing logic without actually calling the private method
 	// This tests the HTTP interaction pattern
@@ -290,6 +301,59 @@ func TestManager_GetNonce_ServerError(t *testing.T) {
 	assert.Equal(t, "Invalid token", response.Error)
 	assert.Empty(t, response.Nonce)
 	assert.True(t, response.NonceRefreshTimestamp.IsZero())
+}
+
+func TestManager_GetNonce_RejectsNonOKStatus(t *testing.T) {
+	manager := newTestManager(t)
+	var redirectTargetCalled atomic.Bool
+	var server *httptest.Server
+	server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/redirected" {
+			redirectTargetCalled.Store(true)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.Redirect(w, r, server.URL+"/redirected", http.StatusFound)
+	}))
+	defer server.Close()
+
+	useDefaultTransport(t, server.Client().Transport)
+	stateFile := setupAttestationMetadataDB(t, map[string]string{
+		"nonce_endpoint": server.URL,
+	})
+	useTestStateFile(t, stateFile)
+
+	nonce, refresh, err := manager.getNonce("test-jwt-token", "test-machine-id")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nonce endpoint returned HTTP 302")
+	assert.Empty(t, nonce)
+	assert.True(t, refresh.IsZero())
+	assert.False(t, redirectTargetCalled.Load())
+}
+
+func TestManager_GetNonce_RejectsServerErrorPayload(t *testing.T) {
+	manager := newTestManager(t)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]string{
+			"error": "Invalid token",
+		}))
+	}))
+	defer server.Close()
+
+	useDefaultTransport(t, server.Client().Transport)
+	stateFile := setupAttestationMetadataDB(t, map[string]string{
+		"nonce_endpoint": server.URL,
+	})
+	useTestStateFile(t, stateFile)
+
+	nonce, refresh, err := manager.getNonce("test-jwt-token", "test-machine-id")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nonce endpoint returned error: Invalid token")
+	assert.Empty(t, nonce)
+	assert.True(t, refresh.IsZero())
 }
 
 func TestManager_GetValidatedNonceEndpoint_UsesStoredNonceEndpoint(t *testing.T) {

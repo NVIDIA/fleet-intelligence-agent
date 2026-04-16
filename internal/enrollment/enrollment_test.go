@@ -145,6 +145,28 @@ func TestPerformEnrollment_HTTPStatusCodes(t *testing.T) {
 	}
 }
 
+func TestPerformEnrollment_DoesNotFollowRedirects(t *testing.T) {
+	redirectTargetCalled := false
+	redirectTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		redirectTargetCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer redirectTarget.Close()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, redirectTarget.URL, http.StatusFound)
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "status 302")
+	assert.Empty(t, token)
+	assert.False(t, redirectTargetCalled)
+}
+
 func TestPerformEnrollment_MissingJWTToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Send response without JWT token

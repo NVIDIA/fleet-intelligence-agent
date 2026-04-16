@@ -81,10 +81,14 @@ func ValidateLocalServerURL(raw string) (*url.URL, error) {
 // described by serverURL. For unix socket URLs it installs a custom dialer; for
 // TCP URLs it returns a plain client.
 func NewAgentHTTPClient(serverURL *url.URL) *http.Client {
+	noRedirect := func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
 	if serverURL.Scheme == "unix" {
 		socketPath := serverURL.Path
 		return &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout:       5 * time.Second,
+			CheckRedirect: noRedirect,
 			Transport: &http.Transport{
 				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
 					return net.Dial("unix", socketPath)
@@ -92,7 +96,7 @@ func NewAgentHTTPClient(serverURL *url.URL) *http.Client {
 			},
 		}
 	}
-	return &http.Client{Timeout: 5 * time.Second}
+	return &http.Client{Timeout: 5 * time.Second, CheckRedirect: noRedirect}
 }
 
 // AgentBaseURL returns the HTTP base URL to use when constructing request URLs.
