@@ -45,7 +45,7 @@ func TestManagerCollectOnceErrors(t *testing.T) {
 
 func TestManagerRunWithZeroInterval(t *testing.T) {
 	src := &fakeSource{
-		snapshots: []*Snapshot{{NodeID: "node-1", MachineID: "machine-1", Hostname: "host-a"}},
+		snapshots: []*Snapshot{{MachineID: "machine-1", Hostname: "host-a"}},
 	}
 	sink := &fakeSink{}
 
@@ -56,7 +56,7 @@ func TestManagerRunWithZeroInterval(t *testing.T) {
 
 func TestManagerRunStopsOnContextCancel(t *testing.T) {
 	src := &fakeSource{
-		snapshots: []*Snapshot{{NodeID: "node-1", MachineID: "machine-1", Hostname: "host-a"}},
+		snapshots: []*Snapshot{{MachineID: "machine-1", Hostname: "host-a"}},
 	}
 	sink := &fakeSink{}
 	ctx, cancel := context.WithCancel(context.Background())

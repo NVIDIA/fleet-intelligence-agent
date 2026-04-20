@@ -29,7 +29,6 @@ func TestToNodeUpsertRequestNil(t *testing.T) {
 
 func TestToNodeUpsertRequest(t *testing.T) {
 	req := ToNodeUpsertRequest(&inventory.Snapshot{
-		NodeID:                  "node-1",
 		Hostname:                "host-a",
 		MachineID:               "machine-id",
 		SystemUUID:              "uuid-1",
@@ -37,7 +36,7 @@ func TestToNodeUpsertRequest(t *testing.T) {
 		OperatingSystem:         "linux",
 		OSImage:                 "Ubuntu",
 		KernelVersion:           "6.5.0",
-		FleetintVersion:         "1.2.3",
+		AgentVersion:            "1.2.3",
 		GPUDriverVersion:        "550.54.15",
 		CUDAVersion:             "12.4",
 		DCGMVersion:             "4.2.3",
@@ -47,7 +46,6 @@ func TestToNodeUpsertRequest(t *testing.T) {
 		InventoryHash:           "hash-1",
 		AgentConfig: inventory.AgentConfig{
 			TotalComponents:        30,
-			APIVersion:             "v1",
 			RetentionPeriodSeconds: 86400,
 			EnabledComponents:      []string{"cpu", "gpu"},
 			DisabledComponents:     []string{"disk"},
@@ -107,7 +105,6 @@ func TestToNodeUpsertRequest(t *testing.T) {
 	require.Equal(t, "203.0.113.10", req.NetPublicIP)
 	require.Equal(t, "hash-1", req.InventoryHash)
 	require.Equal(t, int64(30), req.AgentConfig.TotalComponents)
-	require.Equal(t, "v1", req.AgentConfig.APIVersion)
 	require.Equal(t, int64(86400), req.AgentConfig.RetentionPeriodSeconds)
 	require.Equal(t, []string{"cpu", "gpu"}, req.AgentConfig.EnabledComponents)
 	require.Equal(t, []string{"disk"}, req.AgentConfig.DisabledComponents)

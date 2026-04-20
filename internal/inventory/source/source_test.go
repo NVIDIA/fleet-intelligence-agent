@@ -38,7 +38,7 @@ func (f fakeMachineInfoCollector) Collect(context.Context) (*machineinfo.Machine
 func TestMachineInfoSourceCollect(t *testing.T) {
 	src := NewMachineInfoSource(fakeMachineInfoCollector{
 		info: &machineinfo.MachineInfo{
-			FleetintVersion:         "1.2.3",
+			AgentVersion:            "1.2.3",
 			GPUDriverVersion:        "550.54.15",
 			CUDAVersion:             "12.4",
 			DCGMVersion:             "4.2.3",
@@ -101,7 +101,7 @@ func TestMachineInfoSourceCollect(t *testing.T) {
 	snap, err := src.Collect(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, snap)
-	require.Equal(t, "machine-id", snap.NodeID)
+	require.Equal(t, "machine-id", snap.MachineID)
 	require.Equal(t, "host-a", snap.Hostname)
 	require.Equal(t, "10.0.0.10", snap.NetPrivateIP)
 	require.Equal(t, "Xeon", snap.Resources.CPUInfo.Type)
@@ -118,13 +118,13 @@ func TestMachineInfoSourceCollectWithAgentConfig(t *testing.T) {
 	src := NewMachineInfoSourceWithAgentConfig(
 		fakeMachineInfoCollector{
 			info: &machineinfo.MachineInfo{
-				MachineID: "machine-id",
-				Hostname:  "host-a",
+				MachineID:  "machine-id",
+				SystemUUID: "system-uuid",
+				Hostname:   "host-a",
 			},
 		},
 		&inventory.AgentConfig{
 			TotalComponents:        42,
-			APIVersion:             "v1",
 			RetentionPeriodSeconds: 86400,
 			EnabledComponents:      []string{"cpu", "gpu"},
 			DisabledComponents:     []string{"disk"},
@@ -134,9 +134,24 @@ func TestMachineInfoSourceCollectWithAgentConfig(t *testing.T) {
 	snap, err := src.Collect(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, snap)
+	require.Equal(t, "machine-id", snap.MachineID)
 	require.Equal(t, int64(42), snap.AgentConfig.TotalComponents)
-	require.Equal(t, "v1", snap.AgentConfig.APIVersion)
 	require.Equal(t, int64(86400), snap.AgentConfig.RetentionPeriodSeconds)
 	require.Equal(t, []string{"cpu", "gpu"}, snap.AgentConfig.EnabledComponents)
 	require.Equal(t, []string{"disk"}, snap.AgentConfig.DisabledComponents)
+}
+
+func TestMachineInfoSourceCollectIgnoresSystemUUIDForMachineID(t *testing.T) {
+	src := NewMachineInfoSource(fakeMachineInfoCollector{
+		info: &machineinfo.MachineInfo{
+			MachineID:  "machine-id",
+			SystemUUID: "system-uuid",
+			Hostname:   "host-a",
+		},
+	})
+
+	snap, err := src.Collect(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, snap)
+	require.Equal(t, "machine-id", snap.MachineID)
 }

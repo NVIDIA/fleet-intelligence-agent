@@ -22,7 +22,7 @@ type NodeUpsertRequest struct {
 	Hostname                string        `json:"hostname"`
 	AgentConfig             AgentConfig   `json:"agentConfig,omitempty"`
 	Resources               NodeResources `json:"resources"`
-	FleetintVersion         string        `json:"gpuHealthVersion"`
+	AgentVersion            string        `json:"agentVersion"`
 	GPUDriverVersion        string        `json:"gpuDriverVersion"`
 	CUDAVersion             string        `json:"cudaVersion"`
 	DCGMVersion             string        `json:"dcgmVersion"`
@@ -48,7 +48,6 @@ type NodeResources struct {
 
 type AgentConfig struct {
 	TotalComponents        int64    `json:"totalComponents,omitempty"`
-	APIVersion             string   `json:"apiVersion,omitempty"`
 	RetentionPeriodSeconds int64    `json:"retentionPeriodSeconds,omitempty"`
 	EnabledComponents      []string `json:"enabledComponents,omitempty"`
 	DisabledComponents     []string `json:"disabledComponents,omitempty"`

@@ -916,9 +916,7 @@ func TestInventoryAgentConfig(t *testing.T) {
 		Components:      []string{"*", "-memory", "-disk"},
 	}
 
-	apiVersion, retentionPeriodSeconds, enabled, disabled := cfg.InventoryAgentConfig(allComponents)
-
-	assert.Equal(t, "v1", apiVersion)
+	retentionPeriodSeconds, enabled, disabled := cfg.InventoryAgentConfig(allComponents)
 	assert.Equal(t, int64(86400), retentionPeriodSeconds)
 	assert.ElementsMatch(t, []string{"cpu", "gpu"}, enabled)
 	assert.ElementsMatch(t, []string{"memory", "disk"}, disabled)

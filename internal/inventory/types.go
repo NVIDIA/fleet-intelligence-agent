@@ -28,7 +28,6 @@ var ErrNotReady = errors.New("inventory backend not ready")
 // Snapshot is the agent-owned inventory state model.
 type Snapshot struct {
 	CollectedAt             time.Time
-	NodeID                  string
 	InventoryHash           string
 	Hostname                string
 	MachineID               string
@@ -37,7 +36,7 @@ type Snapshot struct {
 	OperatingSystem         string
 	OSImage                 string
 	KernelVersion           string
-	FleetintVersion         string
+	AgentVersion            string
 	GPUDriverVersion        string
 	CUDAVersion             string
 	DCGMVersion             string
@@ -50,7 +49,6 @@ type Snapshot struct {
 
 type AgentConfig struct {
 	TotalComponents        int64
-	APIVersion             string
 	RetentionPeriodSeconds int64
 	EnabledComponents      []string
 	DisabledComponents     []string

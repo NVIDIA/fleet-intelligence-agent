@@ -67,7 +67,6 @@ func ToNodeUpsertRequest(s *inventory.Snapshot) *backendclient.NodeUpsertRequest
 		Hostname: s.Hostname,
 		AgentConfig: backendclient.AgentConfig{
 			TotalComponents:        s.AgentConfig.TotalComponents,
-			APIVersion:             s.AgentConfig.APIVersion,
 			RetentionPeriodSeconds: s.AgentConfig.RetentionPeriodSeconds,
 			EnabledComponents:      append([]string(nil), s.AgentConfig.EnabledComponents...),
 			DisabledComponents:     append([]string(nil), s.AgentConfig.DisabledComponents...),
@@ -78,7 +77,7 @@ func ToNodeUpsertRequest(s *inventory.Snapshot) *backendclient.NodeUpsertRequest
 		OperatingSystem:         s.OperatingSystem,
 		OSImage:                 s.OSImage,
 		KernelVersion:           s.KernelVersion,
-		FleetintVersion:         s.FleetintVersion,
+		AgentVersion:            s.AgentVersion,
 		GPUDriverVersion:        s.GPUDriverVersion,
 		CUDAVersion:             s.CUDAVersion,
 		DCGMVersion:             s.DCGMVersion,

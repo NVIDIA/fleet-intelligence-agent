@@ -63,9 +63,16 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 	if !ok || jwt == "" {
 		return inventory.ErrNotReady
 	}
+	nodeUUID, ok, err := s.state.GetNodeID(ctx)
+	if err != nil {
+		return err
+	}
+	if !ok || nodeUUID == "" {
+		return inventory.ErrNotReady
+	}
 	client, err := s.clientFactory(baseURL)
 	if err != nil {
 		return fmt.Errorf("create backend client: %w", err)
 	}
-	return client.UpsertNode(ctx, snap.NodeID, mapper.ToNodeUpsertRequest(snap), jwt)
+	return client.UpsertNode(ctx, nodeUUID, mapper.ToNodeUpsertRequest(snap), jwt)
 }

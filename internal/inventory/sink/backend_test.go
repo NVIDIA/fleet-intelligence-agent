@@ -29,6 +29,7 @@ import (
 type fakeState struct {
 	baseURL string
 	jwt     string
+	nodeID  string
 	err     error
 }
 
@@ -45,11 +46,16 @@ func (f fakeState) GetJWT(context.Context) (string, bool, error) {
 	}
 	return f.jwt, f.jwt != "", nil
 }
-func (f fakeState) SetJWT(context.Context, string) error            { return nil }
-func (f fakeState) GetSAK(context.Context) (string, bool, error)    { return "", false, nil }
-func (f fakeState) SetSAK(context.Context, string) error            { return nil }
-func (f fakeState) GetNodeID(context.Context) (string, bool, error) { return "", false, nil }
-func (f fakeState) SetNodeID(context.Context, string) error         { return nil }
+func (f fakeState) SetJWT(context.Context, string) error         { return nil }
+func (f fakeState) GetSAK(context.Context) (string, bool, error) { return "", false, nil }
+func (f fakeState) SetSAK(context.Context, string) error         { return nil }
+func (f fakeState) GetNodeID(context.Context) (string, bool, error) {
+	if f.err != nil {
+		return "", false, f.err
+	}
+	return f.nodeID, f.nodeID != "", nil
+}
+func (f fakeState) SetNodeID(context.Context, string) error { return nil }
 
 type fakeClient struct {
 	nodeID string
@@ -78,21 +84,21 @@ func TestBackendSinkExportNotReady(t *testing.T) {
 		clientFactory: backendclient.New,
 	}
 
-	err := s.Export(context.Background(), &inventory.Snapshot{NodeID: "node-1"})
+	err := s.Export(context.Background(), &inventory.Snapshot{})
 	require.ErrorIs(t, err, inventory.ErrNotReady)
 }
 
 func TestBackendSinkExportErrors(t *testing.T) {
-	err := (&backendSink{}).Export(context.Background(), &inventory.Snapshot{NodeID: "node-1"})
+	err := (&backendSink{}).Export(context.Background(), &inventory.Snapshot{})
 	require.ErrorContains(t, err, "agent state")
 
-	err = (&backendSink{state: fakeState{baseURL: "https://example.com", jwt: "jwt"}}).Export(context.Background(), &inventory.Snapshot{NodeID: "node-1"})
+	err = (&backendSink{state: fakeState{baseURL: "https://example.com", jwt: "jwt"}}).Export(context.Background(), &inventory.Snapshot{})
 	require.ErrorContains(t, err, "client factory")
 
 	err = (&backendSink{
 		state:         fakeState{err: errors.New("state error")},
 		clientFactory: backendclient.New,
-	}).Export(context.Background(), &inventory.Snapshot{NodeID: "node-1"})
+	}).Export(context.Background(), &inventory.Snapshot{})
 	require.ErrorContains(t, err, "state error")
 
 	err = (&backendSink{
@@ -102,11 +108,11 @@ func TestBackendSinkExportErrors(t *testing.T) {
 	require.ErrorContains(t, err, "inventory snapshot")
 
 	err = (&backendSink{
-		state: fakeState{baseURL: "https://example.com", jwt: "jwt"},
+		state: fakeState{baseURL: "https://example.com", jwt: "jwt", nodeID: "node-1"},
 		clientFactory: func(string) (backendclient.Client, error) {
 			return nil, errors.New("client factory error")
 		},
-	}).Export(context.Background(), &inventory.Snapshot{NodeID: "node-1"})
+	}).Export(context.Background(), &inventory.Snapshot{})
 	require.ErrorContains(t, err, "create backend client")
 }
 
@@ -116,6 +122,7 @@ func TestBackendSinkExportUsesState(t *testing.T) {
 		state: fakeState{
 			baseURL: "https://example.com",
 			jwt:     "jwt-token",
+			nodeID:  "node-1",
 		},
 		clientFactory: func(string) (backendclient.Client, error) {
 			return client, nil
@@ -123,7 +130,6 @@ func TestBackendSinkExportUsesState(t *testing.T) {
 	}
 
 	err := s.Export(context.Background(), &inventory.Snapshot{
-		NodeID:    "node-1",
 		Hostname:  "host-a",
 		MachineID: "machine-id",
 	})

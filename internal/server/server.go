@@ -422,7 +422,7 @@ func (s *Server) startInventoryLoop(
 	}
 
 	allComponents := registry.AllComponentNames()
-	apiVersion, retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
+	retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
 
 	source := inventorysource.NewMachineInfoSourceWithAgentConfig(
 		inventoryMachineInfoCollectorFunc(func(context.Context) (*machineinfo.MachineInfo, error) {
@@ -430,7 +430,6 @@ func (s *Server) startInventoryLoop(
 		}),
 		&inventory.AgentConfig{
 			TotalComponents:        int64(len(allComponents)),
-			APIVersion:             apiVersion,
 			RetentionPeriodSeconds: retentionPeriodSeconds,
 			EnabledComponents:      enabledComponents,
 			DisabledComponents:     disabledComponents,

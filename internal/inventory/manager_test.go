@@ -56,7 +56,6 @@ func TestManagerCollectOnceExportsOnlyWhenInventoryChanges(t *testing.T) {
 		snapshots: []*Snapshot{
 			{
 				CollectedAt: time.Unix(100, 0).UTC(),
-				NodeID:      "node-1",
 				Hostname:    "host-a",
 				MachineID:   "machine-id",
 				Resources: Resources{
@@ -65,7 +64,6 @@ func TestManagerCollectOnceExportsOnlyWhenInventoryChanges(t *testing.T) {
 			},
 			{
 				CollectedAt: time.Unix(200, 0).UTC(),
-				NodeID:      "node-1",
 				Hostname:    "host-a",
 				MachineID:   "machine-id",
 				Resources: Resources{
@@ -74,7 +72,6 @@ func TestManagerCollectOnceExportsOnlyWhenInventoryChanges(t *testing.T) {
 			},
 			{
 				CollectedAt: time.Unix(300, 0).UTC(),
-				NodeID:      "node-1",
 				Hostname:    "host-b",
 				MachineID:   "machine-id",
 				Resources: Resources{

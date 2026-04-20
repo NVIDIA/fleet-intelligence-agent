@@ -194,7 +194,29 @@ func TestValidateBackendEndpoint(t *testing.T) {
 	_, err := ValidateBackendEndpoint("https://example.com/base")
 	require.NoError(t, err)
 
+	_, err = ValidateBackendEndpoint("http://localhost:8080")
+	require.NoError(t, err)
+
+	_, err = ValidateBackendEndpoint("http://127.0.0.1:8080")
+	require.NoError(t, err)
+
 	_, err = ValidateBackendEndpoint("http://example.com/base")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "https")
+	assert.Contains(t, err.Error(), "loopback")
+}
+
+func TestDeriveBackendBaseURL(t *testing.T) {
+	t.Parallel()
+
+	got, err := DeriveBackendBaseURL("https://backend.example.com/api/v1/health/metrics")
+	require.NoError(t, err)
+	assert.Equal(t, "https://backend.example.com", got)
+
+	got, err = DeriveBackendBaseURL("http://localhost:8080/api/v1/health/metrics")
+	require.NoError(t, err)
+	assert.Equal(t, "http://localhost:8080", got)
+
+	_, err = DeriveBackendBaseURL("http://example.com/api/v1/health/metrics")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "loopback")
 }

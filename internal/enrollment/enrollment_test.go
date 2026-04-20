@@ -90,6 +90,25 @@ func TestEnrollWorkflowErrors(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("localhost http endpoint allowed", func(t *testing.T) {
+		originalFactory := newBackendClient
+		t.Cleanup(func() { newBackendClient = originalFactory })
+
+		called := false
+		newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+			called = true
+			require.Equal(t, "http://localhost:8080", rawBaseURL)
+			return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
+		}
+
+		tmpHome := t.TempDir()
+		t.Setenv("HOME", tmpHome)
+
+		err := Enroll(context.Background(), "http://localhost:8080", "sak-token")
+		require.NoError(t, err)
+		require.True(t, called)
+	})
+
 	t.Run("backend client creation", func(t *testing.T) {
 		originalFactory := newBackendClient
 		t.Cleanup(func() { newBackendClient = originalFactory })

@@ -67,7 +67,6 @@ func (s *machineInfoSource) Collect(ctx context.Context) (*inventory.Snapshot, e
 
 	snap := &inventory.Snapshot{
 		CollectedAt:             time.Now().UTC(),
-		NodeID:                  info.MachineID,
 		Hostname:                info.Hostname,
 		MachineID:               info.MachineID,
 		SystemUUID:              info.SystemUUID,
@@ -75,14 +74,13 @@ func (s *machineInfoSource) Collect(ctx context.Context) (*inventory.Snapshot, e
 		OperatingSystem:         info.OperatingSystem,
 		OSImage:                 info.OSImage,
 		KernelVersion:           info.KernelVersion,
-		FleetintVersion:         info.FleetintVersion,
+		AgentVersion:            info.AgentVersion,
 		GPUDriverVersion:        info.GPUDriverVersion,
 		CUDAVersion:             info.CUDAVersion,
 		DCGMVersion:             info.DCGMVersion,
 		ContainerRuntimeVersion: info.ContainerRuntimeVersion,
 		AgentConfig:             s.agentConfig,
 	}
-
 	if info.CPUInfo != nil {
 		snap.Resources.CPUInfo = inventory.CPUInfo{
 			Type:         info.CPUInfo.Type,

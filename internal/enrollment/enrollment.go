@@ -112,7 +112,7 @@ func syncInventoryOnce(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("load default config for inventory sync: %w", err)
 	}
-	apiVersion, retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
+	retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
 
 	nvmlInstance, err := nvidianvml.New()
 	if err != nil {
@@ -126,7 +126,6 @@ func syncInventoryOnce(ctx context.Context) error {
 		}),
 		&inventory.AgentConfig{
 			TotalComponents:        int64(len(allComponents)),
-			APIVersion:             apiVersion,
 			RetentionPeriodSeconds: retentionPeriodSeconds,
 			EnabledComponents:      enabledComponents,
 			DisabledComponents:     disabledComponents,

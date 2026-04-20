@@ -25,7 +25,6 @@ import (
 func TestComputeHashIgnoresCollectedAtAndExistingHash(t *testing.T) {
 	base := &Snapshot{
 		CollectedAt:   time.Unix(100, 0).UTC(),
-		NodeID:        "node-1",
 		InventoryHash: "old-hash",
 		Hostname:      "host-a",
 		MachineID:     "machine-id",

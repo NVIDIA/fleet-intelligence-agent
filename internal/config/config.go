@@ -342,13 +342,13 @@ func (config *Config) ToConfigEntries(allComponentNames []string) []ConfigEntry 
 
 // InventoryAgentConfig returns the useful, non-sensitive subset of agent config that should be
 // persisted with inventory rather than exported through telemetry.
-func (config *Config) InventoryAgentConfig(allComponentNames []string) (apiVersion string, retentionPeriodSeconds int64, enabled, disabled []string) {
+func (config *Config) InventoryAgentConfig(allComponentNames []string) (retentionPeriodSeconds int64, enabled, disabled []string) {
 	if config == nil {
-		return "", 0, nil, nil
+		return 0, nil, nil
 	}
 
 	enabled, disabled = config.getComponentLists(allComponentNames)
-	return config.APIVersion, int64(config.RetentionPeriod.Seconds()), enabled, disabled
+	return int64(config.RetentionPeriod.Seconds()), enabled, disabled
 }
 
 // getComponentLists computes enabled/disabled lists from config rules against all available components.
