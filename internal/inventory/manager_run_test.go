@@ -32,6 +32,17 @@ type nilSnapshotSource struct{}
 
 func (nilSnapshotSource) Collect(context.Context) (*Snapshot, error) { return nil, nil }
 
+type countingSource struct {
+	collectCh chan struct{}
+}
+
+func (s *countingSource) Collect(context.Context) (*Snapshot, error) {
+	if s.collectCh != nil {
+		s.collectCh <- struct{}{}
+	}
+	return &Snapshot{MachineID: "machine-1", Hostname: "host-a"}, nil
+}
+
 func TestManagerCollectOnceErrors(t *testing.T) {
 	_, err := NewManager(nil, nil, InventoryConfig{}).CollectOnce(context.Background())
 	require.ErrorContains(t, err, "inventory source is required")
@@ -120,4 +131,30 @@ func TestManagerRunUsesRetryIntervalWithoutJitter(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.GreaterOrEqual(t, elapsed, 15*time.Millisecond)
 	require.Less(t, elapsed, 100*time.Millisecond)
+}
+
+func TestManagerRunWaitsIntervalBeforeSecondCollect(t *testing.T) {
+	src := &countingSource{collectCh: make(chan struct{}, 4)}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- NewManager(src, nil, InventoryConfig{Interval: 50 * time.Millisecond}).Run(ctx)
+	}()
+
+	select {
+	case <-src.collectCh:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("timed out waiting for initial collection")
+	}
+
+	select {
+	case <-src.collectCh:
+		t.Fatal("second collection happened before interval elapsed")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	cancel()
+	require.ErrorIs(t, <-done, context.Canceled)
 }

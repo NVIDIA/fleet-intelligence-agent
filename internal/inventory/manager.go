@@ -54,28 +54,36 @@ func NewManager(source Source, sink Sink, cfg InventoryConfig) Manager {
 }
 
 func (m *manager) Run(ctx context.Context) error {
-	if _, err := m.CollectOnce(ctx); err != nil {
+	_, err := m.CollectOnce(ctx)
+	if err != nil {
 		log.Logger.Warnw("initial inventory collection failed", "error", err)
 	}
 	if m.config.Interval <= 0 {
 		return nil
 	}
+	nextInterval := m.nextInterval(err)
 	if m.config.JitterEnabled {
-		if err := sleepWithContext(ctx, calculateJitter(initialJitterCap(m.config.Interval))); err != nil {
-			return err
-		}
+		nextInterval += calculateJitter(initialJitterCap(nextInterval))
 	}
 
 	for {
-		_, err := m.CollectOnce(ctx)
-		nextInterval := m.config.Interval
-		if err != nil && m.config.RetryInterval > 0 && m.config.RetryInterval < nextInterval {
-			nextInterval = m.config.RetryInterval + calculateJitter(retryJitterCap(m.config.RetryInterval))
-		}
 		if err := sleepWithContext(ctx, nextInterval); err != nil {
 			return err
 		}
+		_, err = m.CollectOnce(ctx)
+		nextInterval = m.nextInterval(err)
 	}
+}
+
+func (m *manager) nextInterval(err error) time.Duration {
+	nextInterval := m.config.Interval
+	if err != nil && m.config.RetryInterval > 0 && m.config.RetryInterval < nextInterval {
+		nextInterval = m.config.RetryInterval
+		if m.config.JitterEnabled {
+			nextInterval += calculateJitter(retryJitterCap(m.config.RetryInterval))
+		}
+	}
+	return nextInterval
 }
 
 func (m *manager) CollectOnce(ctx context.Context) (*Snapshot, error) {
