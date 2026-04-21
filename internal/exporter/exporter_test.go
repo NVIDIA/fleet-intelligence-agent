@@ -814,6 +814,41 @@ func TestRefreshConfigFromMetadata(t *testing.T) {
 		err = exporter.Stop()
 		require.NoError(t, err)
 	})
+
+	t.Run("falls back to legacy endpoints when backend base URL is invalid", func(t *testing.T) {
+		tmpDB := setupTestDB(t)
+		defer tmpDB.Close()
+
+		ctx := context.Background()
+
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "backend_base_url", "http://bad-backend.example.com")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "metrics_endpoint", "https://legacy.example.com/api/v1/health/metrics")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "logs_endpoint", "https://legacy.example.com/api/v1/health/logs")
+		require.NoError(t, err)
+
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithDatabaseConnections(tmpDB, tmpDB),
+			WithMachineID("test-machine-id"),
+		)
+		require.NoError(t, err)
+
+		he := exporter.(*healthExporter)
+		he.refreshConfigFromMetadata(ctx)
+
+		assert.Equal(t, "https://legacy.example.com/api/v1/health/metrics", he.options.config.MetricsEndpoint)
+		assert.Equal(t, "https://legacy.example.com/api/v1/health/logs", he.options.config.LogsEndpoint)
+
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
 }
 
 // TestUpdateTokenInMetadata tests the updateTokenInMetadata function
@@ -1008,6 +1043,96 @@ func TestRefreshJWTToken(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		token, err := he.refreshJWTToken(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, expectedToken, token)
+
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("refreshes token using legacy endpoint when backend base URL is invalid", func(t *testing.T) {
+		expectedToken := "new-jwt-token"
+		originalFactory := newBackendClient
+		t.Cleanup(func() { newBackendClient = originalFactory })
+		newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+			assert.Equal(t, "https://backend.example.com", rawBaseURL)
+			return &fakeJWTRefreshClient{
+				expectedSAK: "test-sak-token",
+				token:       expectedToken,
+			}, nil
+		}
+
+		tmpDB := setupTestDB(t)
+		defer tmpDB.Close()
+
+		ctx := context.Background()
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "sak_token", "test-sak-token")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "backend_base_url", "http://bad-backend.example.com")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "enroll_endpoint", "https://backend.example.com/api/v1/health/enroll")
+		require.NoError(t, err)
+
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithDatabaseConnections(tmpDB, tmpDB),
+			WithMachineID("test-machine-id"),
+		)
+		require.NoError(t, err)
+
+		he := exporter.(*healthExporter)
+
+		token, err := he.refreshJWTToken(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, expectedToken, token)
+
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("refreshes token using later legacy endpoint when earlier one is malformed", func(t *testing.T) {
+		expectedToken := "new-jwt-token"
+		originalFactory := newBackendClient
+		t.Cleanup(func() { newBackendClient = originalFactory })
+		newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+			assert.Equal(t, "https://backend.example.com", rawBaseURL)
+			return &fakeJWTRefreshClient{
+				expectedSAK: "test-sak-token",
+				token:       expectedToken,
+			}, nil
+		}
+
+		tmpDB := setupTestDB(t)
+		defer tmpDB.Close()
+
+		ctx := context.Background()
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "sak_token", "test-sak-token")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "enroll_endpoint", "https://backend.example.com?bad=query")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "metrics_endpoint", "https://backend.example.com/api/v1/health/metrics")
+		require.NoError(t, err)
+
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithDatabaseConnections(tmpDB, tmpDB),
+			WithMachineID("test-machine-id"),
+		)
+		require.NoError(t, err)
 
 		he := exporter.(*healthExporter)
 

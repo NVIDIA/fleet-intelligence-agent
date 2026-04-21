@@ -265,16 +265,20 @@ func (e *healthExporter) refreshConfigFromMetadata(ctx context.Context) {
 		validated, validateErr := endpoint.ValidateBackendEndpoint(baseURL)
 		if validateErr != nil {
 			log.Logger.Errorw("ignoring invalid backend base URL from metadata", "error", validateErr)
+			metricsEndpoint = e.readValidatedEndpoint(ctx, "metrics_endpoint")
+			logsEndpoint = e.readValidatedEndpoint(ctx, "logs_endpoint")
 		} else {
 			if joined, joinErr := endpoint.JoinPath(validated, "api", "v1", "health", "metrics"); joinErr == nil {
 				metricsEndpoint = joined
 			} else {
 				log.Logger.Errorw("failed to derive metrics endpoint from backend base URL", "error", joinErr)
+				metricsEndpoint = e.readValidatedEndpoint(ctx, "metrics_endpoint")
 			}
 			if joined, joinErr := endpoint.JoinPath(validated, "api", "v1", "health", "logs"); joinErr == nil {
 				logsEndpoint = joined
 			} else {
 				log.Logger.Errorw("failed to derive logs endpoint from backend base URL", "error", joinErr)
+				logsEndpoint = e.readValidatedEndpoint(ctx, "logs_endpoint")
 			}
 		}
 	} else {
@@ -348,8 +352,12 @@ func (e *healthExporter) refreshJWTToken(ctx context.Context) (string, error) {
 
 	baseURL, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, "backend_base_url")
 	if err == nil && baseURL != "" {
-		// use configured base URL
-	} else {
+		if _, validateErr := endpoint.ValidateBackendEndpoint(baseURL); validateErr != nil {
+			log.Logger.Errorw("ignoring invalid backend base URL for JWT refresh", "backend_base_url", baseURL, "error", validateErr)
+			baseURL = ""
+		}
+	}
+	if err != nil || baseURL == "" {
 		baseURL, err = e.readLegacyBackendBaseURL(ctx)
 		if err != nil {
 			return "", err
@@ -401,7 +409,8 @@ func (e *healthExporter) readLegacyBackendBaseURL(ctx context.Context) (string, 
 		}
 		baseURL, err := endpoint.DeriveBackendBaseURL(value)
 		if err != nil {
-			return "", fmt.Errorf("invalid legacy %s for JWT refresh: %w", key, err)
+			log.Logger.Errorw("ignoring invalid legacy backend endpoint for JWT refresh", "key", key, "value", value, "error", err)
+			continue
 		}
 		return baseURL, nil
 	}
