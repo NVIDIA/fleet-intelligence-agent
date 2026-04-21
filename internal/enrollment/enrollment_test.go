@@ -84,6 +84,29 @@ func TestEnrollWorkflow(t *testing.T) {
 	require.True(t, syncCalled)
 }
 
+func TestEnrollWorkflowNormalizesLegacyEndpointToBaseURL(t *testing.T) {
+	originalFactory := newBackendClient
+	originalSync := syncInventoryAfterEnroll
+	t.Cleanup(func() {
+		newBackendClient = originalFactory
+		syncInventoryAfterEnroll = originalSync
+	})
+
+	client := &fakeBackendClient{enrollJWT: "jwt-token"}
+	newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+		require.Equal(t, "https://example.com", rawBaseURL)
+		return client, nil
+	}
+	syncInventoryAfterEnroll = func(context.Context) error { return nil }
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	err := Enroll(context.Background(), "https://example.com/api/v1/health/metrics", "sak-token")
+	require.NoError(t, err)
+	require.Equal(t, "sak-token", client.enrollSAK)
+}
+
 func TestEnrollWorkflowErrors(t *testing.T) {
 	t.Run("invalid endpoint", func(t *testing.T) {
 		err := Enroll(context.Background(), "http://example.com", "sak-token")
@@ -129,6 +152,30 @@ func TestEnrollWorkflowErrors(t *testing.T) {
 
 		err := Enroll(context.Background(), "https://example.com", "sak-token")
 		require.ErrorContains(t, err, "enroll boom")
+	})
+
+	t.Run("localhost legacy endpoint allowed", func(t *testing.T) {
+		originalFactory := newBackendClient
+		originalSync := syncInventoryAfterEnroll
+		t.Cleanup(func() {
+			newBackendClient = originalFactory
+			syncInventoryAfterEnroll = originalSync
+		})
+
+		called := false
+		newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+			called = true
+			require.Equal(t, "http://localhost:8080", rawBaseURL)
+			return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
+		}
+		syncInventoryAfterEnroll = func(context.Context) error { return nil }
+
+		tmpHome := t.TempDir()
+		t.Setenv("HOME", tmpHome)
+
+		err := Enroll(context.Background(), "http://localhost:8080/api/v1/health/enroll", "sak-token")
+		require.NoError(t, err)
+		require.True(t, called)
 	})
 }
 

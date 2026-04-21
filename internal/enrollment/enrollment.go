@@ -19,6 +19,7 @@ package enrollment
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
@@ -43,7 +44,7 @@ var (
 
 // Enroll runs the full enrollment workflow and performs a best-effort initial inventory sync.
 func Enroll(ctx context.Context, baseEndpoint, sakToken string) error {
-	baseURL, err := endpoint.ValidateBackendEndpoint(baseEndpoint)
+	baseURL, err := normalizeBackendBaseURL(baseEndpoint)
 	if err != nil {
 		return fmt.Errorf("invalid enrollment endpoint: %w", err)
 	}
@@ -63,6 +64,22 @@ func Enroll(ctx context.Context, baseEndpoint, sakToken string) error {
 		log.Logger.Warnw("post-enroll inventory sync failed", "error", err)
 	}
 	return nil
+}
+
+func normalizeBackendBaseURL(raw string) (*url.URL, error) {
+	baseURL, err := endpoint.ValidateBackendEndpoint(raw)
+	if err != nil {
+		return nil, err
+	}
+	if baseURL.Path == "" || baseURL.Path == "/" {
+		return baseURL, nil
+	}
+
+	normalized, err := endpoint.DeriveBackendBaseURL(raw)
+	if err != nil {
+		return nil, err
+	}
+	return endpoint.ValidateBackendEndpoint(normalized)
 }
 
 func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken string) error {
