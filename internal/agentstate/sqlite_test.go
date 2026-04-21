@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,6 +84,45 @@ func TestSQLiteStateMissingValue(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, ok)
 	require.Empty(t, value)
+}
+
+func TestSQLiteStateMissingMetadataTableIsTreatedAsAbsent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	state := newTestSQLiteState(t)
+
+	stateFile, err := state.stateFileFn()
+	require.NoError(t, err)
+
+	db, err := sqlite.Open(stateFile)
+	require.NoError(t, err)
+	_, err = db.Exec("PRAGMA user_version = 1")
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+
+	for _, get := range []func(context.Context) (string, bool, error){
+		state.GetJWT,
+		state.GetSAK,
+		state.GetNodeID,
+	} {
+		value, ok, err := get(ctx)
+		require.NoError(t, err)
+		require.False(t, ok)
+		require.Empty(t, value)
+	}
+}
+
+func TestSQLiteStateSetBackendBaseURLValidatesInput(t *testing.T) {
+	t.Parallel()
+
+	state := newTestSQLiteState(t)
+
+	err := state.SetBackendBaseURL(context.Background(), "http://example.com")
+	require.Error(t, err)
+
+	err = state.SetBackendBaseURL(context.Background(), "not-a-url")
+	require.Error(t, err)
 }
 
 func TestSQLiteStateGetBackendBaseURLFallsBackToLegacyEndpoints(t *testing.T) {

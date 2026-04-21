@@ -18,10 +18,13 @@ package agentstate
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
+	sqlite3 "github.com/mattn/go-sqlite3"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
@@ -65,6 +68,9 @@ func (s *sqliteState) GetBackendBaseURL(ctx context.Context) (string, bool, erro
 }
 
 func (s *sqliteState) SetBackendBaseURL(ctx context.Context, value string) error {
+	if _, err := endpoint.ValidateBackendEndpoint(value); err != nil {
+		return fmt.Errorf("validate backend base URL: %w", err)
+	}
 	return s.setMetadata(ctx, metadataKeyBackendBaseURL, value)
 }
 
@@ -101,6 +107,9 @@ func (s *sqliteState) getMetadata(ctx context.Context, key string) (string, bool
 
 	value, err := pkgmetadata.ReadMetadata(ctx, db, key)
 	if err != nil {
+		if isMetadataAbsentErr(err) {
+			return "", false, nil
+		}
 		return "", false, fmt.Errorf("read metadata %q: %w", key, err)
 	}
 	if value == "" {
@@ -116,17 +125,17 @@ func (s *sqliteState) setMetadata(ctx context.Context, key, value string) error 
 	}
 	defer db.Close()
 
-	if err := pkgmetadata.CreateTableMetadata(ctx, db); err != nil {
-		return fmt.Errorf("create metadata table: %w", err)
-	}
-	if err := pkgmetadata.SetMetadata(ctx, db, key, value); err != nil {
-		return fmt.Errorf("set metadata %q: %w", key, err)
-	}
 	stateFile, err := s.stateFileFn()
 	if err == nil {
 		if err := config.SecureStateFilePermissions(stateFile); err != nil {
 			return fmt.Errorf("secure state file permissions: %w", err)
 		}
+	}
+	if err := pkgmetadata.CreateTableMetadata(ctx, db); err != nil {
+		return fmt.Errorf("create metadata table: %w", err)
+	}
+	if err := pkgmetadata.SetMetadata(ctx, db, key, value); err != nil {
+		return fmt.Errorf("set metadata %q: %w", key, err)
 	}
 	return nil
 }
@@ -141,6 +150,15 @@ func (s *sqliteState) openReadOnly() (*sql.DB, error) {
 		return nil, fmt.Errorf("open state database read-only: %w", err)
 	}
 	return db, nil
+}
+
+func isMetadataAbsentErr(err error) bool {
+	if errors.Is(err, sql.ErrNoRows) {
+		return true
+	}
+
+	var sqliteErr sqlite3.Error
+	return errors.As(err, &sqliteErr) && sqliteErr.Code == sqlite3.ErrError && strings.Contains(strings.ToLower(sqliteErr.Error()), "no such table")
 }
 
 func (s *sqliteState) openReadWrite() (*sql.DB, error) {
