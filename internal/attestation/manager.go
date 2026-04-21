@@ -311,7 +311,7 @@ func NewStateNodeIDProvider(state agentstate.State) func(context.Context) (strin
 		if state == nil {
 			return "", fmt.Errorf("node ID provider requires agent state")
 		}
-		value, ok, err := state.GetNodeID(ctx)
+		value, ok, err := state.GetNodeUUID(ctx)
 		if err != nil {
 			return "", err
 		}

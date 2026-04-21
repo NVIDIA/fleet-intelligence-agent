@@ -49,13 +49,13 @@ func (f fakeState) GetJWT(context.Context) (string, bool, error) {
 func (f fakeState) SetJWT(context.Context, string) error         { return nil }
 func (f fakeState) GetSAK(context.Context) (string, bool, error) { return "", false, nil }
 func (f fakeState) SetSAK(context.Context, string) error         { return nil }
-func (f fakeState) GetNodeID(context.Context) (string, bool, error) {
+func (f fakeState) GetNodeUUID(context.Context) (string, bool, error) {
 	if f.err != nil {
 		return "", false, f.err
 	}
 	return f.nodeID, f.nodeID != "", nil
 }
-func (f fakeState) SetNodeID(context.Context, string) error { return nil }
+func (f fakeState) SetNodeUUID(context.Context, string) error { return nil }
 
 type fakeClient struct {
 	nodeID string

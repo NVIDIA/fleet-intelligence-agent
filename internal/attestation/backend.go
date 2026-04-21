@@ -109,7 +109,7 @@ func (s *stateSubmitter) Submit(ctx context.Context, result *Result, jwt string)
 		return fmt.Errorf("attestation submission requires result")
 	}
 	if result.NodeID == "" {
-		nodeID, ok, err := s.factory.state.GetNodeID(ctx)
+		nodeID, ok, err := s.factory.state.GetNodeUUID(ctx)
 		if err != nil {
 			return err
 		}

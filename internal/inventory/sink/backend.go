@@ -63,7 +63,7 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 	if !ok || jwt == "" {
 		return inventory.ErrNotReady
 	}
-	nodeUUID, ok, err := s.state.GetNodeID(ctx)
+	nodeUUID, ok, err := s.state.GetNodeUUID(ctx)
 	if err != nil {
 		return err
 	}

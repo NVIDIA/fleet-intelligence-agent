@@ -100,11 +100,11 @@ func (s *sqliteState) SetSAK(ctx context.Context, value string) error {
 	return s.setMetadata(ctx, MetadataKeySAKToken, value)
 }
 
-func (s *sqliteState) GetNodeID(ctx context.Context) (string, bool, error) {
+func (s *sqliteState) GetNodeUUID(ctx context.Context) (string, bool, error) {
 	return s.getMetadata(ctx, pkgmetadata.MetadataKeyMachineID)
 }
 
-func (s *sqliteState) SetNodeID(ctx context.Context, value string) error {
+func (s *sqliteState) SetNodeUUID(ctx context.Context, value string) error {
 	return s.setMetadata(ctx, pkgmetadata.MetadataKeyMachineID, value)
 }
 

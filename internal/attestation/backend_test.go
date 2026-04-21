@@ -47,10 +47,10 @@ func (s *stubState) GetJWT(context.Context) (string, bool, error)    { return s.
 func (s *stubState) SetJWT(_ context.Context, v string) error        { s.setJWT = v; s.jwt = v; return nil }
 func (s *stubState) GetSAK(context.Context) (string, bool, error)    { return "", false, nil }
 func (s *stubState) SetSAK(context.Context, string) error            { return nil }
-func (s *stubState) GetNodeID(context.Context) (string, bool, error) {
+func (s *stubState) GetNodeUUID(context.Context) (string, bool, error) {
 	return s.nodeID, s.nodeOK, s.nodeErr
 }
-func (s *stubState) SetNodeID(context.Context, string) error { return nil }
+func (s *stubState) SetNodeUUID(context.Context, string) error { return nil }
 
 type recordingClient struct {
 	lastNodeID string

@@ -34,6 +34,6 @@ type State interface {
 	GetSAK(ctx context.Context) (value string, ok bool, err error)
 	SetSAK(ctx context.Context, value string) error
 
-	GetNodeID(ctx context.Context) (value string, ok bool, err error)
-	SetNodeID(ctx context.Context, value string) error
+	GetNodeUUID(ctx context.Context) (value string, ok bool, err error)
+	SetNodeUUID(ctx context.Context, value string) error
 }

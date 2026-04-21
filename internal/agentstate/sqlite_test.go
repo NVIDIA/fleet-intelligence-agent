@@ -48,7 +48,7 @@ func TestSQLiteStateRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	err = state.SetSAK(ctx, "sak-token")
 	require.NoError(t, err)
-	err = state.SetNodeID(ctx, "node-1")
+	err = state.SetNodeUUID(ctx, "node-1")
 	require.NoError(t, err)
 
 	value, ok, err := state.GetBackendBaseURL(ctx)
@@ -66,7 +66,7 @@ func TestSQLiteStateRoundTrip(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "sak-token", value)
 
-	value, ok, err = state.GetNodeID(ctx)
+	value, ok, err = state.GetNodeUUID(ctx)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, "node-1", value)
@@ -105,7 +105,7 @@ func TestSQLiteStateMissingMetadataTableIsTreatedAsAbsent(t *testing.T) {
 	for _, get := range []func(context.Context) (string, bool, error){
 		state.GetJWT,
 		state.GetSAK,
-		state.GetNodeID,
+		state.GetNodeUUID,
 	} {
 		value, ok, err := get(ctx)
 		require.NoError(t, err)
