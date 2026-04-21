@@ -25,7 +25,7 @@ import (
 
 // NonceBackendClient is the backend client view required by the nonce provider.
 type NonceBackendClient interface {
-	GetNonce(ctx context.Context, nodeID string, jwt string) (*backendclient.NonceResponse, error)
+	GetNonce(ctx context.Context, nodeUUID string, jwt string) (*backendclient.NonceResponse, error)
 }
 
 type backendNonceProvider struct {
@@ -37,18 +37,18 @@ func NewBackendNonceProvider(client NonceBackendClient) NonceProvider {
 	return &backendNonceProvider{client: client}
 }
 
-func (p *backendNonceProvider) GetNonce(ctx context.Context, nodeID, jwt string) (string, time.Time, string, error) {
+func (p *backendNonceProvider) GetNonce(ctx context.Context, nodeUUID, jwt string) (string, time.Time, string, error) {
 	if p.client == nil {
 		return "", time.Time{}, "", fmt.Errorf("nonce provider requires backend client")
 	}
-	if nodeID == "" {
-		return "", time.Time{}, "", fmt.Errorf("nonce provider requires node ID")
+	if nodeUUID == "" {
+		return "", time.Time{}, "", fmt.Errorf("nonce provider requires node UUID")
 	}
 	if jwt == "" {
 		return "", time.Time{}, "", fmt.Errorf("nonce provider requires jwt")
 	}
 
-	resp, err := p.client.GetNonce(ctx, nodeID, jwt)
+	resp, err := p.client.GetNonce(ctx, nodeUUID, jwt)
 	if err != nil {
 		return "", time.Time{}, "", err
 	}

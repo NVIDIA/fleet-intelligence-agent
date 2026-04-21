@@ -26,13 +26,13 @@ import (
 )
 
 type testNonceClient struct {
-	resp      *backendclient.NonceResponse
-	gotNodeID string
-	gotJWT    string
+	resp        *backendclient.NonceResponse
+	gotNodeUUID string
+	gotJWT      string
 }
 
-func (c *testNonceClient) GetNonce(_ context.Context, nodeID, jwt string) (*backendclient.NonceResponse, error) {
-	c.gotNodeID = nodeID
+func (c *testNonceClient) GetNonce(_ context.Context, nodeUUID, jwt string) (*backendclient.NonceResponse, error) {
+	c.gotNodeUUID = nodeUUID
 	c.gotJWT = jwt
 	return c.resp, nil
 }
@@ -53,6 +53,6 @@ func TestBackendNonceProvider(t *testing.T) {
 	require.Equal(t, "abc123", nonce)
 	require.Equal(t, refreshTS, ts)
 	require.Equal(t, "new-jwt", jwt)
-	require.Equal(t, "node-1", client.gotNodeID)
+	require.Equal(t, "node-1", client.gotNodeUUID)
 	require.Equal(t, "jwt-token", client.gotJWT)
 }

@@ -28,7 +28,7 @@ var ErrNotEnrolled = errors.New("agent not enrolled")
 // Result is the agent-owned attestation state model for the new backend sync loop.
 type Result struct {
 	CollectedAt           time.Time
-	NodeID                string
+	NodeUUID              string
 	NonceRefreshTimestamp time.Time
 	Success               bool
 	ErrorMessage          string
@@ -53,7 +53,7 @@ type EvidenceItem struct {
 
 // NonceProvider retrieves a backend nonce for a node.
 type NonceProvider interface {
-	GetNonce(ctx context.Context, nodeID, jwt string) (nonce string, refreshTS time.Time, refreshedJWT string, err error)
+	GetNonce(ctx context.Context, nodeUUID, jwt string) (nonce string, refreshTS time.Time, refreshedJWT string, err error)
 }
 
 // EvidenceCollector collects attestation evidence from local tooling.

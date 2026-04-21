@@ -27,10 +27,10 @@ import (
 )
 
 type fakeState struct {
-	baseURL string
-	jwt     string
-	nodeID  string
-	err     error
+	baseURL  string
+	jwt      string
+	nodeUUID string
+	err      error
 }
 
 func (f fakeState) GetBackendBaseURL(context.Context) (string, bool, error) {
@@ -53,14 +53,14 @@ func (f fakeState) GetNodeUUID(context.Context) (string, bool, error) {
 	if f.err != nil {
 		return "", false, f.err
 	}
-	return f.nodeID, f.nodeID != "", nil
+	return f.nodeUUID, f.nodeUUID != "", nil
 }
 func (f fakeState) SetNodeUUID(context.Context, string) error { return nil }
 
 type fakeClient struct {
-	nodeID string
-	req    *backendclient.NodeUpsertRequest
-	jwt    string
+	nodeUUID string
+	req      *backendclient.NodeUpsertRequest
+	jwt      string
 }
 
 func (f *fakeClient) Enroll(context.Context, string) (string, error) { return "", nil }
@@ -71,8 +71,8 @@ func (f *fakeClient) SubmitAttestation(context.Context, string, *backendclient.A
 	return nil
 }
 func (f *fakeClient) RefreshToken(context.Context, string) (string, error) { return "", nil }
-func (f *fakeClient) UpsertNode(_ context.Context, nodeID string, req *backendclient.NodeUpsertRequest, jwt string) error {
-	f.nodeID = nodeID
+func (f *fakeClient) UpsertNode(_ context.Context, nodeUUID string, req *backendclient.NodeUpsertRequest, jwt string) error {
+	f.nodeUUID = nodeUUID
 	f.req = req
 	f.jwt = jwt
 	return nil
@@ -108,7 +108,7 @@ func TestBackendSinkExportErrors(t *testing.T) {
 	require.ErrorContains(t, err, "inventory snapshot")
 
 	err = (&backendSink{
-		state: fakeState{baseURL: "https://example.com", jwt: "jwt", nodeID: "node-1"},
+		state: fakeState{baseURL: "https://example.com", jwt: "jwt", nodeUUID: "node-1"},
 		clientFactory: func(string) (backendclient.Client, error) {
 			return nil, errors.New("client factory error")
 		},
@@ -120,9 +120,9 @@ func TestBackendSinkExportUsesState(t *testing.T) {
 	client := &fakeClient{}
 	s := &backendSink{
 		state: fakeState{
-			baseURL: "https://example.com",
-			jwt:     "jwt-token",
-			nodeID:  "node-1",
+			baseURL:  "https://example.com",
+			jwt:      "jwt-token",
+			nodeUUID: "node-1",
 		},
 		clientFactory: func(string) (backendclient.Client, error) {
 			return client, nil
@@ -134,7 +134,7 @@ func TestBackendSinkExportUsesState(t *testing.T) {
 		MachineID: "machine-id",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "node-1", client.nodeID)
+	require.Equal(t, "node-1", client.nodeUUID)
 	require.Equal(t, "jwt-token", client.jwt)
 	require.NotNil(t, client.req)
 	require.Equal(t, "host-a", client.req.Hostname)

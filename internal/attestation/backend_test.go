@@ -27,16 +27,16 @@ import (
 )
 
 type stubState struct {
-	baseURL string
-	baseOK  bool
-	baseErr error
-	jwt     string
-	jwtOK   bool
-	jwtErr  error
-	setJWT  string
-	nodeID  string
-	nodeOK  bool
-	nodeErr error
+	baseURL  string
+	baseOK   bool
+	baseErr  error
+	jwt      string
+	jwtOK    bool
+	jwtErr   error
+	setJWT   string
+	nodeUUID string
+	nodeOK   bool
+	nodeErr  error
 }
 
 func (s *stubState) GetBackendBaseURL(context.Context) (string, bool, error) {
@@ -48,15 +48,15 @@ func (s *stubState) SetJWT(_ context.Context, v string) error        { s.setJWT 
 func (s *stubState) GetSAK(context.Context) (string, bool, error)    { return "", false, nil }
 func (s *stubState) SetSAK(context.Context, string) error            { return nil }
 func (s *stubState) GetNodeUUID(context.Context) (string, bool, error) {
-	return s.nodeID, s.nodeOK, s.nodeErr
+	return s.nodeUUID, s.nodeOK, s.nodeErr
 }
 func (s *stubState) SetNodeUUID(context.Context, string) error { return nil }
 
 type recordingClient struct {
-	lastNodeID string
-	lastJWT    string
-	lastReq    *backendclient.AttestationRequest
-	nonceResp  *backendclient.NonceResponse
+	lastNodeUUID string
+	lastJWT      string
+	lastReq      *backendclient.AttestationRequest
+	nonceResp    *backendclient.NonceResponse
 }
 
 func (c *recordingClient) Enroll(context.Context, string) (string, error) { return "", nil }
@@ -66,8 +66,8 @@ func (c *recordingClient) UpsertNode(context.Context, string, *backendclient.Nod
 func (c *recordingClient) GetNonce(context.Context, string, string) (*backendclient.NonceResponse, error) {
 	return c.nonceResp, nil
 }
-func (c *recordingClient) SubmitAttestation(_ context.Context, nodeID string, req *backendclient.AttestationRequest, jwt string) error {
-	c.lastNodeID = nodeID
+func (c *recordingClient) SubmitAttestation(_ context.Context, nodeUUID string, req *backendclient.AttestationRequest, jwt string) error {
+	c.lastNodeUUID = nodeUUID
 	c.lastJWT = jwt
 	c.lastReq = req
 	return nil
@@ -146,7 +146,7 @@ func TestStateProvidersAndSubmitter(t *testing.T) {
 	state := &stubState{
 		baseURL: "https://backend.example.com", baseOK: true,
 		jwt: "jwt-token", jwtOK: true,
-		nodeID: "node-1", nodeOK: true,
+		nodeUUID: "node-1", nodeOK: true,
 	}
 
 	jwtProvider := NewStateJWTProvider(state)
@@ -156,9 +156,9 @@ func TestStateProvidersAndSubmitter(t *testing.T) {
 	require.NoError(t, jwtProvider.SetJWT(context.Background(), "updated"))
 	require.Equal(t, "updated", state.setJWT)
 
-	nodeID, err := NewStateNodeIDProvider(state)(context.Background())
+	nodeUUID, err := NewStateNodeUUIDProvider(state)(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, "node-1", nodeID)
+	require.Equal(t, "node-1", nodeUUID)
 
 	nonce, ts, refreshedJWT, err := NewStateNonceProvider(state).GetNonce(context.Background(), "node-1", "jwt-token")
 	require.NoError(t, err)
@@ -167,7 +167,7 @@ func TestStateProvidersAndSubmitter(t *testing.T) {
 	require.Equal(t, "new-jwt", refreshedJWT)
 
 	result := &Result{
-		NodeID: "node-1",
+		NodeUUID: "node-1",
 		SDKResponse: SDKResponse{
 			ResultCode: 1,
 			Evidences:  []EvidenceItem{{Arch: "BLACKWELL"}},
@@ -175,15 +175,15 @@ func TestStateProvidersAndSubmitter(t *testing.T) {
 	}
 	err = NewStateBackendSubmitter(state).Submit(context.Background(), result, "jwt-token")
 	require.NoError(t, err)
-	require.Equal(t, "node-1", recording.lastNodeID)
+	require.Equal(t, "node-1", recording.lastNodeUUID)
 	require.Equal(t, "jwt-token", recording.lastJWT)
 	require.NotNil(t, recording.lastReq)
 	require.Equal(t, "BLACKWELL", recording.lastReq.AttestationData.SDKResponse.Evidences[0].Arch)
 
-	recording.lastNodeID = ""
+	recording.lastNodeUUID = ""
 	err = NewStateBackendSubmitter(state).Submit(context.Background(), &Result{}, "jwt-token")
 	require.NoError(t, err)
-	require.Equal(t, "node-1", recording.lastNodeID)
+	require.Equal(t, "node-1", recording.lastNodeUUID)
 }
 
 func TestStateProvidersPropagateBackendClientConstructionErrors(t *testing.T) {
@@ -198,6 +198,6 @@ func TestStateProvidersPropagateBackendClientConstructionErrors(t *testing.T) {
 	_, _, _, err := NewStateNonceProvider(state).GetNonce(context.Background(), "node-1", "jwt-token")
 	require.ErrorContains(t, err, "construct failed")
 
-	err = NewStateBackendSubmitter(state).Submit(context.Background(), &Result{NodeID: "node-1"}, "jwt-token")
+	err = NewStateBackendSubmitter(state).Submit(context.Background(), &Result{NodeUUID: "node-1"}, "jwt-token")
 	require.ErrorContains(t, err, "construct failed")
 }

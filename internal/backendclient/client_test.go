@@ -199,19 +199,19 @@ func TestClient_ValidationErrors(t *testing.T) {
 	require.ErrorContains(t, err, "sakToken cannot be empty")
 
 	err = c.UpsertNode(context.Background(), "", &NodeUpsertRequest{}, "jwt")
-	require.ErrorContains(t, err, "nodeID cannot be empty")
+	require.ErrorContains(t, err, "nodeUUID cannot be empty")
 	err = c.UpsertNode(context.Background(), "node-1", nil, "jwt")
 	require.ErrorContains(t, err, "cannot be nil")
 	err = c.UpsertNode(context.Background(), "node-1", &NodeUpsertRequest{}, "")
 	require.ErrorContains(t, err, "jwt cannot be empty")
 
 	_, err = c.GetNonce(context.Background(), "", "jwt")
-	require.ErrorContains(t, err, "nodeID cannot be empty")
+	require.ErrorContains(t, err, "nodeUUID cannot be empty")
 	_, err = c.GetNonce(context.Background(), "node-1", "")
 	require.ErrorContains(t, err, "jwt cannot be empty")
 
 	err = c.SubmitAttestation(context.Background(), "", &AttestationRequest{}, "jwt")
-	require.ErrorContains(t, err, "nodeID cannot be empty")
+	require.ErrorContains(t, err, "nodeUUID cannot be empty")
 	err = c.SubmitAttestation(context.Background(), "node-1", nil, "jwt")
 	require.ErrorContains(t, err, "cannot be nil")
 	err = c.SubmitAttestation(context.Background(), "node-1", &AttestationRequest{}, "")

@@ -460,7 +460,7 @@ func (s *Server) startAttestationLoop(ctx context.Context, cfg *config.Config) {
 
 	state := agentstate.NewSQLite()
 	manager := attestation.NewManager(
-		attestation.NewStateNodeIDProvider(state),
+		attestation.NewStateNodeUUIDProvider(state),
 		attestation.NewStateJWTProvider(state),
 		attestation.NewStateNonceProvider(state),
 		attestation.NewCLIEvidenceCollector(getAttestationTimeout(cfg)),

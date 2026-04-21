@@ -41,9 +41,9 @@ var errNilBaseURL = errors.New("backend base URL is required")
 // Client is the backend workflow client used by enrollment, inventory, and attestation paths.
 type Client interface {
 	Enroll(ctx context.Context, sakToken string) (jwt string, err error)
-	UpsertNode(ctx context.Context, nodeID string, req *NodeUpsertRequest, jwt string) error
-	GetNonce(ctx context.Context, nodeID string, jwt string) (*NonceResponse, error)
-	SubmitAttestation(ctx context.Context, nodeID string, req *AttestationRequest, jwt string) error
+	UpsertNode(ctx context.Context, nodeUUID string, req *NodeUpsertRequest, jwt string) error
+	GetNonce(ctx context.Context, nodeUUID string, jwt string) (*NonceResponse, error)
+	SubmitAttestation(ctx context.Context, nodeUUID string, req *AttestationRequest, jwt string) error
 	RefreshToken(ctx context.Context, jwt string) (newJWT string, err error)
 }
 
@@ -95,9 +95,9 @@ func (c *client) Enroll(ctx context.Context, sakToken string) (string, error) {
 	return resp.JWTAssertion, nil
 }
 
-func (c *client) UpsertNode(ctx context.Context, nodeID string, req *NodeUpsertRequest, jwt string) error {
-	if nodeID == "" {
-		return fmt.Errorf("nodeID cannot be empty")
+func (c *client) UpsertNode(ctx context.Context, nodeUUID string, req *NodeUpsertRequest, jwt string) error {
+	if nodeUUID == "" {
+		return fmt.Errorf("nodeUUID cannot be empty")
 	}
 	if jwt == "" {
 		return fmt.Errorf("jwt cannot be empty")
@@ -105,19 +105,19 @@ func (c *client) UpsertNode(ctx context.Context, nodeID string, req *NodeUpsertR
 	if req == nil {
 		return fmt.Errorf("node upsert request cannot be nil")
 	}
-	return c.doJSON(ctx, http.MethodPut, []string{"v1", "agent", "nodes", nodeID}, jwt, req, nil)
+	return c.doJSON(ctx, http.MethodPut, []string{"v1", "agent", "nodes", nodeUUID}, jwt, req, nil)
 }
 
-func (c *client) GetNonce(ctx context.Context, nodeID string, jwt string) (*NonceResponse, error) {
-	if nodeID == "" {
-		return nil, fmt.Errorf("nodeID cannot be empty")
+func (c *client) GetNonce(ctx context.Context, nodeUUID string, jwt string) (*NonceResponse, error) {
+	if nodeUUID == "" {
+		return nil, fmt.Errorf("nodeUUID cannot be empty")
 	}
 	if jwt == "" {
 		return nil, fmt.Errorf("jwt cannot be empty")
 	}
 
 	var resp NonceResponse
-	if err := c.doJSON(ctx, http.MethodPost, []string{"v1", "agent", "nodes", nodeID, "nonce"}, jwt, nil, &resp); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, []string{"v1", "agent", "nodes", nodeUUID, "nonce"}, jwt, nil, &resp); err != nil {
 		return nil, err
 	}
 	if resp.Nonce == "" {
@@ -126,9 +126,9 @@ func (c *client) GetNonce(ctx context.Context, nodeID string, jwt string) (*Nonc
 	return &resp, nil
 }
 
-func (c *client) SubmitAttestation(ctx context.Context, nodeID string, req *AttestationRequest, jwt string) error {
-	if nodeID == "" {
-		return fmt.Errorf("nodeID cannot be empty")
+func (c *client) SubmitAttestation(ctx context.Context, nodeUUID string, req *AttestationRequest, jwt string) error {
+	if nodeUUID == "" {
+		return fmt.Errorf("nodeUUID cannot be empty")
 	}
 	if jwt == "" {
 		return fmt.Errorf("jwt cannot be empty")
@@ -136,7 +136,7 @@ func (c *client) SubmitAttestation(ctx context.Context, nodeID string, req *Atte
 	if req == nil {
 		return fmt.Errorf("attestation request cannot be nil")
 	}
-	return c.doJSON(ctx, http.MethodPost, []string{"v1", "agent", "nodes", nodeID, "attestation"}, jwt, req, nil)
+	return c.doJSON(ctx, http.MethodPost, []string{"v1", "agent", "nodes", nodeUUID, "attestation"}, jwt, req, nil)
 }
 
 func (c *client) RefreshToken(ctx context.Context, jwt string) (string, error) {

@@ -87,12 +87,12 @@ func NewStateNonceProvider(state agentstate.State) NonceProvider {
 	return &stateNonceProvider{factory: &stateBackendClientFactory{state: state}}
 }
 
-func (p *stateNonceProvider) GetNonce(ctx context.Context, nodeID, jwt string) (string, time.Time, string, error) {
+func (p *stateNonceProvider) GetNonce(ctx context.Context, nodeUUID, jwt string) (string, time.Time, string, error) {
 	client, err := p.factory.client(ctx)
 	if err != nil {
 		return "", time.Time{}, "", err
 	}
-	return NewBackendNonceProvider(client).GetNonce(ctx, nodeID, jwt)
+	return NewBackendNonceProvider(client).GetNonce(ctx, nodeUUID, jwt)
 }
 
 type stateSubmitter struct {
@@ -108,16 +108,16 @@ func (s *stateSubmitter) Submit(ctx context.Context, result *Result, jwt string)
 	if result == nil {
 		return fmt.Errorf("attestation submission requires result")
 	}
-	if result.NodeID == "" {
-		nodeID, ok, err := s.factory.state.GetNodeUUID(ctx)
+	if result.NodeUUID == "" {
+		nodeUUID, ok, err := s.factory.state.GetNodeUUID(ctx)
 		if err != nil {
 			return err
 		}
-		if !ok || nodeID == "" {
-			return fmt.Errorf("%w: node ID not available in agent state", ErrNotEnrolled)
+		if !ok || nodeUUID == "" {
+			return fmt.Errorf("%w: node UUID not available in agent state", ErrNotEnrolled)
 		}
 		cloned := *result
-		cloned.NodeID = nodeID
+		cloned.NodeUUID = nodeUUID
 		result = &cloned
 	}
 	client, err := s.factory.client(ctx)

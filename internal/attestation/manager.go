@@ -45,13 +45,13 @@ type Manager interface {
 }
 
 type manager struct {
-	mu             sync.RWMutex
-	nodeIDProvider func(context.Context) (string, error)
-	jwtProvider    JWTProvider
-	nonceProvider  NonceProvider
-	collector      EvidenceCollector
-	submitter      Submitter
-	config         AttestationConfig
+	mu               sync.RWMutex
+	nodeUUIDProvider func(context.Context) (string, error)
+	jwtProvider      JWTProvider
+	nonceProvider    NonceProvider
+	collector        EvidenceCollector
+	submitter        Submitter
+	config           AttestationConfig
 
 	lastResult  *Result
 	lastUpdated time.Time
@@ -59,7 +59,7 @@ type manager struct {
 
 // NewManager creates an attestation loop manager skeleton.
 func NewManager(
-	nodeIDProvider func(context.Context) (string, error),
+	nodeUUIDProvider func(context.Context) (string, error),
 	jwtProvider JWTProvider,
 	nonceProvider NonceProvider,
 	collector EvidenceCollector,
@@ -67,17 +67,17 @@ func NewManager(
 	cfg AttestationConfig,
 ) Manager {
 	return &manager{
-		nodeIDProvider: nodeIDProvider,
-		jwtProvider:    jwtProvider,
-		nonceProvider:  nonceProvider,
-		collector:      collector,
-		submitter:      submitter,
-		config:         cfg,
+		nodeUUIDProvider: nodeUUIDProvider,
+		jwtProvider:      jwtProvider,
+		nonceProvider:    nonceProvider,
+		collector:        collector,
+		submitter:        submitter,
+		config:           cfg,
 	}
 }
 
 func (m *manager) Run(ctx context.Context) error {
-	if m.nodeIDProvider == nil || m.jwtProvider == nil || m.nonceProvider == nil || m.collector == nil || m.submitter == nil {
+	if m.nodeUUIDProvider == nil || m.jwtProvider == nil || m.nonceProvider == nil || m.collector == nil || m.submitter == nil {
 		return fmt.Errorf("attestation loop dependencies are incomplete")
 	}
 	if m.config.Interval <= 0 {
@@ -120,11 +120,11 @@ func (m *manager) Run(ctx context.Context) error {
 }
 
 func (m *manager) CollectOnce(ctx context.Context) (*Result, error) {
-	if m.nodeIDProvider == nil || m.jwtProvider == nil || m.nonceProvider == nil || m.collector == nil || m.submitter == nil {
+	if m.nodeUUIDProvider == nil || m.jwtProvider == nil || m.nonceProvider == nil || m.collector == nil || m.submitter == nil {
 		return nil, fmt.Errorf("attestation loop dependencies are incomplete")
 	}
 
-	nodeID, err := m.nodeIDProvider(ctx)
+	nodeUUID, err := m.nodeUUIDProvider(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (m *manager) CollectOnce(ctx context.Context) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	nonce, refreshTS, refreshedJWT, err := m.nonceProvider.GetNonce(ctx, nodeID, jwt)
+	nonce, refreshTS, refreshedJWT, err := m.nonceProvider.GetNonce(ctx, nodeUUID, jwt)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (m *manager) CollectOnce(ctx context.Context) (*Result, error) {
 	collectErr := err
 	result := &Result{
 		CollectedAt:           time.Now().UTC(),
-		NodeID:                nodeID,
+		NodeUUID:              nodeUUID,
 		NonceRefreshTimestamp: refreshTS,
 	}
 	if err != nil {
@@ -254,7 +254,7 @@ type backendSubmitter struct {
 
 // BackendClient is the backend client view required by the attestation workflow.
 type BackendClient interface {
-	SubmitAttestation(ctx context.Context, nodeID string, req *backendclient.AttestationRequest, jwt string) error
+	SubmitAttestation(ctx context.Context, nodeUUID string, req *backendclient.AttestationRequest, jwt string) error
 }
 
 // NewBackendSubmitter creates a backend submitter backed by the agent backend client.
@@ -272,7 +272,7 @@ func (s *backendSubmitter) Submit(ctx context.Context, result *Result, jwt strin
 	if jwt == "" {
 		return fmt.Errorf("attestation submission requires jwt")
 	}
-	return s.client.SubmitAttestation(ctx, result.NodeID, toAttestationRequest(result), jwt)
+	return s.client.SubmitAttestation(ctx, result.NodeUUID, toAttestationRequest(result), jwt)
 }
 
 type stateJWTProvider struct {
@@ -305,18 +305,18 @@ func (p *stateJWTProvider) SetJWT(ctx context.Context, value string) error {
 	return p.state.SetJWT(ctx, value)
 }
 
-// NewStateNodeIDProvider returns a node ID provider backed by persisted agent state.
-func NewStateNodeIDProvider(state agentstate.State) func(context.Context) (string, error) {
+// NewStateNodeUUIDProvider returns a node UUID provider backed by persisted agent state.
+func NewStateNodeUUIDProvider(state agentstate.State) func(context.Context) (string, error) {
 	return func(ctx context.Context) (string, error) {
 		if state == nil {
-			return "", fmt.Errorf("node ID provider requires agent state")
+			return "", fmt.Errorf("node UUID provider requires agent state")
 		}
 		value, ok, err := state.GetNodeUUID(ctx)
 		if err != nil {
 			return "", err
 		}
 		if !ok || value == "" {
-			return "", fmt.Errorf("%w: node ID not available in agent state", ErrNotEnrolled)
+			return "", fmt.Errorf("%w: node UUID not available in agent state", ErrNotEnrolled)
 		}
 		return value, nil
 	}
