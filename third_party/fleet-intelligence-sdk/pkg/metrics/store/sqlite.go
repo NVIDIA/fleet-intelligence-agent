@@ -193,13 +193,13 @@ func read(ctx context.Context, dbRO *sql.DB, table string, opts ...pkgmetrics.Op
 		if whereStatement != "" {
 			whereStatement += " AND "
 		}
-		whereStatement += fmt.Sprintf("%s IN (", columnComponentName)
 
-		components := make([]string, 0, len(op.SelectedComponents))
+		placeholders := make([]string, 0, len(op.SelectedComponents))
 		for component := range op.SelectedComponents {
-			components = append(components, "'"+component+"'")
+			placeholders = append(placeholders, "?")
+			params = append(params, component)
 		}
-		whereStatement += strings.Join(components, ", ") + ")"
+		whereStatement += fmt.Sprintf("%s IN (%s)", columnComponentName, strings.Join(placeholders, ", "))
 	}
 	if whereStatement != "" {
 		whereStatement = fmt.Sprintf("WHERE %s", whereStatement)
