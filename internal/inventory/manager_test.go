@@ -17,6 +17,7 @@ package inventory
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,11 +25,14 @@ import (
 )
 
 type fakeSource struct {
+	mu        sync.Mutex
 	snapshots []*Snapshot
 	index     int
 }
 
 func (f *fakeSource) Collect(context.Context) (*Snapshot, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if len(f.snapshots) == 0 {
 		return nil, nil
 	}
@@ -42,12 +46,22 @@ func (f *fakeSource) Collect(context.Context) (*Snapshot, error) {
 }
 
 type fakeSink struct {
+	mu       sync.Mutex
 	exported []*Snapshot
+	ready    chan struct{}
 }
 
 func (f *fakeSink) Export(_ context.Context, snap *Snapshot) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	cloned := *snap
 	f.exported = append(f.exported, &cloned)
+	if f.ready != nil {
+		select {
+		case f.ready <- struct{}{}:
+		default:
+		}
+	}
 	return nil
 }
 
@@ -97,4 +111,39 @@ func TestManagerCollectOnceExportsOnlyWhenInventoryChanges(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, snap1.InventoryHash, snap3.InventoryHash)
 	require.Len(t, sink.exported, 2)
+}
+
+func TestManagerCollectOnceConcurrentExportSingleHash(t *testing.T) {
+	src := &fakeSource{
+		snapshots: []*Snapshot{{
+			CollectedAt: time.Unix(100, 0).UTC(),
+			Hostname:    "host-a",
+			MachineID:   "machine-id",
+			Resources: Resources{
+				CPUInfo: CPUInfo{Type: "Xeon", LogicalCores: 64},
+			},
+		}},
+	}
+	sink := &fakeSink{}
+	mgr := NewManager(src, sink, InventoryConfig{})
+
+	var (
+		wg   sync.WaitGroup
+		errs = make(chan error, 8)
+	)
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := mgr.CollectOnce(context.Background())
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	require.Len(t, sink.exported, 1)
 }

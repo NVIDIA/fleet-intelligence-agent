@@ -31,6 +31,7 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/systemd"
 	"github.com/urfave/cli"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/cmdutil"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
@@ -163,7 +164,7 @@ func statusCommand(cliContext *cli.Context) error {
 }
 
 func readEnrollmentStatus(ctx context.Context, dbRO *sql.DB) (*enrollmentStatus, error) {
-	baseURL, err := pkgmetadata.ReadMetadata(ctx, dbRO, "backend_base_url")
+	baseURL, err := pkgmetadata.ReadMetadata(ctx, dbRO, agentstate.MetadataKeyBackendBaseURL)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("failed to read backend base URL: %w", err)
 	}
@@ -172,17 +173,19 @@ func readEnrollmentStatus(ctx context.Context, dbRO *sql.DB) (*enrollmentStatus,
 	if baseURL != "" {
 		validated, err := endpoint.ValidateBackendEndpoint(baseURL)
 		if err != nil {
-			return nil, fmt.Errorf("invalid backend base URL in metadata: %w", err)
+			log.Logger.Warnw("ignoring invalid backend base URL in metadata", "backend_base_url", baseURL, "error", err)
+			status.baseURL = ""
+		} else {
+			status.metricsEndpoint, err = endpoint.JoinPath(validated, "api", "v1", "health", "metrics")
+			if err != nil {
+				return nil, fmt.Errorf("failed to construct metrics endpoint: %w", err)
+			}
+			status.logsEndpoint, err = endpoint.JoinPath(validated, "api", "v1", "health", "logs")
+			if err != nil {
+				return nil, fmt.Errorf("failed to construct logs endpoint: %w", err)
+			}
+			return status, nil
 		}
-		status.metricsEndpoint, err = endpoint.JoinPath(validated, "api", "v1", "health", "metrics")
-		if err != nil {
-			return nil, fmt.Errorf("failed to construct metrics endpoint: %w", err)
-		}
-		status.logsEndpoint, err = endpoint.JoinPath(validated, "api", "v1", "health", "logs")
-		if err != nil {
-			return nil, fmt.Errorf("failed to construct logs endpoint: %w", err)
-		}
-		return status, nil
 	}
 
 	status.metricsEndpoint, err = readLegacyEndpoint(ctx, dbRO, "metrics_endpoint")

@@ -50,9 +50,11 @@ func (p *testNonceProvider) GetNonce(context.Context, string, string) (string, t
 type testEvidenceCollector struct {
 	resp *SDKResponse
 	err  error
+	n    int
 }
 
 func (c *testEvidenceCollector) Collect(context.Context, string) (*SDKResponse, error) {
+	c.n++
 	return c.resp, c.err
 }
 
@@ -64,9 +66,11 @@ type submitted struct {
 type testSubmitter struct {
 	submitted submitted
 	err       error
+	count     int
 }
 
 func (s *testSubmitter) Submit(_ context.Context, result *Result, jwt string) error {
+	s.count++
 	s.submitted = submitted{result: result, jwt: jwt}
 	return s.err
 }
@@ -107,7 +111,7 @@ func TestCollectOnceCollectorFailureStillSubmitsFailureResult(t *testing.T) {
 	)
 
 	result, err := manager.CollectOnce(context.Background())
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "collect failed")
 	require.False(t, result.Success)
 	require.Equal(t, "collect failed", result.ErrorMessage)
 	require.NotNil(t, submitter.submitted.result)
@@ -160,6 +164,8 @@ func TestManagerRunUsesRetryIntervalOnFailure(t *testing.T) {
 	require.NotNil(t, last)
 	require.False(t, last.Success)
 	require.Equal(t, "collect failed", last.ErrorMessage)
+	require.GreaterOrEqual(t, collector.n, 2)
+	require.GreaterOrEqual(t, submitter.count, 2)
 }
 
 func TestManagerHelpersAndSubmitterErrors(t *testing.T) {

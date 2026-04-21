@@ -58,7 +58,7 @@ func TestManagerRunStopsOnContextCancel(t *testing.T) {
 	src := &fakeSource{
 		snapshots: []*Snapshot{{MachineID: "machine-1", Hostname: "host-a"}},
 	}
-	sink := &fakeSink{}
+	sink := &fakeSink{ready: make(chan struct{}, 1)}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	done := make(chan error, 1)
@@ -66,7 +66,11 @@ func TestManagerRunStopsOnContextCancel(t *testing.T) {
 		done <- NewManager(src, sink, InventoryConfig{Interval: 10 * time.Millisecond}).Run(ctx)
 	}()
 
-	time.Sleep(25 * time.Millisecond)
+	select {
+	case <-sink.ready:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("timed out waiting for inventory export")
+	}
 	cancel()
 
 	err := <-done

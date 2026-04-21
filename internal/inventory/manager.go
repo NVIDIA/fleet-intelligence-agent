@@ -34,10 +34,11 @@ type Manager interface {
 }
 
 type manager struct {
-	mu     sync.RWMutex
-	source Source
-	sink   Sink
-	config InventoryConfig
+	mu       sync.RWMutex
+	exportMu sync.Mutex
+	source   Source
+	sink     Sink
+	config   InventoryConfig
 
 	lastSnapshot     *Snapshot
 	lastExportedHash string
@@ -97,19 +98,26 @@ func (m *manager) CollectOnce(ctx context.Context) (*Snapshot, error) {
 	m.mu.Lock()
 	cloned := *snap
 	m.lastSnapshot = &cloned
-	shouldExport := m.sink != nil && m.lastExportedHash != hash
 	m.mu.Unlock()
 
-	if shouldExport {
-		if err := m.sink.Export(ctx, snap); err != nil {
-			if errors.Is(err, ErrNotReady) {
-				return snap, nil
+	if m.sink != nil {
+		m.exportMu.Lock()
+		defer m.exportMu.Unlock()
+
+		m.mu.RLock()
+		alreadyExported := m.lastExportedHash == hash
+		m.mu.RUnlock()
+		if !alreadyExported {
+			if err := m.sink.Export(ctx, snap); err != nil {
+				if errors.Is(err, ErrNotReady) {
+					return snap, nil
+				}
+				return nil, err
 			}
-			return nil, err
+			m.mu.Lock()
+			m.lastExportedHash = hash
+			m.mu.Unlock()
 		}
-		m.mu.Lock()
-		m.lastExportedHash = hash
-		m.mu.Unlock()
 	}
 
 	return snap, nil

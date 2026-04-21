@@ -155,3 +155,14 @@ func TestMachineInfoSourceCollectIgnoresSystemUUIDForMachineID(t *testing.T) {
 	require.NotNil(t, snap)
 	require.Equal(t, "machine-id", snap.MachineID)
 }
+
+func TestMachineInfoSourceCollectErrors(t *testing.T) {
+	_, err := NewMachineInfoSource(nil).Collect(context.Background())
+	require.ErrorContains(t, err, "collector is required")
+
+	_, err = NewMachineInfoSource(fakeMachineInfoCollector{err: context.DeadlineExceeded}).Collect(context.Background())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+
+	_, err = NewMachineInfoSource(fakeMachineInfoCollector{}).Collect(context.Background())
+	require.ErrorContains(t, err, "nil machine info")
+}

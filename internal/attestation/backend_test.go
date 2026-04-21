@@ -179,6 +179,11 @@ func TestStateProvidersAndSubmitter(t *testing.T) {
 	require.Equal(t, "jwt-token", recording.lastJWT)
 	require.NotNil(t, recording.lastReq)
 	require.Equal(t, "BLACKWELL", recording.lastReq.AttestationData.SDKResponse.Evidences[0].Arch)
+
+	recording.lastNodeID = ""
+	err = NewStateBackendSubmitter(state).Submit(context.Background(), &Result{}, "jwt-token")
+	require.NoError(t, err)
+	require.Equal(t, "node-1", recording.lastNodeID)
 }
 
 func TestStateProvidersPropagateBackendClientConstructionErrors(t *testing.T) {

@@ -17,6 +17,7 @@ package agentstate
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -160,4 +161,22 @@ func TestSQLiteStateStateFileErrors(t *testing.T) {
 func TestNewSQLite(t *testing.T) {
 	t.Parallel()
 	require.NotNil(t, NewSQLite())
+}
+
+func TestSQLiteStateGetBackendBaseURLPropagatesReadErrors(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	state := newTestSQLiteState(t)
+
+	stateFile, err := state.stateFileFn()
+	require.NoError(t, err)
+
+	db, err := sqlite.Open(stateFile)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+
+	_, _, err = state.GetBackendBaseURL(ctx)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, sql.ErrNoRows)
 }

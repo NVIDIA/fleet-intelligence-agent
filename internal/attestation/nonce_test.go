@@ -26,26 +26,33 @@ import (
 )
 
 type testNonceClient struct {
-	resp *backendclient.NonceResponse
+	resp      *backendclient.NonceResponse
+	gotNodeID string
+	gotJWT    string
 }
 
-func (c *testNonceClient) GetNonce(context.Context, string, string) (*backendclient.NonceResponse, error) {
+func (c *testNonceClient) GetNonce(_ context.Context, nodeID, jwt string) (*backendclient.NonceResponse, error) {
+	c.gotNodeID = nodeID
+	c.gotJWT = jwt
 	return c.resp, nil
 }
 
 func TestBackendNonceProvider(t *testing.T) {
 	refreshTS := time.Now().UTC()
-	provider := NewBackendNonceProvider(&testNonceClient{
+	client := &testNonceClient{
 		resp: &backendclient.NonceResponse{
 			Nonce:                 "abc123",
 			NonceRefreshTimestamp: refreshTS,
 			JWTAssertion:          "new-jwt",
 		},
-	})
+	}
+	provider := NewBackendNonceProvider(client)
 
 	nonce, ts, jwt, err := provider.GetNonce(context.Background(), "node-1", "jwt-token")
 	require.NoError(t, err)
 	require.Equal(t, "abc123", nonce)
 	require.Equal(t, refreshTS, ts)
 	require.Equal(t, "new-jwt", jwt)
+	require.Equal(t, "node-1", client.gotNodeID)
+	require.Equal(t, "jwt-token", client.gotJWT)
 }

@@ -30,8 +30,6 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
 )
 
-const metadataKeyBackendBaseURL = "backend_base_url"
-
 type sqliteState struct {
 	stateFileFn func() (string, error)
 }
@@ -48,20 +46,32 @@ func (s *sqliteState) GetBackendBaseURL(ctx context.Context) (string, bool, erro
 	}
 	defer db.Close()
 
-	if value, err := pkgmetadata.ReadMetadata(ctx, db, metadataKeyBackendBaseURL); err == nil && value != "" {
+	value, err := pkgmetadata.ReadMetadata(ctx, db, MetadataKeyBackendBaseURL)
+	switch {
+	case err == nil && value != "":
 		return value, true, nil
+	case err == nil || isMetadataAbsentErr(err):
+		// fall through to legacy endpoint keys
+	default:
+		return "", false, fmt.Errorf("read metadata %q: %w", MetadataKeyBackendBaseURL, err)
 	}
 
 	for _, key := range []string{"enroll_endpoint", "metrics_endpoint", "logs_endpoint", "nonce_endpoint"} {
 		value, err := pkgmetadata.ReadMetadata(ctx, db, key)
-		if err != nil || value == "" {
+		switch {
+		case err == nil && value == "":
 			continue
+		case err == nil:
+			baseURL, err := endpoint.DeriveBackendBaseURL(value)
+			if err != nil {
+				return "", false, fmt.Errorf("derive backend base URL from metadata %q: %w", key, err)
+			}
+			return baseURL, true, nil
+		case isMetadataAbsentErr(err):
+			continue
+		default:
+			return "", false, fmt.Errorf("read metadata %q: %w", key, err)
 		}
-		baseURL, err := endpoint.DeriveBackendBaseURL(value)
-		if err != nil {
-			return "", false, fmt.Errorf("derive backend base URL from metadata %q: %w", key, err)
-		}
-		return baseURL, true, nil
 	}
 
 	return "", false, nil
@@ -71,7 +81,7 @@ func (s *sqliteState) SetBackendBaseURL(ctx context.Context, value string) error
 	if _, err := endpoint.ValidateBackendEndpoint(value); err != nil {
 		return fmt.Errorf("validate backend base URL: %w", err)
 	}
-	return s.setMetadata(ctx, metadataKeyBackendBaseURL, value)
+	return s.setMetadata(ctx, MetadataKeyBackendBaseURL, value)
 }
 
 func (s *sqliteState) GetJWT(ctx context.Context) (string, bool, error) {
@@ -83,11 +93,11 @@ func (s *sqliteState) SetJWT(ctx context.Context, value string) error {
 }
 
 func (s *sqliteState) GetSAK(ctx context.Context) (string, bool, error) {
-	return s.getMetadata(ctx, "sak_token")
+	return s.getMetadata(ctx, MetadataKeySAKToken)
 }
 
 func (s *sqliteState) SetSAK(ctx context.Context, value string) error {
-	return s.setMetadata(ctx, "sak_token", value)
+	return s.setMetadata(ctx, MetadataKeySAKToken, value)
 }
 
 func (s *sqliteState) GetNodeID(ctx context.Context) (string, bool, error) {

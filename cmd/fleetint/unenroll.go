@@ -26,6 +26,7 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 	"github.com/urfave/cli"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
 
@@ -67,8 +68,8 @@ func removeEnrollmentMetadata(ctx context.Context, dbRW *sql.DB) error {
 	// List of metadata keys to delete
 	keysToDelete := []string{
 		pkgmetadata.MetadataKeyToken,
-		"sak_token",
-		"backend_base_url",
+		agentstate.MetadataKeySAKToken,
+		agentstate.MetadataKeyBackendBaseURL,
 		"enroll_endpoint",
 		"metrics_endpoint",
 		"logs_endpoint",

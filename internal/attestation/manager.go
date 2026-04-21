@@ -143,6 +143,7 @@ func (m *manager) CollectOnce(ctx context.Context) (*Result, error) {
 		jwt = refreshedJWT
 	}
 	sdkResp, err := m.collector.Collect(ctx, nonce)
+	collectErr := err
 	result := &Result{
 		CollectedAt:           time.Now().UTC(),
 		NodeID:                nodeID,
@@ -164,6 +165,9 @@ func (m *manager) CollectOnce(ctx context.Context) (*Result, error) {
 	m.mu.Unlock()
 	if err := m.submitter.Submit(ctx, result, jwt); err != nil {
 		return nil, err
+	}
+	if collectErr != nil {
+		return result, collectErr
 	}
 	return result, nil
 }

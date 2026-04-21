@@ -35,6 +35,9 @@ const (
 	maxResponseBodyBytes = 1 << 20
 )
 
+var errRedirectNotAllowed = errors.New("backend redirects are not allowed")
+var errNilBaseURL = errors.New("backend base URL is required")
+
 // Client is the backend workflow client used by enrollment, inventory, and attestation paths.
 type Client interface {
 	Enroll(ctx context.Context, sakToken string) (jwt string, err error)
@@ -63,6 +66,11 @@ func New(rawBaseURL string) (Client, error) {
 func NewWithHTTPClient(baseURL *url.URL, httpClient *http.Client) Client {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 30 * time.Second}
+	}
+	if httpClient.CheckRedirect == nil {
+		httpClient.CheckRedirect = func(*http.Request, []*http.Request) error {
+			return errRedirectNotAllowed
+		}
 	}
 	return &client{
 		httpClient: httpClient,
@@ -154,6 +162,9 @@ func (c *client) RefreshToken(ctx context.Context, jwt string) (string, error) {
 }
 
 func (c *client) doJSON(ctx context.Context, method string, pathElems []string, bearerToken string, reqBody any, respBody any) error {
+	if c.baseURL == nil {
+		return errNilBaseURL
+	}
 	requestURL, err := endpoint.JoinPath(c.baseURL, pathElems...)
 	if err != nil {
 		return fmt.Errorf("failed to construct request URL: %w", err)

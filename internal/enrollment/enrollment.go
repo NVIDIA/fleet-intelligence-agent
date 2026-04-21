@@ -84,17 +84,14 @@ func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken stri
 		return fmt.Errorf("failed to create metadata table: %w", err)
 	}
 
-	if err := pkgmetadata.SetMetadata(ctx, dbRW, "sak_token", sakToken); err != nil {
+	if err := pkgmetadata.SetMetadata(ctx, dbRW, agentstate.MetadataKeySAKToken, sakToken); err != nil {
 		return fmt.Errorf("failed to set SAK token: %w", err)
 	}
 	if err := pkgmetadata.SetMetadata(ctx, dbRW, pkgmetadata.MetadataKeyToken, jwtToken); err != nil {
 		return fmt.Errorf("failed to set JWT token: %w", err)
 	}
-	if err := pkgmetadata.SetMetadata(ctx, dbRW, "backend_base_url", baseURL); err != nil {
+	if err := pkgmetadata.SetMetadata(ctx, dbRW, agentstate.MetadataKeyBackendBaseURL, baseURL); err != nil {
 		return fmt.Errorf("failed to set backend base URL: %w", err)
-	}
-	if err := config.SecureStateFilePermissions(stateFile); err != nil {
-		return fmt.Errorf("failed to secure state database permissions: %w", err)
 	}
 	return nil
 }

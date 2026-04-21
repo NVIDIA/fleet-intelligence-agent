@@ -18,6 +18,11 @@ package agentstate
 
 import "context"
 
+const (
+	MetadataKeyBackendBaseURL = "backend_base_url"
+	MetadataKeySAKToken       = "sak_token"
+)
+
 // State provides local persisted metadata/state access for backend workflows.
 type State interface {
 	GetBackendBaseURL(ctx context.Context) (value string, ok bool, err error)

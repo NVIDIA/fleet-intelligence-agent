@@ -105,6 +105,21 @@ func NewStateBackendSubmitter(state agentstate.State) Submitter {
 }
 
 func (s *stateSubmitter) Submit(ctx context.Context, result *Result, jwt string) error {
+	if result == nil {
+		return fmt.Errorf("attestation submission requires result")
+	}
+	if result.NodeID == "" {
+		nodeID, ok, err := s.factory.state.GetNodeID(ctx)
+		if err != nil {
+			return err
+		}
+		if !ok || nodeID == "" {
+			return fmt.Errorf("%w: node ID not available in agent state", ErrNotEnrolled)
+		}
+		cloned := *result
+		cloned.NodeID = nodeID
+		result = &cloned
+	}
 	client, err := s.factory.client(ctx)
 	if err != nil {
 		return err
