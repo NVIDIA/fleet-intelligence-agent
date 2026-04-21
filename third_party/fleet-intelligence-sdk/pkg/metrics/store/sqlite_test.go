@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
 	pkgsqlite "github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 )
@@ -1059,4 +1060,42 @@ func TestSQLiteReadScanHandling(t *testing.T) {
 	assert.Equal(t, nullMetric.Component, results[0].Component)
 	assert.Equal(t, nullMetric.Name, results[0].Name)
 	assert.Empty(t, results[0].Labels)
+}
+
+func TestSQLiteReadWithComponentsTreatsSQLMetacharactersAsData(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	dbRW, dbRO, cleanup := pkgsqlite.OpenTestDB(t)
+	defer cleanup()
+
+	tableName := "test_read_sql_metacharacters"
+	err := CreateTable(ctx, dbRW, tableName)
+	require.NoError(t, err)
+
+	err = pkgmetadata.CreateTableMetadata(ctx, dbRW)
+	require.NoError(t, err)
+	err = pkgmetadata.SetMetadata(ctx, dbRW, "sak_token", "top-secret")
+	require.NoError(t, err)
+
+	payload := "x') UNION ALL SELECT 0,key,value,NULL,0 FROM gpud_metadata--"
+	expected := pkgmetrics.Metric{
+		UnixMilliseconds: time.Now().UnixMilli(),
+		Component:        payload,
+		Name:             "metric1",
+		Value:            42.0,
+	}
+
+	err = insert(ctx, dbRW, tableName, expected)
+	require.NoError(t, err)
+
+	results, err := read(ctx, dbRO, tableName, pkgmetrics.WithComponents(payload))
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, expected.UnixMilliseconds, results[0].UnixMilliseconds)
+	assert.Equal(t, expected.Component, results[0].Component)
+	assert.Equal(t, expected.Name, results[0].Name)
+	assert.Equal(t, expected.Value, results[0].Value)
 }
