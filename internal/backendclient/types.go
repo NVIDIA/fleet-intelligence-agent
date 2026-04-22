@@ -34,7 +34,6 @@ type NodeUpsertRequest struct {
 	MachineID               string        `json:"machineId"`
 	BootID                  string        `json:"bootID"`
 	NetPrivateIP            string        `json:"netPrivateIP,omitempty"`
-	NetPublicIP             string        `json:"netPublicIP,omitempty"`
 }
 
 type NodeResources struct {

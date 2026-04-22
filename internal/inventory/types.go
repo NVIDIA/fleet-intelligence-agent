@@ -42,7 +42,6 @@ type Snapshot struct {
 	DCGMVersion             string
 	ContainerRuntimeVersion string
 	NetPrivateIP            string
-	NetPublicIP             string
 	AgentConfig             AgentConfig
 	Resources               Resources
 }
