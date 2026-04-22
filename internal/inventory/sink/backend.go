@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory"
@@ -54,6 +56,7 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 		return err
 	}
 	if !ok || baseURL == "" {
+		log.Logger.Infow("inventory export skipped: agent not enrolled (no backend URL)")
 		return inventory.ErrNotReady
 	}
 	jwt, ok, err := s.state.GetJWT(ctx)
@@ -61,6 +64,7 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 		return err
 	}
 	if !ok || jwt == "" {
+		log.Logger.Infow("inventory export skipped: agent not enrolled (no JWT)")
 		return inventory.ErrNotReady
 	}
 	nodeUUID, ok, err := s.state.GetNodeUUID(ctx)
@@ -68,11 +72,16 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 		return err
 	}
 	if !ok || nodeUUID == "" {
+		log.Logger.Infow("inventory export skipped: agent not enrolled (no node UUID)")
 		return inventory.ErrNotReady
 	}
 	client, err := s.clientFactory(baseURL)
 	if err != nil {
 		return fmt.Errorf("create backend client: %w", err)
 	}
-	return client.UpsertNode(ctx, nodeUUID, mapper.ToNodeUpsertRequest(snap), jwt)
+	if err := client.UpsertNode(ctx, nodeUUID, mapper.ToNodeUpsertRequest(snap), jwt); err != nil {
+		return err
+	}
+	log.Logger.Infow("inventory exported to backend", "node_uuid", nodeUUID)
+	return nil
 }

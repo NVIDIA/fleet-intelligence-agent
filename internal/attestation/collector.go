@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"os/exec"
 	"time"
+
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 )
 
 var execCommandContext = exec.CommandContext
@@ -60,8 +62,10 @@ func (c *cliEvidenceCollector) Collect(ctx context.Context, nonce string) (*SDKR
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
+	log.Logger.Infow("running nvattest collect-evidence")
 	err := cmd.Run()
 	if err != nil && stdout.Len() == 0 {
+		log.Logger.Infow("nvattest execution failed", "error", err, "stderr", stderr.String())
 		return nil, fmt.Errorf("attestation CLI execution failed: %w (stderr: %s)", err, stderr.String())
 	}
 
@@ -71,11 +75,21 @@ func (c *cliEvidenceCollector) Collect(ctx context.Context, nonce string) (*SDKR
 		if err != nil {
 			errText = err.Error()
 		}
+		log.Logger.Infow("nvattest response parse failed", "parse_error", parseErr, "stderr", stderr.String(), "exec_error", errText)
 		return nil, fmt.Errorf(
 			"failed to parse CLI response: %w (stderr: %s), stdout: %s, error: %s",
 			parseErr, stderr.String(), stdout.String(), errText,
 		)
 	}
+	fields := []interface{}{
+		"result_code", response.ResultCode,
+		"result_message", response.ResultMessage,
+		"evidences_count", len(response.Evidences),
+	}
+	if err != nil {
+		fields = append(fields, "exit_error", err)
+	}
+	log.Logger.Infow("nvattest completed", fields...)
 	return &response, nil
 }
 

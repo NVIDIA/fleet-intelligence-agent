@@ -90,6 +90,7 @@ func (m *manager) CollectOnce(ctx context.Context) (*Snapshot, error) {
 	if m.source == nil {
 		return nil, fmt.Errorf("inventory source is required")
 	}
+	log.Logger.Infow("inventory collect started")
 	snap, err := m.source.Collect(ctx)
 	if err != nil {
 		return nil, err
@@ -115,7 +116,9 @@ func (m *manager) CollectOnce(ctx context.Context) (*Snapshot, error) {
 		m.mu.RLock()
 		alreadyExported := m.lastExportedHash == hash
 		m.mu.RUnlock()
-		if !alreadyExported {
+		if alreadyExported {
+			log.Logger.Infow("inventory unchanged, skipping export")
+		} else {
 			if err := m.sink.Export(ctx, snap); err != nil {
 				if errors.Is(err, ErrNotReady) {
 					return snap, nil

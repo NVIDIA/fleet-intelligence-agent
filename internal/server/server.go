@@ -418,8 +418,10 @@ func (s *Server) startInventoryLoop(
 ) {
 	interval := getInventorySyncInterval(cfg)
 	if interval <= 0 {
+		log.Logger.Infow("inventory loop disabled, skipping")
 		return
 	}
+	log.Logger.Infow("inventory loop starting", "interval", interval)
 
 	allComponents := registry.AllComponentNames()
 	retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
@@ -455,8 +457,12 @@ const inventoryRetryInterval = 1 * time.Minute
 func (s *Server) startAttestationLoop(ctx context.Context, cfg *config.Config) {
 	interval := getAttestationInterval(cfg)
 	if interval <= 0 {
+		log.Logger.Infow("attestation loop disabled, skipping")
 		return
 	}
+	log.Logger.Infow("attestation loop starting",
+		"interval", interval,
+		"initial_interval", cfg.Attestation.InitialInterval.Duration)
 
 	state := agentstate.NewSQLite()
 	manager := attestation.NewManager(
