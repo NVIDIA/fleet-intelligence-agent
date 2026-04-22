@@ -84,7 +84,12 @@ type Server struct {
 	// components, databases, and the health exporter would be closed twice.
 	stopOnce sync.Once
 
-	machineID string
+	nvmlInstance nvidianvml.Instance
+	machineID    string
+}
+
+func shouldStartLocalListener(cfg *config.Config) bool {
+	return cfg != nil && !cfg.DisableLocalListener
 }
 
 // initializeDatabases opens and initializes database connections
@@ -222,6 +227,7 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 	if err != nil {
 		return nil, fmt.Errorf("failed to create NVML instance: %w", err)
 	}
+	s.nvmlInstance = nvmlInstance
 
 	// Initialize DCGM instance
 	dcgmInitCtx, dcgmInitCancel := context.WithTimeout(ctx, time.Minute)
@@ -362,8 +368,12 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 		}
 	}
 
-	// Start the HTTP server
-	go s.startServer(ctx, nvmlInstance)
+	if shouldStartLocalListener(config) {
+		// Start the local API server.
+		go s.startServer(ctx)
+	} else {
+		log.Logger.Infow("local API listener disabled; skipping server startup")
+	}
 
 	return s, nil
 }
@@ -393,6 +403,11 @@ func (s *Server) Stop() {
 		if s.listener != nil {
 			// Go's UnixListener.Close() automatically unlinks the socket file.
 			_ = s.listener.Close()
+		}
+		if s.nvmlInstance != nil {
+			if err := s.nvmlInstance.Shutdown(); err != nil {
+				log.Logger.Warnw("failed to shutdown NVML instance", "error", err)
+			}
 		}
 
 		// Stop health exporter if running
@@ -459,16 +474,9 @@ func removeStaleSocket(path string) error {
 	return stdos.Remove(path)
 }
 
-// startServer creates and starts the HTTP server
-func (s *Server) startServer(ctx context.Context, nvmlInstance nvidianvml.Instance) {
-	defer func() {
-		if nvmlInstance != nil {
-			if err := nvmlInstance.Shutdown(); err != nil {
-				log.Logger.Warnw("failed to shutdown NVML instance", "error", err)
-			}
-		}
-		s.Stop()
-	}()
+// startServer creates and starts the local API server.
+func (s *Server) startServer(ctx context.Context) {
+	defer s.Stop()
 
 	// Create metrics store for health data
 	metricsSQLiteStore, err := pkgmetricsstore.NewSQLiteStore(ctx, s.dbRW, s.dbRO, pkgmetricsstore.DefaultTableName)

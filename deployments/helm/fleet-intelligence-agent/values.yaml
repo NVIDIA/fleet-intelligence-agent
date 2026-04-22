@@ -47,6 +47,7 @@ env:
 
 logLevel: warn
 listenAddress: 127.0.0.1:15133
+disableLocalListener: true
 retentionPeriod: 24h
 components: all
 

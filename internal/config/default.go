@@ -73,6 +73,7 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 	cfg := &Config{
 		APIVersion:           DefaultAPIVersion,
 		Address:              DefaultListenAddress,
+		DisableLocalListener: true,
 		RetentionPeriod:      DefaultRetentionPeriod,
 		EnableFaultInjection: false, // Disabled by default for security
 		NvidiaToolOverwrites: nvidiacommon.ToolOverwrites{

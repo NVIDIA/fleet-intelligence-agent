@@ -38,6 +38,7 @@ func TestDefault(t *testing.T) {
 		// Check basic properties
 		assert.Equal(t, DefaultAPIVersion, cfg.APIVersion)
 		assert.Equal(t, DefaultListenAddress, cfg.Address)
+		assert.True(t, cfg.DisableLocalListener)
 		assert.Equal(t, DefaultRetentionPeriod, cfg.RetentionPeriod)
 
 		// State path should be set
@@ -73,6 +74,16 @@ func TestConfigValidation(t *testing.T) {
 		err := cfg.Validate()
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "address is required")
+	})
+
+	t.Run("missing address allowed when local listener disabled", func(t *testing.T) {
+		cfg := &Config{
+			DisableLocalListener: true,
+			RetentionPeriod:      metav1.Duration{Duration: time.Hour},
+		}
+
+		err := cfg.Validate()
+		assert.NoError(t, err)
 	})
 
 	t.Run("retention period too short", func(t *testing.T) {
@@ -591,13 +602,15 @@ func TestToConfigEntries(t *testing.T) {
 		entries := cfg.ToConfigEntries(allComponents)
 
 		// Find specific entries
-		var apiVersion, address, state, retentionPeriod, enabledComponents, disabledComponents string
+		var apiVersion, address, disableLocalListener, state, retentionPeriod, enabledComponents, disabledComponents string
 		for _, entry := range entries {
 			switch entry.Key {
 			case "api_version":
 				apiVersion = entry.Value
 			case "address":
 				address = entry.Value
+			case "disable_local_listener":
+				disableLocalListener = entry.Value
 			case "state":
 				state = entry.Value
 			case "retention_period":
@@ -611,6 +624,7 @@ func TestToConfigEntries(t *testing.T) {
 
 		assert.Equal(t, "v1", apiVersion)
 		assert.Equal(t, "0.0.0.0:8080", address)
+		assert.Equal(t, "false", disableLocalListener)
 		assert.Equal(t, "/var/lib/fleetint", state)
 		assert.Equal(t, "86400", retentionPeriod)
 

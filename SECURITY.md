@@ -33,7 +33,7 @@ This repository contains the `fleetint` host agent. The notes below are intended
 
 ### Key Security Assumptions
 
-- The local API listens on a Unix socket (`/run/fleetint/fleetint.sock`) by default, restricting access via filesystem permissions. TCP mode (`--listen-address=host:port`) is available but binds to localhost unless an operator explicitly changes it.
+- The local API listener is disabled by default. When enabled, the default bind target is Unix socket (`/run/fleetint/fleetint.sock`), restricting access via filesystem permissions. TCP mode (`--listen-address=host:port`) is available but binds to localhost unless an operator explicitly changes it.
 - The local HTTP API is mostly read-only and should not accept writable requests in normal operation; the fault-injection path is the exception, and it is disabled by default for test use only.
 - Backend communication is expected to use HTTPS endpoints.
 - The local state directory is trusted local storage and must remain readable only by the local service account or root.

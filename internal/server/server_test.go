@@ -79,6 +79,20 @@ func TestGetHealthCheckInterval(t *testing.T) {
 	}
 }
 
+func TestShouldStartLocalListener(t *testing.T) {
+	t.Run("nil config", func(t *testing.T) {
+		assert.False(t, shouldStartLocalListener(nil))
+	})
+
+	t.Run("listener enabled by default", func(t *testing.T) {
+		assert.True(t, shouldStartLocalListener(&config.Config{}))
+	})
+
+	t.Run("listener disabled explicitly", func(t *testing.T) {
+		assert.False(t, shouldStartLocalListener(&config.Config{DisableLocalListener: true}))
+	})
+}
+
 // TestShouldEnableComponent tests the shouldEnableComponent function.
 func TestShouldEnableComponent(t *testing.T) {
 	tests := []struct {

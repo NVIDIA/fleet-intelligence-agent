@@ -42,6 +42,11 @@ type Config struct {
 	// Address for the health server to listen on
 	Address string `json:"address"`
 
+	// DisableLocalListener disables the local API listener entirely.
+	// When true, the agent still performs data collection/export but does not
+	// bind either a unix socket or TCP port for local API access.
+	DisableLocalListener bool `json:"disable_local_listener"`
+
 	// State file that persists health status and metrics
 	// If empty, states are not persisted to file
 	State string `json:"state"`
@@ -139,9 +144,10 @@ type HealthExporterConfig struct {
 
 // Validate checks if the configuration is valid
 func (config *Config) Validate() error {
-	// In offline mode, address is not required
+	// In offline mode or when the local listener is explicitly disabled, an
+	// address is not required because no local API bind is attempted.
 	isOfflineMode := config.HealthExporter != nil && config.HealthExporter.OfflineMode
-	if !isOfflineMode {
+	if !isOfflineMode && !config.DisableLocalListener {
 		if config.Address == "" {
 			return errors.New("address is required")
 		}
@@ -246,6 +252,7 @@ func (config *Config) ToConfigEntries(allComponentNames []string) []ConfigEntry 
 	entries := []ConfigEntry{
 		{Key: "api_version", Value: config.APIVersion},
 		{Key: "address", Value: config.Address},
+		{Key: "disable_local_listener", Value: fmt.Sprintf("%t", config.DisableLocalListener)},
 		{Key: "state", Value: config.State},
 		{Key: "retention_period", Value: fmt.Sprintf("%d", int64(config.RetentionPeriod.Seconds()))},
 	}

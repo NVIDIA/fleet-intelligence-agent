@@ -23,15 +23,18 @@ sudo systemctl restart fleetintd
 
 - Set environment variables directly in `/etc/default/fleetint`
 - Set `fleetint run` flags through `FLEETINT_FLAGS="..."`
+- Package default includes `--disable-local-listener` in `FLEETINT_FLAGS` (matches runtime default)
 
 ### Kubernetes
 
 The Helm chart configures the container entrypoint as `fleetint run` and exposes:
 
 - environment variables under `env.*`
-- common `run` flags through dedicated chart values such as `logLevel`, `listenAddress`, and `components`
+- common `run` flags through dedicated chart values such as `logLevel`, `listenAddress`, `disableLocalListener`, and `components`
 
 Apply changes by updating `values.yaml` or using `helm upgrade --set ...`.
+
+Chart default sets `disableLocalListener: true`.
 
 ## Configurable Environment Variables
 
@@ -68,7 +71,7 @@ sudoedit /etc/default/fleetint
 ```
 
 ```bash
-FLEETINT_FLAGS="--log-level=info --components=all,-accelerator-nvidia-dcgm-prof"
+FLEETINT_FLAGS="--log-level=info --disable-local-listener --components=all,-accelerator-nvidia-dcgm-prof"
 DCGM_URL="localhost"
 DCGM_URL_IS_UNIX_SOCKET="false"
 FLEETINT_COLLECT_INTERVAL="2m"
@@ -86,6 +89,7 @@ sudo systemctl restart fleetintd
 ```yaml
 logLevel: info
 listenAddress: 0.0.0.0:15133
+disableLocalListener: false
 retentionPeriod: 24h
 components: all,-accelerator-nvidia-dcgm-prof
 
@@ -115,7 +119,8 @@ These are the `fleetint run` flags supported by the CLI.
 | --- | --- | --- | --- | --- |
 | `--log-level` | Log level: `debug`, `info`, `warn`, `error`. | unset by CLI; packaged bare-metal default is `warn` via `FLEETINT_FLAGS` | `FLEETINT_FLAGS="--log-level=..."` | `logLevel` |
 | `--log-file` | Log file path. Leave empty to log to stdout/stderr. | empty | `FLEETINT_FLAGS="--log-file=..."` | not exposed by chart by default |
-| `--listen-address` | Listen address for the agent API server. An absolute path creates a Unix socket; a `host:port` value opens a TCP listener. | `/run/fleetint/fleetint.sock` | `FLEETINT_FLAGS="--listen-address=..."` | `listenAddress` |
+| `--listen-address` | Listen address for the agent API server. An absolute path creates a Unix socket; a `host:port` value opens a TCP listener. This only takes effect when local listener startup is enabled. | `/run/fleetint/fleetint.sock` | `FLEETINT_FLAGS="--listen-address=..."` | `listenAddress` |
+| `--disable-local-listener` | Disable the local API listener entirely. When set, the agent does not bind either a Unix socket or TCP address. | `true` | `FLEETINT_FLAGS="--disable-local-listener"` | `disableLocalListener` (default `true`) |
 | `--retention-period` | Retention period for stored metrics and events. Minimum `1m`. | `24h` | `FLEETINT_FLAGS="--retention-period=..."` | `retentionPeriod` |
 | `--components` | Comma-separated component selection. Use `all`, `*`, explicit names, and `-name` exclusions. | empty flag value, which means enable all components by default | `FLEETINT_FLAGS="--components=..."` | `components` |
 | `--offline-mode` | Disable the HTTP API server and write telemetry to files instead. | `false` | `FLEETINT_FLAGS="--offline-mode ..."` | not exposed by chart by default |

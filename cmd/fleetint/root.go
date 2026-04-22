@@ -84,6 +84,10 @@ func App() *cli.App {
 					Usage: "set the listen address",
 					Value: config.DefaultListenAddress,
 				},
+				&cli.BoolFlag{
+					Name:  "disable-local-listener",
+					Usage: "disable local API listener startup (default: true; set --disable-local-listener=false to enable)",
+				},
 				&cli.DurationFlag{
 					Name:  "retention-period",
 					Usage: "set the time period to retain metrics for (once elapsed, old records are automatically purged)",

@@ -18,11 +18,14 @@ Performs a quick health scan of GPUs and system components. Returns immediately 
 sudo fleetint run
 ```
 
-Starts the API server. By default it listens on a Unix socket at `/run/fleetint/fleetint.sock` (access controlled by file permissions). Pass `--listen-address` to switch to TCP.
+Starts the agent runtime. By default, the local API listener is disabled.
+Use `--disable-local-listener=false` to enable local API serving.
+When enabled without overriding address, it listens on Unix socket `/run/fleetint/fleetint.sock` (access controlled by file permissions).
 
 **Options:**
 - `--log-level`: Set logging level (debug, info, warn, error)
-- `--listen-address`: Listen address. An absolute path (e.g. `/run/fleetint/fleetint.sock`) creates a Unix socket; a `host:port` value (e.g. `127.0.0.1:15133`) opens a TCP listener. Default: `/run/fleetint/fleetint.sock`. See [Exposing the Agent for External Monitoring](#exposing-the-agent-for-external-monitoring) for details on exposing to Prometheus and other tools.
+- `--listen-address`: Listen address. An absolute path (e.g. `/run/fleetint/fleetint.sock`) creates a Unix socket; a `host:port` value (e.g. `127.0.0.1:15133`) opens a TCP listener.
+- `--disable-local-listener`: Disable local API listener startup entirely (no unix socket or TCP bind). Runtime default is disabled.
 - `--components`: Enable/disable specific components
 
 ### Check Status
@@ -201,7 +204,9 @@ sudo journalctl -u fleetintd -f
 
 ## HTTP API
 
-The fleetint API server listens on a Unix socket (`/run/fleetint/fleetint.sock`) by default. When started with a TCP address (e.g. `--listen-address=127.0.0.1:15133`), the REST endpoints are also available over plain HTTP.
+By default, local API endpoints are not served.
+When started with `--disable-local-listener=false`, fleetint listens on Unix socket (`/run/fleetint/fleetint.sock`) unless `--listen-address` is set.
+When started with a TCP address (e.g. `--listen-address=127.0.0.1:15133`), the REST endpoints are also available over plain HTTP.
 
 **Using curl with the default Unix socket** (requires sudo since the socket is owner-only):
 
@@ -209,7 +214,7 @@ The fleetint API server listens on a Unix socket (`/run/fleetint/fleetint.sock`)
 sudo curl --unix-socket /run/fleetint/fleetint.sock http://localhost/healthz
 ```
 
-**Using curl with TCP** (requires `--listen-address=127.0.0.1:15133`):
+**Using curl with TCP** (requires `--disable-local-listener=false --listen-address=127.0.0.1:15133`):
 
 ```bash
 curl http://localhost:15133/healthz
@@ -303,14 +308,14 @@ Returns metrics in Prometheus exposition format for integration with monitoring 
 
 ## Exposing the Agent for External Monitoring
 
-By default, fleetint uses a Unix socket for security. To allow external monitoring tools like Prometheus to scrape metrics over the network, switch to a TCP listener with the `--listen-address` flag:
+By default, local API serving is disabled. To allow external monitoring tools like Prometheus to scrape metrics over the network, start with a TCP listener using `--listen-address`:
 
 ```bash
 # Expose on all interfaces
-sudo fleetint run --listen-address=0.0.0.0:15133
+sudo fleetint run --disable-local-listener=false --listen-address=0.0.0.0:15133
 
 # Or expose on a specific IP address
-sudo fleetint run --listen-address=192.168.1.100:15133
+sudo fleetint run --disable-local-listener=false --listen-address=192.168.1.100:15133
 ```
 
 ### Prometheus Configuration Example
@@ -352,7 +357,7 @@ scrape_configs:
 
 4. Check that the daemon is listening:
    ```bash
-   # Default (unix socket)
+   # Listener-enabled mode (unix socket)
    sudo ls -la /run/fleetint/fleetint.sock
 
    # TCP mode

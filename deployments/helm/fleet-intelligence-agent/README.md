@@ -39,6 +39,7 @@ Common values (defaults from `values.yaml`):
 | `env.HTTPS_PROXY` | `""` | Optional HTTPS proxy for outbound requests. |
 | `logLevel` | `warn` | Log level. |
 | `listenAddress` | `0.0.0.0:15133` | Listen address. |
+| `disableLocalListener` | `true` | Disable local API listener startup entirely (no unix socket or TCP bind). |
 | `retentionPeriod` | `24h` | Retention period for stored metrics and events. |
 | `components` | `all` | Enabled components. |
 | `enroll.enabled` | `false` | Enable enrollment init container. |
@@ -75,6 +76,7 @@ See `docs/install-helm.md` for the enrollment flow and secret creation steps.
 - The chart assumes DCGM HostEngine is already running in the cluster (typically
   via NVIDIA GPU Operator). Set `env.DCGM_URL` to match your DCGM Service.
 - The DaemonSet uses `runtimeClassName: nvidia` by default.
+- The chart defaults to `disableLocalListener=true` (no local API socket/TCP listener).
 - **Node Labeling**: By default, the agent only deploys to nodes with GPUs (labeled `nvidia.com/gpu.present=true`).
   This label is automatically set by the NVIDIA GPU Operator or Device Plugin.
   To deploy to all nodes regardless of labels, override with `--set nodeSelector=null`.

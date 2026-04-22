@@ -254,6 +254,8 @@ func runCommand(cliContext *cli.Context) error {
 	}
 
 	listenAddress := cliContext.String("listen-address")
+	disableLocalListener := cliContext.Bool("disable-local-listener")
+	disableLocalListenerSet := cliContext.IsSet("disable-local-listener")
 	retentionPeriod := cliContext.Duration("retention-period")
 
 	ibClassRootDir := cliContext.String("infiniband-class-root-dir")
@@ -315,6 +317,9 @@ func runCommand(cliContext *cli.Context) error {
 	if listenAddress != "" {
 		cfg.Address = listenAddress
 	}
+	if disableLocalListenerSet {
+		cfg.DisableLocalListener = disableLocalListener
+	}
 
 	if retentionPeriod > 0 {
 		cfg.RetentionPeriod = metav1.Duration{Duration: retentionPeriod}
@@ -334,6 +339,11 @@ func runCommand(cliContext *cli.Context) error {
 		log.Logger.Infow("fault injection endpoint enabled for testing")
 	} else {
 		log.Logger.Infow("fault injection endpoint disabled")
+	}
+	if cfg.DisableLocalListener {
+		log.Logger.Infow("local API listener disabled")
+	} else {
+		log.Logger.Infow("local API listener enabled", "address", cfg.Address)
 	}
 
 	// Configure offline mode if enabled
