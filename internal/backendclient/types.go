@@ -57,11 +57,11 @@ type CPUInfo struct {
 	Type         string `json:"type"`
 	Manufacturer string `json:"manufacturer"`
 	Architecture string `json:"architecture"`
-	LogicalCores int64  `json:"logicalCores"`
+	LogicalCores string `json:"logicalCores"`
 }
 
 type MemoryInfo struct {
-	TotalBytes uint64 `json:"totalBytes"`
+	TotalBytes string `json:"totalBytes"`
 }
 
 type GPUInfo struct {

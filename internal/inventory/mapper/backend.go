@@ -17,6 +17,8 @@
 package mapper
 
 import (
+	"strconv"
+
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory"
 )
@@ -90,10 +92,10 @@ func ToNodeUpsertRequest(s *inventory.Snapshot) *backendclient.NodeUpsertRequest
 				Type:         s.Resources.CPUInfo.Type,
 				Manufacturer: s.Resources.CPUInfo.Manufacturer,
 				Architecture: s.Resources.CPUInfo.Architecture,
-				LogicalCores: s.Resources.CPUInfo.LogicalCores,
+				LogicalCores: strconv.FormatInt(s.Resources.CPUInfo.LogicalCores, 10),
 			},
 			MemoryInfo: backendclient.MemoryInfo{
-				TotalBytes: s.Resources.MemoryInfo.TotalBytes,
+				TotalBytes: strconv.FormatUint(s.Resources.MemoryInfo.TotalBytes, 10),
 			},
 			GPUInfo: backendclient.GPUInfo{
 				Product:      s.Resources.GPUInfo.Product,
