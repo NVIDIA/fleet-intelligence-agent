@@ -86,7 +86,6 @@ func ToNodeUpsertRequest(s *inventory.Snapshot) *backendclient.NodeUpsertRequest
 		ContainerRuntimeVersion: s.ContainerRuntimeVersion,
 		NetPrivateIP:            s.NetPrivateIP,
 		NetPublicIP:             s.NetPublicIP,
-		InventoryHash:           s.InventoryHash,
 		Resources: backendclient.NodeResources{
 			CPUInfo: backendclient.CPUInfo{
 				Type:         s.Resources.CPUInfo.Type,

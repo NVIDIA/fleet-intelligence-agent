@@ -43,7 +43,6 @@ func TestToNodeUpsertRequest(t *testing.T) {
 		ContainerRuntimeVersion: "containerd://1.7.13",
 		NetPrivateIP:            "10.0.0.10",
 		NetPublicIP:             "203.0.113.10",
-		InventoryHash:           "hash-1",
 		AgentConfig: inventory.AgentConfig{
 			TotalComponents:        30,
 			RetentionPeriodSeconds: 86400,
@@ -103,7 +102,6 @@ func TestToNodeUpsertRequest(t *testing.T) {
 	require.Equal(t, "host-a", req.Hostname)
 	require.Equal(t, "machine-id", req.MachineID)
 	require.Equal(t, "203.0.113.10", req.NetPublicIP)
-	require.Equal(t, "hash-1", req.InventoryHash)
 	require.Equal(t, int64(30), req.AgentConfig.TotalComponents)
 	require.Equal(t, int64(86400), req.AgentConfig.RetentionPeriodSeconds)
 	require.Equal(t, []string{"cpu", "gpu"}, req.AgentConfig.EnabledComponents)

@@ -35,7 +35,6 @@ type NodeUpsertRequest struct {
 	BootID                  string        `json:"bootID"`
 	NetPrivateIP            string        `json:"netPrivateIP,omitempty"`
 	NetPublicIP             string        `json:"netPublicIP,omitempty"`
-	InventoryHash           string        `json:"inventoryHash,omitempty"`
 }
 
 type NodeResources struct {
