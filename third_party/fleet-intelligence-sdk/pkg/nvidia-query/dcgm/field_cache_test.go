@@ -87,6 +87,30 @@ func TestFieldValueCache_SetupWithNoFields(t *testing.T) {
 	assert.NoError(t, err, "setup with no fields should return nil")
 }
 
+func TestFieldValueCache_ResetAfterReconnectCallback(t *testing.T) {
+	ctx := context.Background()
+	mockInstance := &mockReconnectRegistrarInstance{
+		mockDCGMInstance: mockDCGMInstance{dcgmExists: true},
+	}
+
+	fc := NewFieldValueCache(ctx, mockInstance, time.Second)
+	assert.NotNil(t, mockInstance.callback, "reconnect callback should be registered")
+
+	fc.mu.Lock()
+	fc.lastError = assert.AnError
+	fc.lastUpdate = time.Now()
+	fc.values[1] = map[dcgm.Short]dcgm.FieldValue_v1{}
+	fc.mu.Unlock()
+
+	mockInstance.callback()
+
+	fc.mu.RLock()
+	defer fc.mu.RUnlock()
+	assert.Nil(t, fc.lastError, "callback should clear cached errors")
+	assert.True(t, fc.lastUpdate.IsZero(), "callback should reset last update timestamp")
+	assert.Empty(t, fc.values, "callback should clear cached values")
+}
+
 // mockDCGMInstance is a minimal mock for testing field cache behavior
 type mockDCGMInstance struct {
 	dcgmExists bool
@@ -139,4 +163,13 @@ func (m *mockDCGMInstance) GetDevices() []DeviceInfo {
 
 func (m *mockDCGMInstance) Shutdown() error {
 	return nil
+}
+
+type mockReconnectRegistrarInstance struct {
+	mockDCGMInstance
+	callback func()
+}
+
+func (m *mockReconnectRegistrarInstance) RegisterReconnectCallback(callback func()) {
+	m.callback = callback
 }

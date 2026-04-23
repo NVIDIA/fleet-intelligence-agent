@@ -78,7 +78,7 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	}
 
 	// Register this component's health watch system with DCGM
-	if c.dcgmInstance != nil && c.dcgmInstance.DCGMExists() {
+	if c.dcgmInstance != nil {
 		if err := c.dcgmInstance.AddHealthWatch(dcgm.DCGM_HEALTH_WATCH_INFOROM); err != nil {
 			log.Logger.Warnw("failed to add inforom health watch", "error", err)
 		} else {

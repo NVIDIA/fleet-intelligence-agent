@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 
@@ -29,6 +30,10 @@ import (
 )
 
 var _ Instance = &instance{}
+
+const defaultDCGMReconnectInterval = 30 * time.Second
+
+var dcgmReconnectInterval = defaultDCGMReconnectInterval
 
 // dcgmInitParams defines how we initialize the go-dcgm client.
 type dcgmInitParams struct {
@@ -154,6 +159,10 @@ type Instance interface {
 	Shutdown() error
 }
 
+type reconnectCallbackRegistrar interface {
+	RegisterReconnectCallback(callback func())
+}
+
 var newInstanceFunc = newInitializedInstance
 
 // New creates a DCGM instance. Returns no-op instance if DCGM is unavailable.
@@ -187,21 +196,36 @@ func NewWithContext(ctx context.Context) (Instance, error) {
 
 	select {
 	case res := <-resultCh:
-		return res.inst, res.err
+		if res.err != nil {
+			return nil, res.err
+		}
+		return newReconnectingInstance(res.inst, dcgmReconnectInterval), nil
 	case <-ctx.Done():
 		close(abandonCh)
 		log.Logger.Warnw("DCGM initialization timed out, returning no-op instance", "error", ctx.Err())
-		return NewNoOp(), nil
+		return newReconnectingInstance(NewNoOp(), dcgmReconnectInterval), nil
 	}
 }
 
+var newConnectedInstanceFunc = func() (Instance, error) {
+	return newConnectedInstance()
+}
+
 func newInitializedInstance() (Instance, error) {
+	connectedInst, err := newConnectedInstanceFunc()
+	if err != nil {
+		log.Logger.Warnw("DCGM initialization failed, returning no-op instance", "error", err)
+		return NewNoOp(), nil
+	}
+	return connectedInst, nil
+}
+
+func newConnectedInstance() (Instance, error) {
 	initParams := resolveInitFromEnv()
 
 	cleanup, err := dcgm.Init(dcgm.Standalone, initParams.address, initParams.isUnixSocket)
 	if err != nil {
-		log.Logger.Warnw("DCGM initialization failed, returning no-op instance", "error", err)
-		return NewNoOp(), nil
+		return nil, err
 	}
 
 	log.Logger.Debugw("DCGM initialized successfully")
@@ -238,14 +262,14 @@ func newInitializedInstance() (Instance, error) {
 		log.Logger.Infow("cached device information", "numDevices", len(devices))
 	}
 
-	inst := &instance{
+	connectedInst := &instance{
 		dcgmExists:  true,
 		groupHandle: groupHandle,
 		cleanup:     cleanup,
 		devices:     devices,
 	}
 
-	return inst, nil
+	return connectedInst, nil
 }
 
 var _ Instance = &instance{}
@@ -441,6 +465,308 @@ func (inst *instance) Shutdown() error {
 		inst.cleanup()
 	}
 	return nil
+}
+
+var _ Instance = &reconnectingInstance{}
+
+type reconnectingInstance struct {
+	stateMu   sync.RWMutex
+	currentMu sync.RWMutex
+
+	current        Instance
+	watchedSystems dcgm.HealthSystem
+	watchedFields  map[dcgm.Short]struct{}
+	groupEntities  map[uint]struct{}
+	callbacks      []func()
+
+	reconnectInterval time.Duration
+	stopCh            chan struct{}
+	shutdownOnce      sync.Once
+}
+
+func newReconnectingInstance(initial Instance, reconnectInterval time.Duration) Instance {
+	if initial == nil {
+		initial = NewNoOp()
+	}
+	if reconnectInterval <= 0 {
+		reconnectInterval = defaultDCGMReconnectInterval
+	}
+
+	inst := &reconnectingInstance{
+		current:           initial,
+		watchedFields:     make(map[dcgm.Short]struct{}),
+		groupEntities:     make(map[uint]struct{}),
+		reconnectInterval: reconnectInterval,
+		stopCh:            make(chan struct{}),
+	}
+
+	for _, field := range initial.GetWatchedFields() {
+		inst.watchedFields[field] = struct{}{}
+	}
+
+	go inst.reconnectLoop()
+
+	return inst
+}
+
+func (inst *reconnectingInstance) reconnectLoop() {
+	if !inst.DCGMExists() {
+		if err := inst.reconnectNow(); err != nil {
+			log.Logger.Debugw("initial DCGM reconnect attempt failed", "error", err)
+		}
+	}
+
+	ticker := time.NewTicker(inst.reconnectInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-inst.stopCh:
+			return
+		case <-ticker.C:
+			if inst.DCGMExists() {
+				continue
+			}
+			if err := inst.reconnectNow(); err != nil {
+				log.Logger.Debugw("DCGM reconnect attempt failed", "error", err)
+			}
+		}
+	}
+}
+
+func (inst *reconnectingInstance) reconnectNow() error {
+	connectedInst, err := newConnectedInstanceFunc()
+	if err != nil {
+		return err
+	}
+
+	if err := inst.replayState(connectedInst); err != nil {
+		_ = connectedInst.Shutdown()
+		return err
+	}
+
+	inst.currentMu.Lock()
+	previousInst := inst.current
+	inst.current = connectedInst
+	inst.currentMu.Unlock()
+
+	inst.runReconnectCallbacks()
+
+	if previousInst != nil {
+		_ = previousInst.Shutdown()
+	}
+
+	log.Logger.Infow("DCGM reconnected successfully")
+	return nil
+}
+
+func (inst *reconnectingInstance) replayState(connectedInst Instance) error {
+	inst.stateMu.RLock()
+	groupEntities := make([]uint, 0, len(inst.groupEntities))
+	for entityID := range inst.groupEntities {
+		groupEntities = append(groupEntities, entityID)
+	}
+
+	watchedSystems := inst.watchedSystems
+
+	watchedFields := make([]dcgm.Short, 0, len(inst.watchedFields))
+	for fieldID := range inst.watchedFields {
+		watchedFields = append(watchedFields, fieldID)
+	}
+	inst.stateMu.RUnlock()
+
+	for _, entityID := range groupEntities {
+		if err := connectedInst.AddEntityToGroup(entityID); err != nil {
+			return fmt.Errorf("failed to replay DCGM entity group state for entity %d: %w", entityID, err)
+		}
+	}
+
+	if watchedSystems != 0 {
+		if err := connectedInst.AddHealthWatch(watchedSystems); err != nil {
+			return fmt.Errorf("failed to replay DCGM health watch state: %w", err)
+		}
+	}
+
+	if len(watchedFields) > 0 {
+		if err := connectedInst.AddFieldsToWatch(watchedFields); err != nil {
+			return fmt.Errorf("failed to replay DCGM watched fields state: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (inst *reconnectingInstance) RegisterReconnectCallback(callback func()) {
+	if callback == nil {
+		return
+	}
+	inst.stateMu.Lock()
+	inst.callbacks = append(inst.callbacks, callback)
+	inst.stateMu.Unlock()
+}
+
+func (inst *reconnectingInstance) runReconnectCallbacks() {
+	inst.stateMu.RLock()
+	callbacks := make([]func(), len(inst.callbacks))
+	copy(callbacks, inst.callbacks)
+	inst.stateMu.RUnlock()
+
+	for _, callback := range callbacks {
+		callback()
+	}
+}
+
+func (inst *reconnectingInstance) DCGMExists() bool {
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
+	if currentInst == nil {
+		return false
+	}
+	return currentInst.DCGMExists()
+}
+
+func (inst *reconnectingInstance) AddEntityToGroup(entityID uint) error {
+	inst.stateMu.Lock()
+	inst.groupEntities[entityID] = struct{}{}
+	inst.stateMu.Unlock()
+
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
+	if currentInst != nil && currentInst.DCGMExists() {
+		return currentInst.AddEntityToGroup(entityID)
+	}
+	return nil
+}
+
+func (inst *reconnectingInstance) AddHealthWatch(system dcgm.HealthSystem) error {
+	inst.stateMu.Lock()
+	inst.watchedSystems |= system
+	inst.stateMu.Unlock()
+
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
+	if currentInst != nil && currentInst.DCGMExists() {
+		return currentInst.AddHealthWatch(system)
+	}
+	return nil
+}
+
+func (inst *reconnectingInstance) RemoveHealthWatch(system dcgm.HealthSystem) error {
+	inst.stateMu.Lock()
+	inst.watchedSystems &^= system
+	inst.stateMu.Unlock()
+
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
+	if currentInst != nil && currentInst.DCGMExists() {
+		return currentInst.RemoveHealthWatch(system)
+	}
+	return nil
+}
+
+func (inst *reconnectingInstance) HealthCheck(system dcgm.HealthSystem) (dcgm.HealthResult, []dcgm.Incident, error) {
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
+	if currentInst == nil {
+		return dcgm.DCGM_HEALTH_RESULT_PASS, nil, nil
+	}
+	return currentInst.HealthCheck(system)
+}
+
+func (inst *reconnectingInstance) AddFieldsToWatch(fields []dcgm.Short) error {
+	inst.stateMu.Lock()
+	for _, field := range fields {
+		inst.watchedFields[field] = struct{}{}
+	}
+	inst.stateMu.Unlock()
+
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
+	if currentInst != nil && currentInst.DCGMExists() {
+		return currentInst.AddFieldsToWatch(fields)
+	}
+	return nil
+}
+
+func (inst *reconnectingInstance) GetWatchedFields() []dcgm.Short {
+	inst.stateMu.RLock()
+	defer inst.stateMu.RUnlock()
+
+	fields := make([]dcgm.Short, 0, len(inst.watchedFields))
+	for fieldID := range inst.watchedFields {
+		fields = append(fields, fieldID)
+	}
+
+	return fields
+}
+
+func (inst *reconnectingInstance) RemoveFieldsFromWatch(fields []dcgm.Short) error {
+	inst.stateMu.Lock()
+	for _, field := range fields {
+		delete(inst.watchedFields, field)
+	}
+	inst.stateMu.Unlock()
+
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
+	if currentInst != nil && currentInst.DCGMExists() {
+		return currentInst.RemoveFieldsFromWatch(fields)
+	}
+	return nil
+}
+
+func (inst *reconnectingInstance) GetLatestValuesForFields(deviceID uint, fields []dcgm.Short) ([]dcgm.FieldValue_v1, error) {
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
+	if currentInst == nil {
+		return nil, fmt.Errorf("DCGM is not available")
+	}
+	return currentInst.GetLatestValuesForFields(deviceID, fields)
+}
+
+func (inst *reconnectingInstance) GetGroupHandle() dcgm.GroupHandle {
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
+	if currentInst == nil {
+		return dcgm.GroupHandle{}
+	}
+	return currentInst.GetGroupHandle()
+}
+
+func (inst *reconnectingInstance) GetDevices() []DeviceInfo {
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
+	if currentInst == nil {
+		return nil
+	}
+	return currentInst.GetDevices()
+}
+
+func (inst *reconnectingInstance) Shutdown() error {
+	var shutdownErr error
+	inst.shutdownOnce.Do(func() {
+		close(inst.stopCh)
+
+		inst.currentMu.Lock()
+		currentInst := inst.current
+		inst.current = nil
+		inst.currentMu.Unlock()
+
+		if currentInst != nil {
+			shutdownErr = currentInst.Shutdown()
+		}
+	})
+	return shutdownErr
 }
 
 var _ Instance = &noOpInstance{}
