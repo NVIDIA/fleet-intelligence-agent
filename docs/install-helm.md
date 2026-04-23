@@ -149,7 +149,7 @@ kubectl describe pod -n "$NS" -l app.kubernetes.io/name=fleet-intelligence-agent
 
 Common issues:
 - **ImagePullBackOff**: Verify nodes can reach `ghcr.io` and the image tag exists
-- **Pending**: Check node labels match `nodeSelector` (default: `nvidia.com/gpu.present=true`)
+- **Pending**: Check node labels match `nodeSelector` (default: `nvidia.com/gpu.deploy.dcgm=true`)
 - **CrashLoopBackOff**: Check logs for errors
 
 **Enrollment failures:**
@@ -190,16 +190,18 @@ helm upgrade fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intellig
 
 ## Node Scheduling
 
-**By default**, the agent automatically deploys only to GPU nodes using the nodeSelector:
+**By default**, the agent only deploys to nodes where DCGM is running, using the nodeSelector:
 
 ```yaml
 nodeSelector:
-  nvidia.com/gpu.present: "true"
+  nvidia.com/gpu.deploy.dcgm: "true"
 ```
 
-This label is automatically set by the NVIDIA GPU Operator or Device Plugin, so no manual node labeling is required.
+The agent requires a DCGM HostEngine to collect GPU metrics, so it must co-locate with DCGM. This label is
+automatically set by the NVIDIA GPU Operator when DCGM is enabled — no manual labeling is required.
 
 If you need a different node selector or tolerations for GPU taints, you can override them.
+The examples below use a generic label to illustrate the override syntax — replace it with the actual label used in your cluster.
 
 Using `--set` (quote the tolerations for zsh, and escape dots in the label key):
 
@@ -207,7 +209,7 @@ Using `--set` (quote the tolerations for zsh, and escape dots in the label key):
 helm upgrade --install fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intelligence-agent \
   --version "$CHART_VERSION" \
   --namespace "$NS" \
-  --set-string nodeSelector.nvidia\\.com/gpu\\.deploy\\.dcgm=true \
+  --set-string nodeSelector.my-org\\.com/gpu-node=true \
   --set 'tolerations[0].key=nvidia.com/gpu' \
   --set 'tolerations[0].operator=Exists' \
   --set 'tolerations[0].effect=NoSchedule'
@@ -217,7 +219,7 @@ Using a values file:
 
 ```yaml
 nodeSelector:
-  nvidia.com/gpu.deploy.dcgm: "true"
+  my-org.com/gpu-node: "true"
 
 tolerations:
   - key: "nvidia.com/gpu"
