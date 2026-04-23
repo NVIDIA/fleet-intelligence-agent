@@ -77,7 +77,7 @@ resources:
 # This is a standard label set by the NVIDIA GPU Operator/Device Plugin.
 # To deploy without label restriction, set to {} and override.
 nodeSelector:
-  nvidia.com/gpu.present: "true"
+  nvidia.com/gpu.deploy.dcgm: "true"
 
 tolerations: []
 affinity: {}
