@@ -40,6 +40,7 @@ type FieldValueCache struct {
 	lastError  error
 
 	fieldGroupID   dcgm.FieldHandle
+	fieldGroupName string
 	pollInterval   time.Duration
 	started        bool
 	startOnce      sync.Once
@@ -51,25 +52,38 @@ func NewFieldValueCache(ctx context.Context, instance Instance, pollInterval tim
 	cctx, ccancel := context.WithCancel(ctx)
 
 	return &FieldValueCache{
-		ctx:          cctx,
-		cancel:       ccancel,
-		instance:     instance,
-		values:       make(map[uint]map[dcgm.Short]dcgm.FieldValue_v1),
-		pollInterval: pollInterval,
+		ctx:            cctx,
+		cancel:         ccancel,
+		instance:       instance,
+		values:         make(map[uint]map[dcgm.Short]dcgm.FieldValue_v1),
+		fieldGroupName: "gpud-gpu-fields",
+		pollInterval:   pollInterval,
 	}
 }
 
 // SetupFieldWatching creates the field group and starts DCGM watching for all registered fields.
 // For tests, use SetupFieldWatchingWithName to provide a unique name.
 func (fc *FieldValueCache) SetupFieldWatching() error {
-	return fc.SetupFieldWatchingWithName("gpud-gpu-fields")
+	return fc.SetupFieldWatchingWithName(fc.fieldGroupName)
 }
 
 // SetupFieldWatchingWithName creates the field group with a custom name.
 // This is useful for tests to avoid naming conflicts when running in parallel.
 func (fc *FieldValueCache) SetupFieldWatchingWithName(fieldGroupName string) error {
+	fc.mu.Lock()
+	fc.fieldGroupName = fieldGroupName
+	fc.mu.Unlock()
+
+	return fc.ensureFieldWatchingSetup()
+}
+
+func (fc *FieldValueCache) ensureFieldWatchingSetup() error {
 	fc.registrationMu.Lock()
 	defer fc.registrationMu.Unlock()
+
+	if fc.fieldGroupID.GetHandle() != 0 {
+		return nil
+	}
 
 	if fc.instance == nil || !fc.instance.DCGMExists() {
 		log.Logger.Debugw("DCGM not available, skipping field watching setup")
@@ -81,6 +95,10 @@ func (fc *FieldValueCache) SetupFieldWatchingWithName(fieldGroupName string) err
 		log.Logger.Debugw("no fields registered, skipping field watching setup")
 		return nil
 	}
+
+	fc.mu.RLock()
+	fieldGroupName := fc.fieldGroupName
+	fc.mu.RUnlock()
 
 	fieldGroupID, err := dcgm.FieldGroupCreate(fieldGroupName, watchedFields)
 	if err != nil {
@@ -122,22 +140,8 @@ func (fc *FieldValueCache) Start() error {
 	var startErr error
 	fc.startOnce.Do(func() {
 		fc.registrationMu.Lock()
-		defer fc.registrationMu.Unlock()
-
-		if fc.instance == nil || !fc.instance.DCGMExists() {
-			log.Logger.Debugw("no fields or DCGM unavailable, skipping polling")
-			fc.started = true
-			return
-		}
-
-		watchedFields := fc.instance.GetWatchedFields()
-		if len(watchedFields) == 0 {
-			log.Logger.Debugw("no fields or DCGM unavailable, skipping polling")
-			fc.started = true
-			return
-		}
-
 		fc.started = true
+		fc.registrationMu.Unlock()
 
 		if err := fc.Poll(); err != nil {
 			log.Logger.Warnw("initial poll failed", "error", err)
@@ -145,7 +149,7 @@ func (fc *FieldValueCache) Start() error {
 
 		go fc.pollLoop()
 
-		log.Logger.Infow("field cache polling started", "interval", fc.pollInterval, "fields", len(watchedFields))
+		log.Logger.Infow("field cache polling started", "interval", fc.pollInterval)
 	})
 
 	return startErr
@@ -185,12 +189,19 @@ func (fc *FieldValueCache) Poll() error {
 	}
 
 	if !fc.instance.DCGMExists() {
-		return fmt.Errorf("DCGM library not loaded")
+		// DCGM may become available after startup; keep polling until it is ready.
+		log.Logger.Debugw("DCGM not available yet, skipping field poll")
+		return nil
+	}
+
+	if err := fc.ensureFieldWatchingSetup(); err != nil {
+		return err
 	}
 
 	watchedFields := fc.instance.GetWatchedFields()
 	if len(watchedFields) == 0 {
-		return fmt.Errorf("no fields to watch")
+		log.Logger.Debugw("no fields registered with DCGM, skipping field poll")
+		return nil
 	}
 
 	devices := fc.instance.GetDevices()

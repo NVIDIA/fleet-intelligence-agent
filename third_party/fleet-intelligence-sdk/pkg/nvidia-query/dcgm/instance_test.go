@@ -130,9 +130,14 @@ func TestInstanceWhenDCGMNotAvailable(t *testing.T) {
 
 func TestNewWithContextReturnsNoOpOnTimeout(t *testing.T) {
 	originalNewInstanceFunc := newInstanceFunc
+	originalNewConnectedInstanceFunc := newConnectedInstanceFunc
 	defer func() {
 		newInstanceFunc = originalNewInstanceFunc
+		newConnectedInstanceFunc = originalNewConnectedInstanceFunc
 	}()
+	newConnectedInstanceFunc = func() (Instance, error) {
+		return nil, errors.New("dcgm unavailable for reconnect test")
+	}
 
 	blocker := make(chan struct{})
 	newInstanceFunc = func() (Instance, error) {
@@ -147,6 +152,7 @@ func TestNewWithContextReturnsNoOpOnTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWithContext() returned error: %v", err)
 	}
+	defer inst.Shutdown()
 	if inst == nil {
 		t.Fatal("instance should not be nil")
 	}
@@ -155,6 +161,80 @@ func TestNewWithContextReturnsNoOpOnTimeout(t *testing.T) {
 	}
 
 	close(blocker)
+}
+
+func TestReconnectingInstanceReplaysDeferredState(t *testing.T) {
+	originalNewConnectedInstanceFunc := newConnectedInstanceFunc
+	defer func() {
+		newConnectedInstanceFunc = originalNewConnectedInstanceFunc
+	}()
+
+	mock := newMockTrackingInstance()
+	newConnectedInstanceFunc = func() (Instance, error) {
+		return mock, nil
+	}
+
+	reconnectingInst := newReconnectingInstance(NewNoOp(), time.Hour)
+	defer reconnectingInst.Shutdown()
+
+	if err := reconnectingInst.AddHealthWatch(dcgm.DCGM_HEALTH_WATCH_PCIE); err != nil {
+		t.Fatalf("AddHealthWatch() failed: %v", err)
+	}
+	fields := []dcgm.Short{dcgm.DCGM_FI_DEV_FB_FREE, dcgm.DCGM_FI_DEV_FB_USED}
+	if err := reconnectingInst.AddFieldsToWatch(fields); err != nil {
+		t.Fatalf("AddFieldsToWatch() failed: %v", err)
+	}
+	if err := reconnectingInst.AddEntityToGroup(3); err != nil {
+		t.Fatalf("AddEntityToGroup() failed: %v", err)
+	}
+
+	internalInst := reconnectingInst.(*reconnectingInstance)
+	if err := internalInst.reconnectNow(); err != nil {
+		t.Fatalf("reconnectNow() failed: %v", err)
+	}
+
+	if !reconnectingInst.DCGMExists() {
+		t.Fatalf("expected reconnecting instance to report DCGM available")
+	}
+	if mock.watchedSystems != dcgm.DCGM_HEALTH_WATCH_PCIE {
+		t.Fatalf("expected watched systems 0x%x, got 0x%x", dcgm.DCGM_HEALTH_WATCH_PCIE, mock.watchedSystems)
+	}
+	if _, ok := mock.entities[3]; !ok {
+		t.Fatalf("expected entity 3 to be replayed to connected instance")
+	}
+	if len(mock.watchedFields) != len(fields) {
+		t.Fatalf("expected %d watched fields, got %d", len(fields), len(mock.watchedFields))
+	}
+	for _, field := range fields {
+		if _, ok := mock.watchedFields[field]; !ok {
+			t.Fatalf("expected watched field %d to be replayed", field)
+		}
+	}
+}
+
+func TestReconnectingInstanceReturnsDeferredWatchedFields(t *testing.T) {
+	reconnectingInst := newReconnectingInstance(NewNoOp(), time.Hour)
+	defer reconnectingInst.Shutdown()
+
+	fields := []dcgm.Short{dcgm.DCGM_FI_DEV_FB_FREE, dcgm.DCGM_FI_DEV_FB_USED}
+	if err := reconnectingInst.AddFieldsToWatch(fields); err != nil {
+		t.Fatalf("AddFieldsToWatch() failed: %v", err)
+	}
+
+	gotFields := reconnectingInst.GetWatchedFields()
+	if len(gotFields) != len(fields) {
+		t.Fatalf("expected %d watched fields, got %d", len(fields), len(gotFields))
+	}
+
+	gotSet := make(map[dcgm.Short]struct{}, len(gotFields))
+	for _, field := range gotFields {
+		gotSet[field] = struct{}{}
+	}
+	for _, field := range fields {
+		if _, ok := gotSet[field]; !ok {
+			t.Fatalf("expected watched field %d in deferred state", field)
+		}
+	}
 }
 
 func TestNewWithContextReturnsUnderlyingError(t *testing.T) {
@@ -442,3 +522,58 @@ func TestHealthCheckMultipleSystems(t *testing.T) {
 		t.Logf("%s: health=%v, incidents=%d", sys.name, health, len(incidents))
 	}
 }
+
+type mockTrackingInstance struct {
+	watchedSystems dcgm.HealthSystem
+	watchedFields  map[dcgm.Short]struct{}
+	entities       map[uint]struct{}
+}
+
+func newMockTrackingInstance() *mockTrackingInstance {
+	return &mockTrackingInstance{
+		watchedFields: make(map[dcgm.Short]struct{}),
+		entities:      make(map[uint]struct{}),
+	}
+}
+
+func (m *mockTrackingInstance) DCGMExists() bool { return true }
+func (m *mockTrackingInstance) AddEntityToGroup(entityID uint) error {
+	m.entities[entityID] = struct{}{}
+	return nil
+}
+func (m *mockTrackingInstance) AddHealthWatch(system dcgm.HealthSystem) error {
+	m.watchedSystems |= system
+	return nil
+}
+func (m *mockTrackingInstance) RemoveHealthWatch(system dcgm.HealthSystem) error {
+	m.watchedSystems &^= system
+	return nil
+}
+func (m *mockTrackingInstance) HealthCheck(system dcgm.HealthSystem) (dcgm.HealthResult, []dcgm.Incident, error) {
+	return dcgm.DCGM_HEALTH_RESULT_PASS, nil, nil
+}
+func (m *mockTrackingInstance) AddFieldsToWatch(fields []dcgm.Short) error {
+	for _, field := range fields {
+		m.watchedFields[field] = struct{}{}
+	}
+	return nil
+}
+func (m *mockTrackingInstance) GetWatchedFields() []dcgm.Short {
+	fields := make([]dcgm.Short, 0, len(m.watchedFields))
+	for field := range m.watchedFields {
+		fields = append(fields, field)
+	}
+	return fields
+}
+func (m *mockTrackingInstance) RemoveFieldsFromWatch(fields []dcgm.Short) error {
+	for _, field := range fields {
+		delete(m.watchedFields, field)
+	}
+	return nil
+}
+func (m *mockTrackingInstance) GetLatestValuesForFields(deviceID uint, fields []dcgm.Short) ([]dcgm.FieldValue_v1, error) {
+	return nil, nil
+}
+func (m *mockTrackingInstance) GetGroupHandle() dcgm.GroupHandle { return dcgm.GroupHandle{} }
+func (m *mockTrackingInstance) GetDevices() []DeviceInfo         { return nil }
+func (m *mockTrackingInstance) Shutdown() error                  { return nil }

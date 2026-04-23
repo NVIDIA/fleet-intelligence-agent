@@ -78,7 +78,7 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	}
 
 	// Only initialize if DCGM is available
-	if c.dcgmInstance != nil && c.dcgmInstance.DCGMExists() {
+	if c.dcgmInstance != nil {
 		// Register this component's health watch system with DCGM
 		if err := c.dcgmInstance.AddHealthWatch(dcgm.DCGM_HEALTH_WATCH_MEM); err != nil {
 			log.Logger.Warnw("failed to add memory health watch", "error", err)
@@ -446,4 +446,3 @@ func (cr *checkResult) HealthStates() apiv1.HealthStates {
 
 	return apiv1.HealthStates{state}
 }
-
