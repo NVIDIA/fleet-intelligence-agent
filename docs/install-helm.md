@@ -201,6 +201,7 @@ The agent requires a DCGM HostEngine to collect GPU metrics, so it must co-locat
 automatically set by the NVIDIA GPU Operator when DCGM is enabled — no manual labeling is required.
 
 If you need a different node selector or tolerations for GPU taints, you can override them.
+The examples below use a generic label to illustrate the override syntax — replace it with the actual label used in your cluster.
 
 Using `--set` (quote the tolerations for zsh, and escape dots in the label key):
 
@@ -208,7 +209,7 @@ Using `--set` (quote the tolerations for zsh, and escape dots in the label key):
 helm upgrade --install fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intelligence-agent \
   --version "$CHART_VERSION" \
   --namespace "$NS" \
-  --set-string nodeSelector.nvidia\\.com/gpu\\.present=true \
+  --set-string nodeSelector.my-org\\.com/gpu-node=true \
   --set 'tolerations[0].key=nvidia.com/gpu' \
   --set 'tolerations[0].operator=Exists' \
   --set 'tolerations[0].effect=NoSchedule'
@@ -218,7 +219,7 @@ Using a values file:
 
 ```yaml
 nodeSelector:
-  nvidia.com/gpu.present: "true"
+  my-org.com/gpu-node: "true"
 
 tolerations:
   - key: "nvidia.com/gpu"
