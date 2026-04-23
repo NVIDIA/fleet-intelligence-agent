@@ -51,7 +51,7 @@ type FieldValueCache struct {
 func NewFieldValueCache(ctx context.Context, instance Instance, pollInterval time.Duration) *FieldValueCache {
 	cctx, ccancel := context.WithCancel(ctx)
 
-	return &FieldValueCache{
+	fc := &FieldValueCache{
 		ctx:            cctx,
 		cancel:         ccancel,
 		instance:       instance,
@@ -59,6 +59,12 @@ func NewFieldValueCache(ctx context.Context, instance Instance, pollInterval tim
 		fieldGroupName: "gpud-gpu-fields",
 		pollInterval:   pollInterval,
 	}
+
+	if registrar, ok := instance.(reconnectCallbackRegistrar); ok {
+		registrar.RegisterReconnectCallback(fc.resetAfterReconnect)
+	}
+
+	return fc
 }
 
 // SetupFieldWatching creates the field group and starts DCGM watching for all registered fields.
@@ -159,11 +165,28 @@ func (fc *FieldValueCache) Start() error {
 func (fc *FieldValueCache) Stop() {
 	fc.cancel()
 
-	if fc.instance != nil && fc.instance.DCGMExists() && fc.fieldGroupID.GetHandle() != 0 {
-		if err := dcgm.FieldGroupDestroy(fc.fieldGroupID); err != nil {
+	fc.registrationMu.Lock()
+	fieldGroupID := fc.fieldGroupID
+	fc.fieldGroupID = dcgm.FieldHandle{}
+	fc.registrationMu.Unlock()
+
+	if fc.instance != nil && fc.instance.DCGMExists() && fieldGroupID.GetHandle() != 0 {
+		if err := dcgm.FieldGroupDestroy(fieldGroupID); err != nil {
 			log.Logger.Warnw("failed to destroy field group", "error", err)
 		}
 	}
+}
+
+func (fc *FieldValueCache) resetAfterReconnect() {
+	fc.registrationMu.Lock()
+	fc.fieldGroupID = dcgm.FieldHandle{}
+	fc.registrationMu.Unlock()
+
+	fc.mu.Lock()
+	fc.values = make(map[uint]map[dcgm.Short]dcgm.FieldValue_v1)
+	fc.lastError = nil
+	fc.lastUpdate = time.Time{}
+	fc.mu.Unlock()
 }
 
 func (fc *FieldValueCache) pollLoop() {

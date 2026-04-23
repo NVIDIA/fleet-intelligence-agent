@@ -237,6 +237,35 @@ func TestReconnectingInstanceReturnsDeferredWatchedFields(t *testing.T) {
 	}
 }
 
+func TestReconnectingInstanceInvokesReconnectCallbacks(t *testing.T) {
+	originalNewConnectedInstanceFunc := newConnectedInstanceFunc
+	defer func() {
+		newConnectedInstanceFunc = originalNewConnectedInstanceFunc
+	}()
+
+	mock := newMockTrackingInstance()
+	newConnectedInstanceFunc = func() (Instance, error) {
+		return mock, nil
+	}
+
+	reconnectingInst := newReconnectingInstance(NewNoOp(), time.Hour)
+	defer reconnectingInst.Shutdown()
+
+	internalInst := reconnectingInst.(*reconnectingInstance)
+	callbackCount := 0
+	internalInst.RegisterReconnectCallback(func() {
+		callbackCount++
+	})
+
+	if err := internalInst.reconnectNow(); err != nil {
+		t.Fatalf("reconnectNow() failed: %v", err)
+	}
+
+	if callbackCount != 1 {
+		t.Fatalf("expected reconnect callback to run once, got %d", callbackCount)
+	}
+}
+
 func TestNewWithContextReturnsUnderlyingError(t *testing.T) {
 	originalNewInstanceFunc := newInstanceFunc
 	defer func() {

@@ -159,6 +159,10 @@ type Instance interface {
 	Shutdown() error
 }
 
+type reconnectCallbackRegistrar interface {
+	RegisterReconnectCallback(callback func())
+}
+
 var newInstanceFunc = newInitializedInstance
 
 // New creates a DCGM instance. Returns no-op instance if DCGM is unavailable.
@@ -466,12 +470,14 @@ func (inst *instance) Shutdown() error {
 var _ Instance = &reconnectingInstance{}
 
 type reconnectingInstance struct {
-	mu sync.RWMutex
+	stateMu   sync.RWMutex
+	currentMu sync.RWMutex
 
 	current        Instance
 	watchedSystems dcgm.HealthSystem
 	watchedFields  map[dcgm.Short]struct{}
 	groupEntities  map[uint]struct{}
+	callbacks      []func()
 
 	reconnectInterval time.Duration
 	stopCh            chan struct{}
@@ -539,10 +545,12 @@ func (inst *reconnectingInstance) reconnectNow() error {
 		return err
 	}
 
-	inst.mu.Lock()
+	inst.currentMu.Lock()
 	previousInst := inst.current
 	inst.current = connectedInst
-	inst.mu.Unlock()
+	inst.currentMu.Unlock()
+
+	inst.runReconnectCallbacks()
 
 	if previousInst != nil {
 		_ = previousInst.Shutdown()
@@ -553,7 +561,7 @@ func (inst *reconnectingInstance) reconnectNow() error {
 }
 
 func (inst *reconnectingInstance) replayState(connectedInst Instance) error {
-	inst.mu.RLock()
+	inst.stateMu.RLock()
 	groupEntities := make([]uint, 0, len(inst.groupEntities))
 	for entityID := range inst.groupEntities {
 		groupEntities = append(groupEntities, entityID)
@@ -565,7 +573,7 @@ func (inst *reconnectingInstance) replayState(connectedInst Instance) error {
 	for fieldID := range inst.watchedFields {
 		watchedFields = append(watchedFields, fieldID)
 	}
-	inst.mu.RUnlock()
+	inst.stateMu.RUnlock()
 
 	for _, entityID := range groupEntities {
 		if err := connectedInst.AddEntityToGroup(entityID); err != nil {
@@ -588,14 +596,30 @@ func (inst *reconnectingInstance) replayState(connectedInst Instance) error {
 	return nil
 }
 
-func (inst *reconnectingInstance) getCurrent() Instance {
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-	return inst.current
+func (inst *reconnectingInstance) RegisterReconnectCallback(callback func()) {
+	if callback == nil {
+		return
+	}
+	inst.stateMu.Lock()
+	inst.callbacks = append(inst.callbacks, callback)
+	inst.stateMu.Unlock()
+}
+
+func (inst *reconnectingInstance) runReconnectCallbacks() {
+	inst.stateMu.RLock()
+	callbacks := make([]func(), len(inst.callbacks))
+	copy(callbacks, inst.callbacks)
+	inst.stateMu.RUnlock()
+
+	for _, callback := range callbacks {
+		callback()
+	}
 }
 
 func (inst *reconnectingInstance) DCGMExists() bool {
-	currentInst := inst.getCurrent()
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
 	if currentInst == nil {
 		return false
 	}
@@ -603,11 +627,13 @@ func (inst *reconnectingInstance) DCGMExists() bool {
 }
 
 func (inst *reconnectingInstance) AddEntityToGroup(entityID uint) error {
-	inst.mu.Lock()
+	inst.stateMu.Lock()
 	inst.groupEntities[entityID] = struct{}{}
-	currentInst := inst.current
-	inst.mu.Unlock()
+	inst.stateMu.Unlock()
 
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
 	if currentInst != nil && currentInst.DCGMExists() {
 		return currentInst.AddEntityToGroup(entityID)
 	}
@@ -615,11 +641,13 @@ func (inst *reconnectingInstance) AddEntityToGroup(entityID uint) error {
 }
 
 func (inst *reconnectingInstance) AddHealthWatch(system dcgm.HealthSystem) error {
-	inst.mu.Lock()
+	inst.stateMu.Lock()
 	inst.watchedSystems |= system
-	currentInst := inst.current
-	inst.mu.Unlock()
+	inst.stateMu.Unlock()
 
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
 	if currentInst != nil && currentInst.DCGMExists() {
 		return currentInst.AddHealthWatch(system)
 	}
@@ -627,11 +655,13 @@ func (inst *reconnectingInstance) AddHealthWatch(system dcgm.HealthSystem) error
 }
 
 func (inst *reconnectingInstance) RemoveHealthWatch(system dcgm.HealthSystem) error {
-	inst.mu.Lock()
+	inst.stateMu.Lock()
 	inst.watchedSystems &^= system
-	currentInst := inst.current
-	inst.mu.Unlock()
+	inst.stateMu.Unlock()
 
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
 	if currentInst != nil && currentInst.DCGMExists() {
 		return currentInst.RemoveHealthWatch(system)
 	}
@@ -639,7 +669,9 @@ func (inst *reconnectingInstance) RemoveHealthWatch(system dcgm.HealthSystem) er
 }
 
 func (inst *reconnectingInstance) HealthCheck(system dcgm.HealthSystem) (dcgm.HealthResult, []dcgm.Incident, error) {
-	currentInst := inst.getCurrent()
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
 	if currentInst == nil {
 		return dcgm.DCGM_HEALTH_RESULT_PASS, nil, nil
 	}
@@ -647,13 +679,15 @@ func (inst *reconnectingInstance) HealthCheck(system dcgm.HealthSystem) (dcgm.He
 }
 
 func (inst *reconnectingInstance) AddFieldsToWatch(fields []dcgm.Short) error {
-	inst.mu.Lock()
+	inst.stateMu.Lock()
 	for _, field := range fields {
 		inst.watchedFields[field] = struct{}{}
 	}
-	currentInst := inst.current
-	inst.mu.Unlock()
+	inst.stateMu.Unlock()
 
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
 	if currentInst != nil && currentInst.DCGMExists() {
 		return currentInst.AddFieldsToWatch(fields)
 	}
@@ -661,8 +695,8 @@ func (inst *reconnectingInstance) AddFieldsToWatch(fields []dcgm.Short) error {
 }
 
 func (inst *reconnectingInstance) GetWatchedFields() []dcgm.Short {
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
+	inst.stateMu.RLock()
+	defer inst.stateMu.RUnlock()
 
 	fields := make([]dcgm.Short, 0, len(inst.watchedFields))
 	for fieldID := range inst.watchedFields {
@@ -673,13 +707,15 @@ func (inst *reconnectingInstance) GetWatchedFields() []dcgm.Short {
 }
 
 func (inst *reconnectingInstance) RemoveFieldsFromWatch(fields []dcgm.Short) error {
-	inst.mu.Lock()
+	inst.stateMu.Lock()
 	for _, field := range fields {
 		delete(inst.watchedFields, field)
 	}
-	currentInst := inst.current
-	inst.mu.Unlock()
+	inst.stateMu.Unlock()
 
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
 	if currentInst != nil && currentInst.DCGMExists() {
 		return currentInst.RemoveFieldsFromWatch(fields)
 	}
@@ -687,7 +723,9 @@ func (inst *reconnectingInstance) RemoveFieldsFromWatch(fields []dcgm.Short) err
 }
 
 func (inst *reconnectingInstance) GetLatestValuesForFields(deviceID uint, fields []dcgm.Short) ([]dcgm.FieldValue_v1, error) {
-	currentInst := inst.getCurrent()
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
 	if currentInst == nil {
 		return nil, fmt.Errorf("DCGM is not available")
 	}
@@ -695,7 +733,9 @@ func (inst *reconnectingInstance) GetLatestValuesForFields(deviceID uint, fields
 }
 
 func (inst *reconnectingInstance) GetGroupHandle() dcgm.GroupHandle {
-	currentInst := inst.getCurrent()
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
 	if currentInst == nil {
 		return dcgm.GroupHandle{}
 	}
@@ -703,7 +743,9 @@ func (inst *reconnectingInstance) GetGroupHandle() dcgm.GroupHandle {
 }
 
 func (inst *reconnectingInstance) GetDevices() []DeviceInfo {
-	currentInst := inst.getCurrent()
+	inst.currentMu.RLock()
+	currentInst := inst.current
+	defer inst.currentMu.RUnlock()
 	if currentInst == nil {
 		return nil
 	}
@@ -715,7 +757,11 @@ func (inst *reconnectingInstance) Shutdown() error {
 	inst.shutdownOnce.Do(func() {
 		close(inst.stopCh)
 
-		currentInst := inst.getCurrent()
+		inst.currentMu.Lock()
+		currentInst := inst.current
+		inst.current = nil
+		inst.currentMu.Unlock()
+
 		if currentInst != nil {
 			shutdownErr = currentInst.Shutdown()
 		}
