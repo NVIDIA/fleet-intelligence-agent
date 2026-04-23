@@ -17,6 +17,7 @@ package dcgm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -26,6 +27,8 @@ import (
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 )
+
+var errTransientGroupNotReady = errors.New("dcgm group handle not ready")
 
 // HealthCache manages a shared cache of DCGM health check results.
 // It polls DCGM health status in the background and provides cached results
@@ -135,7 +138,7 @@ func (hc *HealthCache) Poll() error {
 		}
 
 		// Check if this is a transient error (benign, don't store)
-		if IsTransientError(err) {
+		if errors.Is(err, errTransientGroupNotReady) || IsTransientError(err) {
 			log.Logger.Infow("DCGM transient error, will retry",
 				"component", "health_cache",
 				"error", err)
@@ -258,7 +261,7 @@ func (hc *HealthCache) GetLastUpdateTime() time.Time {
 func healthCheckDirect(inst Instance) (*dcgm.HealthResponse, error) {
 	groupHandle := inst.GetGroupHandle()
 	if groupHandle.GetHandle() == 0 {
-		return nil, fmt.Errorf("DCGM group handle is not initialized")
+		return nil, fmt.Errorf("%w: DCGM group handle is not initialized", errTransientGroupNotReady)
 	}
 
 	// Call DCGM health check directly on the group
