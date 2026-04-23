@@ -190,14 +190,15 @@ helm upgrade fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intellig
 
 ## Node Scheduling
 
-**By default**, the agent automatically deploys only to GPU nodes using the nodeSelector:
+**By default**, the agent only deploys to nodes where DCGM is running, using the nodeSelector:
 
 ```yaml
 nodeSelector:
   nvidia.com/gpu.deploy.dcgm: "true"
 ```
 
-This label is automatically set by the NVIDIA GPU Operator or Device Plugin, so no manual node labeling is required.
+The agent requires a DCGM HostEngine to collect GPU metrics, so it must co-locate with DCGM. This label is
+automatically set by the NVIDIA GPU Operator when DCGM is enabled — no manual labeling is required.
 
 If you need a different node selector or tolerations for GPU taints, you can override them.
 

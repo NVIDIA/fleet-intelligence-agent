@@ -75,6 +75,7 @@ See `docs/install-helm.md` for the enrollment flow and secret creation steps.
 - The chart assumes DCGM HostEngine is already running in the cluster (typically
   via NVIDIA GPU Operator). Set `env.DCGM_URL` to match your DCGM Service.
 - The DaemonSet uses `runtimeClassName: nvidia` by default.
-- **Node Labeling**: By default, the agent only deploys to nodes with GPUs (labeled `nvidia.com/gpu.deploy.dcgm=true`).
-  This label is automatically set by the NVIDIA GPU Operator or Device Plugin.
-  To deploy to all nodes regardless of labels, override with `--set nodeSelector=null`.
+- **Node Scheduling**: The agent requires a running DCGM HostEngine to collect GPU metrics, so it only deploys to
+  nodes where DCGM is present (labeled `nvidia.com/gpu.deploy.dcgm=true`). This label is automatically set by
+  the NVIDIA GPU Operator when DCGM is enabled. To override, set a different `nodeSelector` or `null` to remove
+  the restriction.
