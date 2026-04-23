@@ -55,6 +55,10 @@ func TestCLIEvidenceCollectorParsesResponse(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 200, resp.ResultCode)
 	require.Equal(t, "ok", resp.ResultMessage)
+	require.Len(t, resp.Evidences, 1)
+	require.Equal(t, "BLACKWELL", resp.Evidences[0].Arch)
+	require.Equal(t, "550.120", resp.Evidences[0].DriverVersion)
+	require.Equal(t, "97.00.B9.00.69", resp.Evidences[0].VBIOSVersion)
 }
 
 func TestCLIEvidenceCollectorExecutionAndParseErrors(t *testing.T) {
@@ -124,6 +128,6 @@ func TestHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 		return
 	}
-	_, _ = os.Stdout.WriteString(`{"evidences":[],"resultCode":200,"resultMessage":"ok"}`)
+	_, _ = os.Stdout.WriteString(`{"evidences":[{"arch":"BLACKWELL","certificate":"cert","driver_version":"550.120","evidence":"blob","nonce":"abc123","vbios_version":"97.00.B9.00.69","version":"1.0"}],"result_code":200,"result_message":"ok"}`)
 	os.Exit(0)
 }

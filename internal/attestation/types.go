@@ -36,19 +36,19 @@ type Result struct {
 }
 
 type SDKResponse struct {
-	Evidences     []EvidenceItem
-	ResultCode    int
-	ResultMessage string
+	Evidences     []EvidenceItem `json:"evidences"`
+	ResultCode    int            `json:"result_code"`
+	ResultMessage string         `json:"result_message"`
 }
 
 type EvidenceItem struct {
-	Arch          string
-	Certificate   string
-	DriverVersion string
-	Evidence      string
-	Nonce         string
-	VBIOSVersion  string
-	Version       string
+	Arch          string `json:"arch"`
+	Certificate   string `json:"certificate"`
+	DriverVersion string `json:"driver_version"`
+	Evidence      string `json:"evidence"`
+	Nonce         string `json:"nonce"`
+	VBIOSVersion  string `json:"vbios_version"`
+	Version       string `json:"version"`
 }
 
 // NonceProvider retrieves a backend nonce for a node.
