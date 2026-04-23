@@ -149,7 +149,7 @@ kubectl describe pod -n "$NS" -l app.kubernetes.io/name=fleet-intelligence-agent
 
 Common issues:
 - **ImagePullBackOff**: Verify nodes can reach `ghcr.io` and the image tag exists
-- **Pending**: Check node labels match `nodeSelector` (default: `nvidia.com/gpu.present=true`)
+- **Pending**: Check node labels match `nodeSelector` (default: `nvidia.com/gpu.deploy.dcgm=true`)
 - **CrashLoopBackOff**: Check logs for errors
 
 **Enrollment failures:**
@@ -194,7 +194,7 @@ helm upgrade fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intellig
 
 ```yaml
 nodeSelector:
-  nvidia.com/gpu.present: "true"
+  nvidia.com/gpu.deploy.dcgm: "true"
 ```
 
 This label is automatically set by the NVIDIA GPU Operator or Device Plugin, so no manual node labeling is required.
@@ -207,7 +207,7 @@ Using `--set` (quote the tolerations for zsh, and escape dots in the label key):
 helm upgrade --install fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intelligence-agent \
   --version "$CHART_VERSION" \
   --namespace "$NS" \
-  --set-string nodeSelector.nvidia\\.com/gpu\\.deploy\\.dcgm=true \
+  --set-string nodeSelector.nvidia\\.com/gpu\\.present=true \
   --set 'tolerations[0].key=nvidia.com/gpu' \
   --set 'tolerations[0].operator=Exists' \
   --set 'tolerations[0].effect=NoSchedule'
@@ -217,7 +217,7 @@ Using a values file:
 
 ```yaml
 nodeSelector:
-  nvidia.com/gpu.deploy.dcgm: "true"
+  nvidia.com/gpu.present: "true"
 
 tolerations:
   - key: "nvidia.com/gpu"

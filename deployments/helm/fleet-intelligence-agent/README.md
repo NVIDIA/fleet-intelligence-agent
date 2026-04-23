@@ -56,7 +56,7 @@ Common values (defaults from `values.yaml`):
 | `resources.limits.cpu` | `500m` | CPU limit. |
 | `resources.limits.memory` | `512Mi` | Memory limit. |
 | `resources.limits.ephemeral-storage` | `1Gi` | Ephemeral storage limit. |
-| `nodeSelector` | `{"nvidia.com/gpu.present": "true"}` | Node selector (targets GPU nodes). |
+| `nodeSelector` | `{"nvidia.com/gpu.deploy.dcgm": "true"}` | Node selector (targets GPU nodes). |
 | `tolerations` | `[]` | Tolerations. |
 | `affinity` | `{}` | Affinity rules. |
 | `serviceAccount.create` | `true` | Create ServiceAccount. |
@@ -75,6 +75,6 @@ See `docs/install-helm.md` for the enrollment flow and secret creation steps.
 - The chart assumes DCGM HostEngine is already running in the cluster (typically
   via NVIDIA GPU Operator). Set `env.DCGM_URL` to match your DCGM Service.
 - The DaemonSet uses `runtimeClassName: nvidia` by default.
-- **Node Labeling**: By default, the agent only deploys to nodes with GPUs (labeled `nvidia.com/gpu.present=true`).
+- **Node Labeling**: By default, the agent only deploys to nodes with GPUs (labeled `nvidia.com/gpu.deploy.dcgm=true`).
   This label is automatically set by the NVIDIA GPU Operator or Device Plugin.
   To deploy to all nodes regardless of labels, override with `--set nodeSelector=null`.
