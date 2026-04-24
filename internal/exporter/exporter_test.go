@@ -1169,10 +1169,6 @@ func (f *fakeJWTRefreshClient) SubmitAttestation(context.Context, string, *backe
 	return nil
 }
 
-func (f *fakeJWTRefreshClient) RefreshToken(context.Context, string) (string, error) {
-	return "", nil
-}
-
 // TestIntegration provides integration tests
 func TestIntegration(t *testing.T) {
 	t.Run("full lifecycle with file export", func(t *testing.T) {

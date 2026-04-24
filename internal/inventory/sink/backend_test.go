@@ -70,7 +70,6 @@ func (f *fakeClient) GetNonce(context.Context, string, string) (*backendclient.N
 func (f *fakeClient) SubmitAttestation(context.Context, string, *backendclient.AttestationRequest, string) error {
 	return nil
 }
-func (f *fakeClient) RefreshToken(context.Context, string) (string, error) { return "", nil }
 func (f *fakeClient) UpsertNode(_ context.Context, nodeUUID string, req *backendclient.NodeUpsertRequest, jwt string) error {
 	f.nodeUUID = nodeUUID
 	f.req = req

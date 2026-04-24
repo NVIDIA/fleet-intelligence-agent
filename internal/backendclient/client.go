@@ -44,7 +44,6 @@ type Client interface {
 	UpsertNode(ctx context.Context, nodeUUID string, req *NodeUpsertRequest, jwt string) error
 	GetNonce(ctx context.Context, nodeUUID string, jwt string) (*NonceResponse, error)
 	SubmitAttestation(ctx context.Context, nodeUUID string, req *AttestationRequest, jwt string) error
-	RefreshToken(ctx context.Context, jwt string) (newJWT string, err error)
 }
 
 type client struct {
@@ -137,28 +136,6 @@ func (c *client) SubmitAttestation(ctx context.Context, nodeUUID string, req *At
 		return fmt.Errorf("attestation request cannot be nil")
 	}
 	return c.doJSON(ctx, http.MethodPost, []string{"v1", "agent", "nodes", nodeUUID, "attestation"}, jwt, req, nil)
-}
-
-func (c *client) RefreshToken(ctx context.Context, jwt string) (string, error) {
-	if jwt == "" {
-		return "", fmt.Errorf("jwt cannot be empty")
-	}
-
-	var resp struct {
-		JWTAssertion string `json:"jwtAssertion"`
-	}
-	req := struct {
-		JWTAssertion string `json:"jwtAssertion"`
-	}{
-		JWTAssertion: jwt,
-	}
-	if err := c.doJSON(ctx, http.MethodPost, []string{"v1", "agent", "token"}, "", req, &resp); err != nil {
-		return "", err
-	}
-	if resp.JWTAssertion == "" {
-		return "", fmt.Errorf("token refresh response missing jwtAssertion field")
-	}
-	return resp.JWTAssertion, nil
 }
 
 func (c *client) doJSON(ctx context.Context, method string, pathElems []string, bearerToken string, reqBody any, respBody any) error {

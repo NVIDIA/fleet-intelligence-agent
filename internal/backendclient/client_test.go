@@ -148,34 +148,6 @@ func TestClient_SubmitAttestation(t *testing.T) {
 	require.Equal(t, "Bearer jwt-token", gotAuth)
 }
 
-func TestClient_RefreshToken(t *testing.T) {
-	t.Parallel()
-
-	var (
-		gotMethod string
-		gotPath   string
-		gotReq    struct {
-			JWTAssertion string `json:"jwtAssertion"`
-		}
-	)
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
-		gotPath = r.URL.Path
-		_ = json.NewDecoder(r.Body).Decode(&gotReq)
-
-		_ = json.NewEncoder(w).Encode(map[string]string{"jwtAssertion": "new-jwt-token"})
-	}))
-	defer server.Close()
-
-	c := NewWithHTTPClient(mustParseURL(t, server.URL), server.Client())
-	jwt, err := c.RefreshToken(context.Background(), "jwt-token")
-	require.NoError(t, err)
-	require.Equal(t, "new-jwt-token", jwt)
-	require.Equal(t, http.MethodPost, gotMethod)
-	require.Equal(t, "/v1/agent/token", gotPath)
-	require.Equal(t, "jwt-token", gotReq.JWTAssertion)
-}
-
 func TestClient_EnrollMapsHTTPStatus(t *testing.T) {
 	t.Parallel()
 
@@ -215,9 +187,6 @@ func TestClient_ValidationErrors(t *testing.T) {
 	err = c.SubmitAttestation(context.Background(), "node-1", nil, "jwt")
 	require.ErrorContains(t, err, "cannot be nil")
 	err = c.SubmitAttestation(context.Background(), "node-1", &AttestationRequest{}, "")
-	require.ErrorContains(t, err, "jwt cannot be empty")
-
-	_, err = c.RefreshToken(context.Background(), "")
 	require.ErrorContains(t, err, "jwt cannot be empty")
 
 	c = NewWithHTTPClient(nil, nil)
@@ -269,17 +238,6 @@ func TestClient_ResponseValidationAndErrors(t *testing.T) {
 		c := NewWithHTTPClient(mustParseURL(t, server.URL), server.Client())
 		_, err := c.GetNonce(context.Background(), "node-1", "jwt-token")
 		require.ErrorContains(t, err, "missing nonce")
-	})
-
-	t.Run("missing refresh jwt assertion", func(t *testing.T) {
-		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]string{})
-		}))
-		defer server.Close()
-
-		c := NewWithHTTPClient(mustParseURL(t, server.URL), server.Client())
-		_, err := c.RefreshToken(context.Background(), "jwt-token")
-		require.ErrorContains(t, err, "missing jwtAssertion")
 	})
 
 	t.Run("invalid json response", func(t *testing.T) {

@@ -51,10 +51,6 @@ func (f *fakeBackendClient) SubmitAttestation(context.Context, string, *backendc
 	return nil
 }
 
-func (f *fakeBackendClient) RefreshToken(context.Context, string) (string, error) {
-	return "", nil
-}
-
 func TestEnrollWorkflow(t *testing.T) {
 	originalFactory := newBackendClient
 	originalSync := syncInventoryAfterEnroll

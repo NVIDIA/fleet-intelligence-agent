@@ -72,7 +72,6 @@ func (c *recordingClient) SubmitAttestation(_ context.Context, nodeUUID string, 
 	c.lastReq = req
 	return nil
 }
-func (c *recordingClient) RefreshToken(context.Context, string) (string, error) { return "", nil }
 
 func TestToAttestationRequest(t *testing.T) {
 	refreshTS := time.Now().UTC()
