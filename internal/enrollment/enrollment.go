@@ -13,123 +13,141 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package enrollment provides shared enrollment functionality for the Fleet Intelligence agent
+// Package enrollment provides shared enrollment functionality for the Fleet Intelligence agent.
 package enrollment
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
-	"time"
+	"net/url"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
+	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
+	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
+
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory"
+	inventorysink "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/sink"
+	inventorysource "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/source"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/registry"
 )
 
-const maxEnrollmentResponseSize = 1 << 20
+var (
+	newBackendClient         = backendclient.New
+	syncInventoryAfterEnroll = syncInventoryOnce
+)
 
-// EnrollResponse represents the response from the enrollment endpoint
-type EnrollResponse struct {
-	JWTToken string `json:"jwt_assertion"`
+// Enroll runs the full enrollment workflow and performs a best-effort initial inventory sync.
+func Enroll(ctx context.Context, baseEndpoint, sakToken string) error {
+	baseURL, err := normalizeBackendBaseURL(baseEndpoint)
+	if err != nil {
+		return fmt.Errorf("invalid enrollment endpoint: %w", err)
+	}
+
+	client, err := newBackendClient(baseURL.String())
+	if err != nil {
+		return fmt.Errorf("failed to create backend client: %w", err)
+	}
+	jwtToken, err := client.Enroll(ctx, sakToken)
+	if err != nil {
+		return err
+	}
+	if err := storeConfigInMetadata(ctx, baseURL.String(), jwtToken, sakToken); err != nil {
+		return fmt.Errorf("failed to store configuration: %w", err)
+	}
+	if err := syncInventoryAfterEnroll(ctx); err != nil {
+		log.Logger.Warnw("post-enroll inventory sync failed", "error", err)
+	}
+	return nil
 }
 
-// PerformEnrollment performs the enrollment request to get a new JWT token
-func PerformEnrollment(ctx context.Context, enrollEndpoint, sakToken string) (string, error) {
-	if enrollEndpoint == "" {
-		return "", fmt.Errorf("enrollEndpoint cannot be empty")
+func normalizeBackendBaseURL(raw string) (*url.URL, error) {
+	baseURL, err := endpoint.ValidateBackendEndpoint(raw)
+	if err != nil {
+		return nil, err
 	}
-	if sakToken == "" {
-		return "", fmt.Errorf("sakToken cannot be empty")
+	if baseURL.Path == "" || baseURL.Path == "/" {
+		return baseURL, nil
 	}
 
-	// Use the provided enrollment endpoint directly
-	enrollURL := enrollEndpoint
+	normalized, err := endpoint.DeriveBackendBaseURL(raw)
+	if err != nil {
+		return nil, err
+	}
+	return endpoint.ValidateBackendEndpoint(normalized)
+}
 
-	// Create HTTP client with timeout. Disable redirects so a compromised
-	// backend cannot bounce us to an internal service (SSRF).
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
+func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken string) error {
+	stateFile, err := config.DefaultStateFile()
+	if err != nil {
+		return fmt.Errorf("failed to get state file path: %w", err)
+	}
+
+	dbRW, err := sqlite.Open(stateFile)
+	if err != nil {
+		return fmt.Errorf("failed to open state database: %w", err)
+	}
+	defer dbRW.Close()
+
+	if err := config.SecureStateFilePermissions(stateFile); err != nil {
+		return fmt.Errorf("failed to secure state database permissions: %w", err)
+	}
+	if err := pkgmetadata.CreateTableMetadata(ctx, dbRW); err != nil {
+		return fmt.Errorf("failed to create metadata table: %w", err)
+	}
+
+	if err := pkgmetadata.SetMetadata(ctx, dbRW, agentstate.MetadataKeySAKToken, sakToken); err != nil {
+		return fmt.Errorf("failed to set SAK token: %w", err)
+	}
+	if err := pkgmetadata.SetMetadata(ctx, dbRW, pkgmetadata.MetadataKeyToken, jwtToken); err != nil {
+		return fmt.Errorf("failed to set JWT token: %w", err)
+	}
+	if err := pkgmetadata.SetMetadata(ctx, dbRW, agentstate.MetadataKeyBackendBaseURL, baseURL); err != nil {
+		return fmt.Errorf("failed to set backend base URL: %w", err)
+	}
+	return nil
+}
+
+type machineInfoCollectorFunc func(context.Context) (*machineinfo.MachineInfo, error)
+
+func (f machineInfoCollectorFunc) Collect(ctx context.Context) (*machineinfo.MachineInfo, error) {
+	return f(ctx)
+}
+
+func syncInventoryOnce(ctx context.Context) error {
+	state := agentstate.NewSQLite()
+	sink := inventorysink.NewBackendSink(state)
+	allComponents := registry.AllComponentNames()
+
+	cfg, err := config.Default(ctx)
+	if err != nil {
+		return fmt.Errorf("load default config for inventory sync: %w", err)
+	}
+	retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
+
+	nvmlInstance, err := nvidianvml.New()
+	if err != nil {
+		return fmt.Errorf("initialize nvml for inventory sync: %w", err)
+	}
+	defer func() { _ = nvmlInstance.Shutdown() }()
+
+	src := inventorysource.NewMachineInfoSourceWithAgentConfig(
+		machineInfoCollectorFunc(func(context.Context) (*machineinfo.MachineInfo, error) {
+			return machineinfo.GetMachineInfo(nvmlInstance)
+		}),
+		&inventory.AgentConfig{
+			TotalComponents:        int64(len(allComponents)),
+			RetentionPeriodSeconds: retentionPeriodSeconds,
+			EnabledComponents:      enabledComponents,
+			DisabledComponents:     disabledComponents,
 		},
-	}
-
-	// Create HTTP request with empty body
-	req, err := http.NewRequestWithContext(ctx, "POST", enrollURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create HTTP request: %w", err)
-	}
-
-	// Set headers (no Content-Type since no body is sent)
-	req.Header.Set("User-Agent", "fleet-intelligence-agent")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", sakToken))
-
-	// Make the request
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Logger.Errorw("Enrollment request failed", "error", err, "url", enrollURL)
-		return "", fmt.Errorf("failed to make enrollment request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read at most max+1 bytes so oversized responses fail explicitly instead of
-	// surfacing later as a truncated JSON parse error.
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxEnrollmentResponseSize+1))
-	if err != nil {
-		log.Logger.Errorw("Failed to read enrollment response body", "error", err)
-		return "", fmt.Errorf("failed to read enrollment response: %w", err)
-	}
-	if len(respBody) > maxEnrollmentResponseSize {
-		err = fmt.Errorf("enrollment response too large (max %d bytes)", maxEnrollmentResponseSize)
-		log.Logger.Errorw("Failed to read enrollment response body", "error", err)
-		return "", err
-	}
-
-	// Check response status and return specific error messages
-	if resp.StatusCode != http.StatusOK {
-		var errMsg string
-		switch resp.StatusCode {
-		case http.StatusBadRequest: // 400
-			errMsg = "The token used in the enrollment is not in the correct format. Please check the token. If all else fails, generate a new token by going to the UI"
-		case http.StatusUnauthorized: // 401
-			errMsg = "The token used in the enrollment is incorrect. Please generate a new token by going to the UI or make sure you are using the correct token"
-		case http.StatusForbidden: // 403
-			errMsg = "The token used in the enrollment is incorrect/expired. Please generate a new token by going to the UI or make sure you are using the correct token"
-		case http.StatusNotFound: // 404
-			errMsg = "The endpoint is not found. Please use the correct endpoint"
-		case http.StatusTooManyRequests: // 429
-			errMsg = "Please retry after some time. Server is under heavy load"
-		case http.StatusBadGateway: // 502
-			errMsg = "Some temporary issue caused enrollment to fail. Please try again"
-		case http.StatusServiceUnavailable: // 503
-			errMsg = "Service is unavailable currently. Please try again"
-		case http.StatusGatewayTimeout: // 504
-			errMsg = "Service is experiencing load and is slow to respond. Please try again maybe after a few minutes"
-		default:
-			errMsg = fmt.Sprintf("enrollment request failed with status %d", resp.StatusCode)
-		}
-
-		// Print error to stderr
-		fmt.Fprintf(os.Stderr, "Enrollment failed: %s\n", errMsg)
-		return "", fmt.Errorf("%s", errMsg)
-	}
-
-	// Parse response
-	var enrollResp EnrollResponse
-	if err := json.Unmarshal(respBody, &enrollResp); err != nil {
-		log.Logger.Errorw("Failed to parse enrollment response JSON", "error", err)
-		return "", fmt.Errorf("failed to parse enrollment response: %w", err)
-	}
-
-	// Validate JWT token is present
-	if enrollResp.JWTToken == "" {
-		log.Logger.Errorw("Enrollment response missing jwt-token field")
-		return "", fmt.Errorf("enrollment response missing jwt-token field")
-	}
-
-	// Print success to stdout
-	fmt.Fprintf(os.Stdout, "Enrollment succeeded\n")
-	return enrollResp.JWTToken, nil
+	)
+	manager := inventory.NewManager(src, sink, inventory.InventoryConfig{})
+	_, err = manager.CollectOnce(ctx)
+	return err
 }

@@ -19,6 +19,7 @@ package converter
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -31,6 +32,8 @@ import (
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
 )
+
+var osHostname = os.Hostname
 
 // OTLPData holds both metrics and logs for OTLP export
 type OTLPData struct {
@@ -98,7 +101,7 @@ func (c *otlpConverter) Convert(data *collector.HealthData) *OTLPData {
 	}
 }
 
-// createOTLPResource creates OTLP resource with machine info, agent config, and identification
+// createOTLPResource creates a minimal OTLP resource for telemetry correlation.
 func (c *otlpConverter) createOTLPResource(data *collector.HealthData) *resourcev1.Resource {
 	attributes := []*commonv1.KeyValue{
 		{
@@ -113,39 +116,31 @@ func (c *otlpConverter) createOTLPResource(data *collector.HealthData) *resource
 				Value: &commonv1.AnyValue_StringValue{StringValue: data.MachineID},
 			},
 		},
-		{
-			Key: "agentConfig.totalComponents",
-			Value: &commonv1.AnyValue{
-				Value: &commonv1.AnyValue_IntValue{IntValue: int64(len(data.ComponentData))},
-			},
-		},
 	}
 
-	// Add agent config entries as resource attributes
-	for _, entry := range data.ConfigEntries {
+	if hostname := resolveOTLPHostname(); hostname != "" {
 		attributes = append(attributes, &commonv1.KeyValue{
-			Key: "agentConfig." + entry.Key,
+			Key: "host.name",
 			Value: &commonv1.AnyValue{
-				Value: &commonv1.AnyValue_StringValue{StringValue: entry.Value},
+				Value: &commonv1.AnyValue_StringValue{StringValue: hostname},
 			},
 		})
-	}
-
-	// Add machine info attributes if available using reflection
-	if data.MachineInfo != nil {
-		machineInfoAttributes := convertStructToOTLPAttributes(data.MachineInfo)
-		attributes = append(attributes, machineInfoAttributes...)
-	}
-
-	// Add attestation data attributes if available using reflection
-	if data.AttestationData != nil {
-		attestationAttributes := convertStructToOTLPAttributesWithPrefix(data.AttestationData, "attestation")
-		attributes = append(attributes, attestationAttributes...)
 	}
 
 	return &resourcev1.Resource{
 		Attributes: attributes,
 	}
+}
+
+func resolveOTLPHostname() string {
+	if hostname := strings.TrimSpace(os.Getenv("HOSTNAME")); hostname != "" {
+		return hostname
+	}
+	hostname, err := osHostname()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(hostname)
 }
 
 // convertMetricsToOTLP converts health metrics to OTLP metrics format
@@ -211,12 +206,6 @@ func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metr
 									Value: &commonv1.AnyValue_IntValue{IntValue: int64(len(data.ComponentData))},
 								},
 							},
-							{
-								Key: "attestation_evidences_count",
-								Value: &commonv1.AnyValue{
-									Value: &commonv1.AnyValue_IntValue{IntValue: int64(c.getAttestationEvidencesCount(data))},
-								},
-							},
 						},
 					},
 				},
@@ -259,16 +248,17 @@ func (c *otlpConverter) convertLabelsToOTLPAttributes(labels map[string]string, 
 	return attributes
 }
 
-// buildGPUUUIDToIndexMap builds a UUID → GPU index lookup from MachineInfo.
+// buildGPUUUIDToIndexMap builds a UUID → GPU index lookup from the collector snapshot.
 func buildGPUUUIDToIndexMap(data *collector.HealthData) map[string]string {
 	m := make(map[string]string)
-	if data.MachineInfo == nil || data.MachineInfo.GPUInfo == nil {
+	if len(data.GPUUUIDToIndex) == 0 {
 		return m
 	}
-	for _, gpu := range data.MachineInfo.GPUInfo.GPUs {
-		if gpu.UUID != "" && gpu.GPUIndex != "" {
-			m[gpu.UUID] = gpu.GPUIndex
+	for uuid, gpuIndex := range data.GPUUUIDToIndex {
+		if uuid == "" || gpuIndex == "" {
+			continue
 		}
+		m[uuid] = gpuIndex
 	}
 	return m
 }
@@ -645,12 +635,4 @@ func convertStructToOTLPAttributesWithPrefix(v interface{}, prefix string) []*co
 	}
 
 	return attributes
-}
-
-// getAttestationEvidencesCount returns the count of attestation evidences
-func (c *otlpConverter) getAttestationEvidencesCount(data *collector.HealthData) int {
-	if data.AttestationData == nil {
-		return 0
-	}
-	return len(data.AttestationData.SDKResponse.Evidences)
 }

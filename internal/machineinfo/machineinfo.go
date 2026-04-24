@@ -37,10 +37,10 @@ import (
 
 var getDCGMVersion = dcgmversion.DetectHostengineVersion
 
-// MachineInfo is a custom struct that replaces GPUdVersion with FleetintVersion
+// MachineInfo is a custom struct that replaces GPUdVersion with AgentVersion.
 type MachineInfo struct {
-	// FleetintVersion represents the current version of Fleet Intelligence agent
-	FleetintVersion string `json:"fleetintVersion,omitempty"`
+	// AgentVersion represents the current version of the Fleet Intelligence agent.
+	AgentVersion string `json:"agentVersion,omitempty"`
 	// GPUDriverVersion represents the current version of GPU driver installed
 	GPUDriverVersion string `json:"gpuDriverVersion,omitempty"`
 	// CUDAVersion represents the current version of cuda library.
@@ -124,9 +124,9 @@ func GetMachineInfo(nvmlInstance nvidianvml.Instance, opts ...MachineInfoOption)
 
 	dcgmVersion, _ := getDCGMVersion()
 
-	// Convert to our custom MachineInfo struct with Fleet Intelligence version
+	// Convert to our custom MachineInfo struct with the agent version.
 	return &MachineInfo{
-		FleetintVersion:         version.Version,
+		AgentVersion:            version.Version,
 		GPUDriverVersion:        gpudInfo.GPUDriverVersion,
 		CUDAVersion:             gpudInfo.CUDAVersion,
 		DCGMVersion:             dcgmVersion,
@@ -156,8 +156,7 @@ func (i *MachineInfo) RenderTable(wr io.Writer) {
 	table := tablewriter.NewWriter(wr)
 	table.SetAlignment(tablewriter.ALIGN_CENTER)
 
-	// Show Fleetint Version instead of GPUd Version
-	table.Append([]string{"Fleetint Version", i.FleetintVersion})
+	table.Append([]string{"Agent Version", i.AgentVersion})
 	table.Append([]string{"Container Runtime Version", i.ContainerRuntimeVersion})
 	table.Append([]string{"OS Image", i.OSImage})
 	table.Append([]string{"Kernel Version", i.KernelVersion})

@@ -17,9 +17,8 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -50,12 +49,10 @@ func TestEnrollCommandPrecheckError(t *testing.T) {
 
 func TestEnrollCommandBlocksOnFailedPrecheck(t *testing.T) {
 	originalRunPrecheck := runPrecheck
-	originalPerformEnrollment := performEnrollment
-	originalStoreConfig := storeEnrollmentConfig
+	originalEnrollWorkflow := performEnrollWorkflow
 	t.Cleanup(func() {
 		runPrecheck = originalRunPrecheck
-		performEnrollment = originalPerformEnrollment
-		storeEnrollmentConfig = originalStoreConfig
+		performEnrollWorkflow = originalEnrollWorkflow
 	})
 
 	enrollmentCalled := false
@@ -66,11 +63,8 @@ func TestEnrollCommandBlocksOnFailedPrecheck(t *testing.T) {
 			},
 		}, nil
 	}
-	performEnrollment = func(enrollEndpoint, sakToken string) (string, error) {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string) error {
 		enrollmentCalled = true
-		return "jwt-token", nil
-	}
-	storeEnrollmentConfig = func(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken string) error {
 		return nil
 	}
 
@@ -88,12 +82,10 @@ func TestEnrollCommandBlocksOnFailedPrecheck(t *testing.T) {
 
 func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 	originalRunPrecheck := runPrecheck
-	originalPerformEnrollment := performEnrollment
-	originalStoreConfig := storeEnrollmentConfig
+	originalEnrollWorkflow := performEnrollWorkflow
 	t.Cleanup(func() {
 		runPrecheck = originalRunPrecheck
-		performEnrollment = originalPerformEnrollment
-		storeEnrollmentConfig = originalStoreConfig
+		performEnrollWorkflow = originalEnrollWorkflow
 	})
 
 	enrollmentCalled := false
@@ -104,11 +96,8 @@ func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 			},
 		}, nil
 	}
-	performEnrollment = func(enrollEndpoint, sakToken string) (string, error) {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string) error {
 		enrollmentCalled = true
-		return "jwt-token", nil
-	}
-	storeEnrollmentConfig = func(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken string) error {
 		return nil
 	}
 
@@ -119,36 +108,4 @@ func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, enrollmentCalled)
-}
-
-func TestStoreConfigInMetadataSecuresFreshStateFile(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("test expects non-root default state path resolution")
-	}
-
-	tmpHome := t.TempDir()
-	t.Setenv("HOME", tmpHome)
-
-	err := storeConfigInMetadata(
-		"https://example.com/api/v1/health/enroll",
-		"https://example.com/api/v1/health/metrics",
-		"https://example.com/api/v1/health/logs",
-		"https://example.com/api/v1/health/nonce",
-		"jwt-token",
-		"sak-token",
-	)
-	require.NoError(t, err)
-
-	stateFile := filepath.Join(tmpHome, ".fleetint", "fleetint.state")
-	for _, candidate := range []string{stateFile, stateFile + "-wal", stateFile + "-shm"} {
-		info, err := os.Stat(candidate)
-		if os.IsNotExist(err) {
-			if candidate == stateFile {
-				require.NoError(t, err)
-			}
-			continue
-		}
-		require.NoError(t, err)
-		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
-	}
 }

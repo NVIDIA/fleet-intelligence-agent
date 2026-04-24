@@ -307,18 +307,6 @@ func TestExporterOptionsValidate(t *testing.T) {
 			wantErr:     true,
 			expectedErr: "components registry is required when IncludeComponentData is enabled",
 		},
-		{
-			name: "machine info enabled but no NVML instance",
-			setupOpts: func() *exporterOptions {
-				return &exporterOptions{
-					config: &config.HealthExporterConfig{
-						IncludeMachineInfo: true,
-					},
-				}
-			},
-			wantErr:     true,
-			expectedErr: "NVML instance is required when IncludeMachineInfo is enabled",
-		},
 	}
 
 	for _, tt := range tests {

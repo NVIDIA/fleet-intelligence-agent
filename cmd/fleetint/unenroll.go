@@ -19,12 +19,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 	"github.com/urfave/cli"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
 
@@ -66,7 +68,8 @@ func removeEnrollmentMetadata(ctx context.Context, dbRW *sql.DB) error {
 	// List of metadata keys to delete
 	keysToDelete := []string{
 		pkgmetadata.MetadataKeyToken,
-		"sak_token",
+		agentstate.MetadataKeySAKToken,
+		agentstate.MetadataKeyBackendBaseURL,
 		"enroll_endpoint",
 		"metrics_endpoint",
 		"logs_endpoint",
@@ -74,7 +77,8 @@ func removeEnrollmentMetadata(ctx context.Context, dbRW *sql.DB) error {
 	}
 
 	// Build batch delete query
-	query := "DELETE FROM gpud_metadata WHERE key IN (?, ?, ?, ?, ?, ?)"
+	placeholders := strings.TrimSuffix(strings.Repeat("?, ", len(keysToDelete)), ", ")
+	query := fmt.Sprintf("DELETE FROM gpud_metadata WHERE key IN (%s)", placeholders)
 
 	// Convert string slice to []interface{} for ExecContext
 	args := make([]interface{}, len(keysToDelete))

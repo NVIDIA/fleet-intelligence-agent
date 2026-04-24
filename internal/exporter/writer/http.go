@@ -228,6 +228,7 @@ func (w *httpWriter) sendOTLPRequest(ctx context.Context, reqData []byte, dataTy
 	req.Header.Set("X-Machine-ID", machineID)
 	req.Header.Set("X-Data-Type", dataType)
 	req.Header.Set("X-Collection-ID", collectionID)
+	req.Header.Set("X-Agent-Mode", "direct-inventory-write")
 
 	if authToken != "" {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", authToken))

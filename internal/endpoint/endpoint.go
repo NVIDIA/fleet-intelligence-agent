@@ -109,16 +109,49 @@ func AgentBaseURL(serverURL *url.URL) *url.URL {
 	return serverURL
 }
 
-// ValidateBackendEndpoint validates a trusted backend HTTPS endpoint.
+// ValidateBackendEndpoint validates a trusted backend endpoint.
+// Production backends must use HTTPS. HTTP is accepted only for loopback hosts
+// to support local development and smoke tests.
 func ValidateBackendEndpoint(raw string) (*url.URL, error) {
 	parsed, err := parseURL(raw)
 	if err != nil {
 		return nil, err
 	}
+	if parsed.Scheme == "http" {
+		host := parsed.Hostname()
+		if host == "" || !isLoopbackHost(host) {
+			return nil, fmt.Errorf("backend endpoint over http must use localhost or a loopback IP, got %q", host)
+		}
+		return parsed, nil
+	}
 	if err := requireScheme(parsed, "https"); err != nil {
 		return nil, err
 	}
 	return parsed, nil
+}
+
+// DeriveBackendBaseURL converts a legacy backend endpoint URL into its backend base URL.
+// For example, "https://backend.example.com/api/v1/health/metrics" becomes
+// "https://backend.example.com".
+func DeriveBackendBaseURL(raw string) (string, error) {
+	parsed, err := parseURL(raw)
+	if err != nil {
+		return "", err
+	}
+	if parsed.Scheme == "http" {
+		host := parsed.Hostname()
+		if host == "" || !isLoopbackHost(host) {
+			return "", fmt.Errorf("backend endpoint over http must use localhost or a loopback IP, got %q", host)
+		}
+	} else {
+		if err := requireScheme(parsed, "https"); err != nil {
+			return "", err
+		}
+	}
+	return (&url.URL{
+		Scheme: parsed.Scheme,
+		Host:   parsed.Host,
+	}).String(), nil
 }
 
 // JoinPath appends path elements to a validated base URL.

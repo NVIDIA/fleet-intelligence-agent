@@ -180,10 +180,6 @@ func (c *exporterOptions) validate() error {
 		return errors.New("components registry is required when IncludeComponentData is enabled")
 	}
 
-	if c.config.IncludeMachineInfo && c.nvmlInstance == nil {
-		return errors.New("NVML instance is required when IncludeMachineInfo is enabled")
-	}
-
 	// Machine ID is always required - it should be set by server via WithMachineID
 	if c.machineID == "" {
 		return errors.New("machine ID is required - must be set via WithMachineID()")

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,318 +17,213 @@ package enrollment
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
+	"errors"
+	"os"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
 
-func TestPerformEnrollment_Success(t *testing.T) {
-	expectedToken := "test-jwt-token-12345"
+type fakeBackendClient struct {
+	enrollSAK string
+	enrollJWT string
+	enrollErr error
+}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request method
-		assert.Equal(t, "POST", r.Method)
+func (f *fakeBackendClient) Enroll(_ context.Context, sakToken string) (string, error) {
+	f.enrollSAK = sakToken
+	return f.enrollJWT, f.enrollErr
+}
 
-		// Verify headers
-		assert.Equal(t, "fleet-intelligence-agent", r.Header.Get("User-Agent"))
-		assert.Equal(t, "Bearer test-sak-token", r.Header.Get("Authorization"))
+func (f *fakeBackendClient) UpsertNode(context.Context, string, *backendclient.NodeUpsertRequest, string) error {
+	return nil
+}
 
-		// Send successful response
-		response := EnrollResponse{
-			JWTToken: expectedToken,
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		err := json.NewEncoder(w).Encode(response)
-		require.NoError(t, err)
-	}))
-	defer server.Close()
+func (f *fakeBackendClient) GetNonce(context.Context, string, string) (*backendclient.NonceResponse, error) {
+	return nil, nil
+}
 
-	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
+func (f *fakeBackendClient) SubmitAttestation(context.Context, string, *backendclient.AttestationRequest, string) error {
+	return nil
+}
 
+func TestEnrollWorkflow(t *testing.T) {
+	originalFactory := newBackendClient
+	originalSync := syncInventoryAfterEnroll
+	t.Cleanup(func() {
+		newBackendClient = originalFactory
+		syncInventoryAfterEnroll = originalSync
+	})
+
+	client := &fakeBackendClient{enrollJWT: "jwt-token"}
+	newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+		require.Equal(t, "https://example.com", rawBaseURL)
+		return client, nil
+	}
+
+	syncCalled := false
+	syncInventoryAfterEnroll = func(ctx context.Context) error {
+		syncCalled = true
+		return nil
+	}
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	err := Enroll(context.Background(), "https://example.com", "sak-token")
 	require.NoError(t, err)
-	assert.Equal(t, expectedToken, token)
+	require.Equal(t, "sak-token", client.enrollSAK)
+	require.True(t, syncCalled)
 }
 
-func TestPerformEnrollment_EmptyEndpoint(t *testing.T) {
-	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, "", "test-sak-token")
+func TestEnrollWorkflowNormalizesLegacyEndpointToBaseURL(t *testing.T) {
+	originalFactory := newBackendClient
+	originalSync := syncInventoryAfterEnroll
+	t.Cleanup(func() {
+		newBackendClient = originalFactory
+		syncInventoryAfterEnroll = originalSync
+	})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "enrollEndpoint cannot be empty")
-	assert.Empty(t, token)
-}
-
-func TestPerformEnrollment_EmptyToken(t *testing.T) {
-	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, "http://example.com", "")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "sakToken cannot be empty")
-	assert.Empty(t, token)
-}
-
-func TestPerformEnrollment_HTTPStatusCodes(t *testing.T) {
-	tests := []struct {
-		name           string
-		statusCode     int
-		expectedErrMsg string
-	}{
-		{
-			name:           "BadRequest_400",
-			statusCode:     http.StatusBadRequest,
-			expectedErrMsg: "The token used in the enrollment is not in the correct format",
-		},
-		{
-			name:           "Unauthorized_401",
-			statusCode:     http.StatusUnauthorized,
-			expectedErrMsg: "The token used in the enrollment is incorrect",
-		},
-		{
-			name:           "Forbidden_403",
-			statusCode:     http.StatusForbidden,
-			expectedErrMsg: "The token used in the enrollment is incorrect/expired",
-		},
-		{
-			name:           "NotFound_404",
-			statusCode:     http.StatusNotFound,
-			expectedErrMsg: "The endpoint is not found",
-		},
-		{
-			name:           "TooManyRequests_429",
-			statusCode:     http.StatusTooManyRequests,
-			expectedErrMsg: "Please retry after some time",
-		},
-		{
-			name:           "BadGateway_502",
-			statusCode:     http.StatusBadGateway,
-			expectedErrMsg: "Some temporary issue caused enrollment to fail",
-		},
-		{
-			name:           "ServiceUnavailable_503",
-			statusCode:     http.StatusServiceUnavailable,
-			expectedErrMsg: "Service is unavailable currently",
-		},
-		{
-			name:           "GatewayTimeout_504",
-			statusCode:     http.StatusGatewayTimeout,
-			expectedErrMsg: "Service is experiencing load and is slow to respond",
-		},
-		{
-			name:           "InternalServerError_500",
-			statusCode:     http.StatusInternalServerError,
-			expectedErrMsg: "enrollment request failed with status 500",
-		},
+	client := &fakeBackendClient{enrollJWT: "jwt-token"}
+	newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+		require.Equal(t, "https://example.com", rawBaseURL)
+		return client, nil
 	}
+	syncInventoryAfterEnroll = func(context.Context) error { return nil }
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(tt.statusCode)
-			}))
-			defer server.Close()
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
 
-			ctx := context.Background()
-			token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
-
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.expectedErrMsg)
-			assert.Empty(t, token)
-		})
-	}
-}
-
-func TestPerformEnrollment_DoesNotFollowRedirects(t *testing.T) {
-	redirectTargetCalled := false
-	redirectTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		redirectTargetCalled = true
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer redirectTarget.Close()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, redirectTarget.URL, http.StatusFound)
-	}))
-	defer server.Close()
-
-	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "status 302")
-	assert.Empty(t, token)
-	assert.False(t, redirectTargetCalled)
-}
-
-func TestPerformEnrollment_MissingJWTToken(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Send response without JWT token
-		response := EnrollResponse{
-			JWTToken: "",
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		err := json.NewEncoder(w).Encode(response)
-		require.NoError(t, err)
-	}))
-	defer server.Close()
-
-	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "enrollment response missing jwt-token field")
-	assert.Empty(t, token)
-}
-
-func TestPerformEnrollment_InvalidJSON(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, err := w.Write([]byte("invalid json"))
-		require.NoError(t, err)
-	}))
-	defer server.Close()
-
-	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to parse enrollment response")
-	assert.Empty(t, token)
-}
-
-func TestPerformEnrollment_ResponseTooLarge(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, err := w.Write(make([]byte, maxEnrollmentResponseSize+1))
-		require.NoError(t, err)
-	}))
-	defer server.Close()
-
-	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "enrollment response too large")
-	assert.Empty(t, token)
-}
-
-func TestPerformEnrollment_ContextCancellation(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Simulate slow response
-		time.Sleep(2 * time.Second)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to make enrollment request")
-	assert.Empty(t, token)
-}
-
-func TestPerformEnrollment_ServerUnavailable(t *testing.T) {
-	// Use an invalid URL that will fail to connect
-	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, "http://localhost:99999", "test-sak-token")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to make enrollment request")
-	assert.Empty(t, token)
-}
-
-func TestPerformEnrollment_RequestBodyEmpty(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify no body is sent (Content-Length should be 0 or not set)
-		assert.Equal(t, int64(0), r.ContentLength)
-
-		response := EnrollResponse{
-			JWTToken: "test-token",
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		err := json.NewEncoder(w).Encode(response)
-		require.NoError(t, err)
-	}))
-	defer server.Close()
-
-	ctx := context.Background()
-	token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
-
+	err := Enroll(context.Background(), "https://example.com/api/v1/health/metrics", "sak-token")
 	require.NoError(t, err)
-	assert.NotEmpty(t, token)
+	require.Equal(t, "sak-token", client.enrollSAK)
 }
 
-func TestEnrollResponse_JSONSerialization(t *testing.T) {
-	tests := []struct {
-		name     string
-		response EnrollResponse
-	}{
-		{
-			name: "with_token",
-			response: EnrollResponse{
-				JWTToken: "test-jwt-token",
-			},
-		},
-		{
-			name: "empty_token",
-			response: EnrollResponse{
-				JWTToken: "",
-			},
-		},
-	}
+func TestEnrollWorkflowErrors(t *testing.T) {
+	t.Run("invalid endpoint", func(t *testing.T) {
+		err := Enroll(context.Background(), "http://example.com", "sak-token")
+		require.Error(t, err)
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Test marshaling
-			data, err := json.Marshal(tt.response)
-			assert.NoError(t, err)
+	t.Run("localhost http endpoint allowed", func(t *testing.T) {
+		originalFactory := newBackendClient
+		t.Cleanup(func() { newBackendClient = originalFactory })
 
-			// Test unmarshaling
-			var unmarshaled EnrollResponse
-			err = json.Unmarshal(data, &unmarshaled)
-			assert.NoError(t, err)
-			assert.Equal(t, tt.response.JWTToken, unmarshaled.JWTToken)
-		})
-	}
-}
-
-func TestPerformEnrollment_MultipleSuccessiveRequests(t *testing.T) {
-	requestCount := 0
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
-		response := EnrollResponse{
-			JWTToken: fmt.Sprintf("token-%d", requestCount),
+		called := false
+		newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+			called = true
+			require.Equal(t, "http://localhost:8080", rawBaseURL)
+			return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		err := json.NewEncoder(w).Encode(response)
-		require.NoError(t, err)
-	}))
-	defer server.Close()
 
-	ctx := context.Background()
+		tmpHome := t.TempDir()
+		t.Setenv("HOME", tmpHome)
 
-	// Make multiple requests
-	for i := 1; i <= 3; i++ {
-		token, err := PerformEnrollment(ctx, server.URL, "test-sak-token")
+		err := Enroll(context.Background(), "http://localhost:8080", "sak-token")
 		require.NoError(t, err)
-		assert.Equal(t, fmt.Sprintf("token-%d", i), token)
+		require.True(t, called)
+	})
+
+	t.Run("backend client creation", func(t *testing.T) {
+		originalFactory := newBackendClient
+		t.Cleanup(func() { newBackendClient = originalFactory })
+		newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+			return nil, errors.New("factory boom")
+		}
+
+		err := Enroll(context.Background(), "https://example.com", "sak-token")
+		require.ErrorContains(t, err, "failed to create backend client")
+	})
+
+	t.Run("enroll error", func(t *testing.T) {
+		originalFactory := newBackendClient
+		t.Cleanup(func() { newBackendClient = originalFactory })
+		newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+			return &fakeBackendClient{enrollErr: errors.New("enroll boom")}, nil
+		}
+
+		err := Enroll(context.Background(), "https://example.com", "sak-token")
+		require.ErrorContains(t, err, "enroll boom")
+	})
+
+	t.Run("localhost legacy endpoint allowed", func(t *testing.T) {
+		originalFactory := newBackendClient
+		originalSync := syncInventoryAfterEnroll
+		t.Cleanup(func() {
+			newBackendClient = originalFactory
+			syncInventoryAfterEnroll = originalSync
+		})
+
+		called := false
+		newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+			called = true
+			require.Equal(t, "http://localhost:8080", rawBaseURL)
+			return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
+		}
+		syncInventoryAfterEnroll = func(context.Context) error { return nil }
+
+		tmpHome := t.TempDir()
+		t.Setenv("HOME", tmpHome)
+
+		err := Enroll(context.Background(), "http://localhost:8080/api/v1/health/enroll", "sak-token")
+		require.NoError(t, err)
+		require.True(t, called)
+	})
+}
+
+func TestEnrollWorkflowInventorySyncFailureIsNonFatal(t *testing.T) {
+	originalFactory := newBackendClient
+	originalSync := syncInventoryAfterEnroll
+	t.Cleanup(func() {
+		newBackendClient = originalFactory
+		syncInventoryAfterEnroll = originalSync
+	})
+
+	newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+		return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
+	}
+	syncInventoryAfterEnroll = func(ctx context.Context) error {
+		return errors.New("inventory failed")
 	}
 
-	assert.Equal(t, 3, requestCount)
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	err := Enroll(context.Background(), "https://example.com", "sak-token")
+	require.NoError(t, err)
+}
+
+func TestStoreConfigInMetadataSecuresFreshStateFile(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("test expects non-root default state path resolution")
+	}
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	err := storeConfigInMetadata(
+		context.Background(),
+		"https://example.com",
+		"jwt-token",
+		"sak-token",
+	)
+	require.NoError(t, err)
+
+	stateFile, err := config.DefaultStateFile()
+	require.NoError(t, err)
+	for _, candidate := range []string{stateFile, stateFile + "-wal", stateFile + "-shm"} {
+		info, err := os.Stat(candidate)
+		if os.IsNotExist(err) {
+			if candidate == stateFile {
+				require.NoError(t, err)
+			}
+			continue
+		}
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
 }

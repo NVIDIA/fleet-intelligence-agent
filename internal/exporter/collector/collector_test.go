@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,309 +33,9 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
-
-func TestCollector_AttestationDataCollection(t *testing.T) {
-	tests := []struct {
-		name        string
-		description string
-		testLogic   func(t *testing.T)
-	}{
-		{
-			name:        "first_collection_always_collects",
-			description: "First collection should always collect attestation data even if empty",
-			testLogic:   testFirstCollectionAlwaysCollects,
-		},
-		{
-			name:        "subsequent_collection_skips_when_no_update",
-			description: "Subsequent collections should skip when attestation data hasn't been updated",
-			testLogic:   testSubsequentCollectionSkipsWhenNoUpdate,
-		},
-		{
-			name:        "collection_after_attestation_update",
-			description: "Collection should happen after attestation data is updated",
-			testLogic:   testCollectionAfterAttestationUpdate,
-		},
-		{
-			name:        "nil_attestation_manager_skips_collection",
-			description: "Collector should skip attestation collection when manager is nil",
-			testLogic:   testNilAttestationManagerSkipsCollection,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Log("Testing:", tt.description)
-			tt.testLogic(t)
-		})
-	}
-}
-
-func testFirstCollectionAlwaysCollects(t *testing.T) {
-	ctx := context.Background()
-	cfg := &config.AttestationConfig{
-		Interval:      metav1.Duration{Duration: 20 * time.Second},
-		JitterEnabled: false,
-	}
-	attestationManager := attestation.NewManager(ctx, nil, cfg) // nil nvmlInstance, 20s for testing
-
-	// Create collector
-	testCollector := createTestCollector(attestationManager)
-
-	// Start attestation manager to populate some data
-	attestationManager.Start()
-	defer attestationManager.Stop()
-
-	// Wait a bit for attestation to run
-	time.Sleep(100 * time.Millisecond)
-
-	// Collect data for the first time
-	data, err := testCollector.Collect(ctx)
-
-	require.NoError(t, err)
-	require.NotNil(t, data)
-
-	// First collection should work (but may not have attestation data due to test environment)
-	if data.AttestationData != nil {
-		t.Log("First collection successfully populated attestation data")
-	} else {
-		t.Log("First collection did not populate attestation data - this is expected when NVML/nonce fails in test environment")
-	}
-
-	// Check if lastAttestationCollection was updated only if attestation data was collected
-	collectorImpl := testCollector.(*collector)
-	if data.AttestationData != nil {
-		assert.False(t, collectorImpl.lastAttestationCollection.IsZero(),
-			"lastAttestationCollection should be set after successful collection")
-	} else {
-		assert.True(t, collectorImpl.lastAttestationCollection.IsZero(),
-			"lastAttestationCollection should remain zero when attestation fails")
-	}
-}
-
-func testSubsequentCollectionSkipsWhenNoUpdate(t *testing.T) {
-	ctx := context.Background()
-	cfg := &config.AttestationConfig{
-		Interval:      metav1.Duration{Duration: 20 * time.Second},
-		JitterEnabled: false,
-	}
-	attestationManager := attestation.NewManager(ctx, nil, cfg) // nil nvmlInstance, 20s for testing
-
-	// Create collector
-	testCollector := createTestCollector(attestationManager)
-	collectorImpl := testCollector.(*collector)
-
-	// Start attestation manager
-	attestationManager.Start()
-	defer attestationManager.Stop()
-
-	// Wait for attestation to run and populate data
-	time.Sleep(100 * time.Millisecond)
-
-	// First collection
-	data1, err := testCollector.Collect(ctx)
-	require.NoError(t, err)
-	require.NotNil(t, data1)
-
-	firstCollectionTime := collectorImpl.lastAttestationCollection
-	// In test environment, this will be zero since attestation fails
-	t.Logf("First collection time: %v", firstCollectionTime)
-
-	// Verify first collection has attestation data
-	// Verify first collection has attestation data (or logs why it doesn't)
-	if data1.AttestationData != nil {
-		assert.Empty(t, data1.AttestationData.SDKResponse.Evidences, "Until Attestation is available in public release, this should be empty")
-	} else {
-		t.Log("First collection did not populate attestation data - this is expected when NVML/nonce fails")
-	}
-
-	// Sleep a little to ensure time difference
-	time.Sleep(10 * time.Millisecond)
-
-	// Second collection (should skip attestation since no update)
-	data2, err := testCollector.Collect(ctx)
-	require.NoError(t, err)
-	require.NotNil(t, data2)
-
-	secondCollectionTime := collectorImpl.lastAttestationCollection
-
-	// lastAttestationCollection should remain the same (indicating skip)
-	assert.Equal(t, firstCollectionTime, secondCollectionTime,
-		"lastAttestationCollection should not change when attestation collection is skipped")
-}
-
-func testCollectionAfterAttestationUpdate(t *testing.T) {
-	ctx := context.Background()
-	cfg := &config.AttestationConfig{
-		Interval:      metav1.Duration{Duration: 20 * time.Second},
-		JitterEnabled: false,
-	}
-	attestationManager := attestation.NewManager(ctx, nil, cfg) // nil nvmlInstance, 20s for testing
-
-	// Create collector
-	testCollector := createTestCollector(attestationManager)
-	collectorImpl := testCollector.(*collector)
-
-	// Start attestation manager with faster interval for testing (20 seconds)
-	attestationManager.Start()
-	defer attestationManager.Stop()
-
-	// Wait for first attestation to run
-	time.Sleep(100 * time.Millisecond)
-
-	// First collection
-	data1, err := testCollector.Collect(ctx)
-	require.NoError(t, err)
-	require.NotNil(t, data1)
-
-	firstCollectionTime := collectorImpl.lastAttestationCollection
-
-	// Verify first collection has attestation data
-	// Verify first collection has attestation data (or logs why it doesn't)
-	if data1.AttestationData != nil {
-		assert.Empty(t, data1.AttestationData.SDKResponse.Evidences, "Until Attestation is available in public release, this should be empty")
-	} else {
-		t.Log("First collection did not populate attestation data - this is expected when NVML/nonce fails")
-	}
-
-	// Wait for attestation to run again (it's set to 20 seconds in the test)
-	t.Log("Waiting for attestation to refresh...")
-	time.Sleep(10 * time.Second)
-
-	// Second collection (should collect since attestation was updated)
-	data2, err := testCollector.Collect(ctx)
-	require.NoError(t, err)
-	require.NotNil(t, data2)
-
-	secondCollectionTime := collectorImpl.lastAttestationCollection
-
-	// In test environment, both times will be zero since attestation fails
-	t.Logf("First collection time: %v, Second collection time: %v", firstCollectionTime, secondCollectionTime)
-
-	// In a real environment with working NVML/HTTP, both collections would have evidence data
-	// In test environment, they will be nil due to missing dependencies
-	if data1.AttestationData != nil && data2.AttestationData != nil {
-		assert.Empty(t, data1.AttestationData.SDKResponse.Evidences, "Until Attestation is available in public release, this should be empty")
-		assert.Empty(t, data2.AttestationData.SDKResponse.Evidences, "Until Attestation is available in public release, this should be empty")
-		t.Log("Both collections successfully have attestation data")
-	} else {
-		t.Log("Collections do not have attestation data - expected in test environment without real dependencies")
-	}
-}
-
-func testNilAttestationManagerSkipsCollection(t *testing.T) {
-	ctx := context.Background()
-
-	// Create collector with nil attestation manager
-	testCollector := createTestCollectorWithNilAttestation()
-
-	// Collection should skip gracefully
-	data, err := testCollector.Collect(ctx)
-
-	require.NoError(t, err)
-	require.NotNil(t, data)
-	assert.Nil(t, data.AttestationData, "Should not collect attestation data when manager is nil")
-}
-
-func TestCollector_AttestationDataCollection_WithMockData(t *testing.T) {
-	// This test verifies collection behavior when attestation is unavailable
-	ctx := context.Background()
-	attestationCfg := &config.AttestationConfig{
-		Interval:      metav1.Duration{Duration: 20 * time.Second},
-		JitterEnabled: false,
-	}
-	attestationManager := attestation.NewManager(ctx, nil, attestationCfg)
-	testCollector := createTestCollector(attestationManager)
-	collectorImpl := testCollector.(*collector)
-
-	// Verify that collection works when no attestation data is available
-	data1, err := testCollector.Collect(ctx)
-	require.NoError(t, err)
-	require.NotNil(t, data1)
-
-	// Should be nil since no attestation data is available
-	assert.Nil(t, data1.AttestationData, "Should be nil when no attestation data available")
-	assert.True(t, collectorImpl.lastAttestationCollection.IsZero(), "Should remain zero")
-
-	t.Log("Successfully tested collection with no attestation data")
-}
-
-func TestAttestationManager_UpdateTracking(t *testing.T) {
-	ctx := context.Background()
-	attestationCfg := &config.AttestationConfig{
-		Interval:      metav1.Duration{Duration: 20 * time.Second},
-		JitterEnabled: false,
-	}
-	manager := attestation.NewManager(ctx, nil, attestationCfg) // nil nvmlInstance for testing
-
-	// Initially, no updates
-	baseTime := time.Now().UTC()
-	assert.False(t, manager.IsAttestationDataUpdated(baseTime),
-		"Should return false before any attestation runs")
-
-	// Start the manager and test the update tracking
-	manager.Start()
-	defer manager.Stop()
-
-	// Give it time to attempt attestation
-	time.Sleep(100 * time.Millisecond)
-
-	// In test environment this may still be false due to NVML/HTTP failures, but that's expected
-	updated := manager.IsAttestationDataUpdated(baseTime)
-	t.Logf("Attestation updated after start: %v", updated)
-
-	// The important part is that the method doesn't crash and returns a boolean
-	assert.IsType(t, false, updated, "IsAttestationDataUpdated should return a boolean")
-}
-
-// Helper functions
-
-func createTestCollector(attestationManager *attestation.Manager) Collector {
-	cfg := &config.HealthExporterConfig{
-		IncludeMachineInfo:   false,
-		IncludeMetrics:       false,
-		IncludeEvents:        false,
-		IncludeComponentData: false,
-	}
-
-	return New(
-		cfg,
-		nil, // fullConfig
-		nil, // allComponentNames
-		nil, // metricsStore
-		nil, // eventStore
-		nil, // componentsRegistry
-		nil, // nvmlInstance
-		attestationManager,
-		"test-machine-id",
-		nil, // dcgmGPUIndexes
-	)
-}
-
-func createTestCollectorWithNilAttestation() Collector {
-	cfg := &config.HealthExporterConfig{
-		IncludeMachineInfo:   false,
-		IncludeMetrics:       false,
-		IncludeEvents:        false,
-		IncludeComponentData: false,
-	}
-
-	return New(
-		cfg,
-		nil, // fullConfig
-		nil, // allComponentNames
-		nil, // metricsStore
-		nil, // eventStore
-		nil, // componentsRegistry
-		nil, // nvmlInstance
-		nil, // attestationManager (nil for testing)
-		"test-machine-id",
-		nil, // dcgmGPUIndexes
-	)
-}
 
 func TestGenerateCollectionID(t *testing.T) {
 	// Generate multiple collection IDs
@@ -376,20 +75,13 @@ func TestGenerateEventID(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	ctx := context.Background()
 	cfg := &config.HealthExporterConfig{
 		IncludeMachineInfo:   true,
 		IncludeMetrics:       true,
 		IncludeEvents:        true,
 		IncludeComponentData: true,
 	}
-	attestationCfg := &config.AttestationConfig{
-		Interval:      metav1.Duration{Duration: 20 * time.Second},
-		JitterEnabled: false,
-	}
-	attestationManager := attestation.NewManager(ctx, nil, attestationCfg)
-
-	c := New(cfg, nil, nil, nil, nil, nil, nil, attestationManager, "test-machine-id", nil)
+	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil)
 
 	assert.NotNil(t, c, "Collector should be created")
 
@@ -404,7 +96,6 @@ func TestCollector_Collect_BasicFlow(t *testing.T) {
 		IncludeMetrics:       false,
 		IncludeEvents:        false,
 		IncludeComponentData: false,
-		Attestation:          config.AttestationConfig{},
 	}
 
 	collector := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil)
@@ -424,7 +115,6 @@ func TestCollector_Collect_BasicFlow(t *testing.T) {
 	assert.Empty(t, data.Metrics, "Metrics should be empty when disabled")
 	assert.Empty(t, data.Events, "Events should be empty when disabled")
 	assert.Empty(t, data.ComponentData, "ComponentData should be empty when disabled")
-	assert.Nil(t, data.AttestationData, "AttestationData should be nil when disabled")
 }
 
 func TestCollector_CollectMachineInfo_NoNVML(t *testing.T) {
@@ -442,180 +132,6 @@ func TestCollector_CollectMachineInfo_NoNVML(t *testing.T) {
 
 	// MachineInfo should be nil because NVML is not available
 	assert.Nil(t, data.MachineInfo, "MachineInfo should be nil without NVML")
-}
-
-func TestCollector_CollectMachineInfo_UsesCachedValue(t *testing.T) {
-	ctx := context.Background()
-	cfg := &config.HealthExporterConfig{
-		IncludeMachineInfo: true,
-	}
-
-	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
-	expected := &machineinfo.MachineInfo{Hostname: "cached-host"}
-	provider := &mockMachineInfoProvider{
-		cached: expected,
-	}
-	c.machineInfoProvider = provider
-
-	data, err := c.Collect(ctx)
-
-	require.NoError(t, err)
-	require.NotNil(t, data)
-	require.NotNil(t, data.MachineInfo)
-	assert.Equal(t, expected, data.MachineInfo)
-	assert.Equal(t, int32(1), provider.refreshCalls.Load())
-}
-
-func TestCollector_CollectMachineInfo_WaitsBrieflyForInitialRefresh(t *testing.T) {
-	ctx := context.Background()
-	cfg := &config.HealthExporterConfig{
-		IncludeMachineInfo: true,
-	}
-
-	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
-	provider := newMockMachineInfoProvider()
-	c.machineInfoProvider = provider
-
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		provider.setCached(&machineinfo.MachineInfo{Hostname: "prewarmed-host"})
-		provider.markInitialRefreshDone()
-	}()
-
-	data, err := c.Collect(ctx)
-
-	require.NoError(t, err)
-	require.NotNil(t, data)
-	require.NotNil(t, data.MachineInfo)
-	assert.Equal(t, "prewarmed-host", data.MachineInfo.Hostname)
-}
-
-func TestCollector_CollectMachineInfo_RefreshDoesNotBlockMetrics(t *testing.T) {
-	ctx := context.Background()
-	cfg := &config.HealthExporterConfig{
-		IncludeMachineInfo: true,
-		IncludeMetrics:     true,
-		MetricsLookback:    metav1.Duration{Duration: 5 * time.Minute},
-	}
-
-	c := New(cfg, nil, nil, &mockMetricsStore{
-		metrics: pkgmetrics.Metrics{
-			{Component: "gpu", Name: "temperature", Value: 70, UnixMilliseconds: time.Now().UnixMilli()},
-		},
-	}, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
-
-	blocker := make(chan struct{})
-	provider := newMockMachineInfoProvider()
-	provider.refreshFn = func(parent context.Context) {
-		provider.markInitialRefreshDone()
-		<-blocker
-	}
-	c.machineInfoProvider = provider
-
-	start := time.Now()
-	data, err := c.Collect(ctx)
-	elapsed := time.Since(start)
-	close(blocker)
-
-	require.NoError(t, err)
-	require.NotNil(t, data)
-	assert.Len(t, data.Metrics, 1)
-	assert.Nil(t, data.MachineInfo)
-	assert.GreaterOrEqual(t, elapsed, 4900*time.Millisecond)
-	assert.Less(t, elapsed, 5500*time.Millisecond)
-}
-
-func TestCollector_CollectMachineInfo_InitialWaitDoesNotRepeatAfterFirstRefresh(t *testing.T) {
-	ctx := context.Background()
-	cfg := &config.HealthExporterConfig{
-		IncludeMachineInfo: true,
-	}
-
-	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
-	provider := newMockMachineInfoProvider()
-	provider.markInitialRefreshDone()
-	provider.refreshFn = func(parent context.Context) {}
-	c.machineInfoProvider = provider
-
-	start := time.Now()
-	data, err := c.Collect(ctx)
-	elapsed := time.Since(start)
-
-	require.NoError(t, err)
-	require.NotNil(t, data)
-	assert.Less(t, elapsed, 200*time.Millisecond)
-}
-
-func TestCollector_CollectMachineInfo_InitialWaitDoesNotRepeatAfterTimeout(t *testing.T) {
-	ctx := context.Background()
-	cfg := &config.HealthExporterConfig{
-		IncludeMachineInfo: true,
-	}
-
-	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
-	provider := newMockMachineInfoProvider()
-	provider.refreshFn = func(parent context.Context) {}
-	c.machineInfoProvider = provider
-
-	start := time.Now()
-	data, err := c.Collect(ctx)
-	firstElapsed := time.Since(start)
-
-	require.NoError(t, err)
-	require.NotNil(t, data)
-	assert.GreaterOrEqual(t, firstElapsed, 4900*time.Millisecond)
-	assert.Less(t, firstElapsed, 5500*time.Millisecond)
-
-	start = time.Now()
-	data, err = c.Collect(ctx)
-	secondElapsed := time.Since(start)
-
-	require.NoError(t, err)
-	require.NotNil(t, data)
-	assert.Less(t, secondElapsed, 200*time.Millisecond)
-}
-
-func TestCollector_CollectMachineInfo_InitialWaitHonorsContextCancellation(t *testing.T) {
-	cfg := &config.HealthExporterConfig{
-		IncludeMachineInfo: true,
-	}
-
-	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
-	provider := newMockMachineInfoProvider()
-	provider.refreshFn = func(parent context.Context) {}
-	c.machineInfoProvider = provider
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	start := time.Now()
-	data, err := c.Collect(ctx)
-	elapsed := time.Since(start)
-
-	require.NoError(t, err)
-	require.NotNil(t, data)
-	assert.Less(t, elapsed, 200*time.Millisecond)
-}
-
-func TestCollector_CollectMachineInfo_RetainsLastGoodOnRefreshFailure(t *testing.T) {
-	ctx := context.Background()
-	cfg := &config.HealthExporterConfig{
-		IncludeMachineInfo: true,
-	}
-
-	c := New(cfg, nil, nil, nil, nil, nil, nil, nil, "test-machine-id", nil).(*collector)
-	expected := &machineinfo.MachineInfo{Hostname: "last-good"}
-	provider := newMockMachineInfoProvider()
-	provider.cached = expected
-	provider.initialRefreshOnce.Do(func() { close(provider.initialRefreshDone) })
-	provider.refreshFn = func(parent context.Context) {}
-	c.machineInfoProvider = provider
-
-	data, err := c.Collect(ctx)
-
-	require.NoError(t, err)
-	require.NotNil(t, data)
-	assert.Equal(t, expected, data.MachineInfo)
 }
 
 func TestCachedMachineInfoProvider_DeduplicatesConcurrentRefresh(t *testing.T) {
@@ -975,7 +491,6 @@ func TestCollector_AllFeaturesEnabled(t *testing.T) {
 		IncludeMetrics:       true,
 		IncludeEvents:        true,
 		IncludeComponentData: true,
-		Attestation:          config.AttestationConfig{},
 		MetricsLookback:      metav1.Duration{Duration: 5 * time.Minute},
 		EventsLookback:       metav1.Duration{Duration: 5 * time.Minute},
 	}
@@ -1005,15 +520,9 @@ func TestCollector_AllFeaturesEnabled(t *testing.T) {
 		components: []components.Component{mockComp},
 	}
 
-	attestationCfg := &config.AttestationConfig{
-		Interval:      metav1.Duration{Duration: 20 * time.Second},
-		JitterEnabled: false,
-	}
-	attestationManager := attestation.NewManager(ctx, nil, attestationCfg)
-
 	mockEventStore := &mockEventStore{}
 
-	collector := New(cfg, nil, nil, mockMetricsStore, mockEventStore, mockRegistry, nil, attestationManager, "test-machine-id", nil)
+	collector := New(cfg, nil, nil, mockMetricsStore, mockEventStore, mockRegistry, nil, nil, "test-machine-id", nil)
 	data, err := collector.Collect(ctx)
 
 	require.NoError(t, err)
@@ -1028,7 +537,6 @@ func TestCollector_AllFeaturesEnabled(t *testing.T) {
 	assert.Len(t, data.Events, 1)
 	assert.Len(t, data.ComponentData, 1)
 	// MachineInfo will be nil without NVML
-	// AttestationData may be nil in test environment
 }
 
 // =============================================================================
@@ -1038,83 +546,6 @@ func TestCollector_AllFeaturesEnabled(t *testing.T) {
 type mockMetricsStore struct {
 	metrics     pkgmetrics.Metrics
 	shouldError bool
-}
-
-type mockMachineInfoProvider struct {
-	mu                 sync.RWMutex
-	cached             *machineinfo.MachineInfo
-	refreshFn          func(context.Context)
-	refreshCalls       atomic.Int32
-	initialWaited      bool
-	initialRefreshDone chan struct{}
-	initialRefreshOnce sync.Once
-}
-
-func newMockMachineInfoProvider() *mockMachineInfoProvider {
-	return &mockMachineInfoProvider{
-		initialRefreshDone: make(chan struct{}),
-	}
-}
-
-func (m *mockMachineInfoProvider) Get() (*machineinfo.MachineInfo, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if m.cached == nil {
-		return nil, false
-	}
-	return m.cached, true
-}
-
-func (m *mockMachineInfoProvider) RefreshAsync(parent context.Context) {
-	m.refreshCalls.Add(1)
-	if m.refreshFn == nil {
-		return
-	}
-	go func() {
-		defer func() {
-			_ = recover()
-		}()
-		m.refreshFn(parent)
-	}()
-}
-
-func (m *mockMachineInfoProvider) WaitForInitialRefresh(ctx context.Context, maxWait time.Duration) bool {
-	if maxWait <= 0 {
-		return false
-	}
-
-	m.mu.Lock()
-	if m.initialWaited {
-		m.mu.Unlock()
-		return false
-	}
-	m.initialWaited = true
-	m.mu.Unlock()
-
-	timer := time.NewTimer(maxWait)
-	defer timer.Stop()
-
-	select {
-	case <-m.initialRefreshDone:
-		return true
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return false
-	}
-}
-
-func (m *mockMachineInfoProvider) setCached(info *machineinfo.MachineInfo) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.cached = info
-}
-
-func (m *mockMachineInfoProvider) markInitialRefreshDone() {
-	m.initialRefreshOnce.Do(func() {
-		close(m.initialRefreshDone)
-	})
 }
 
 func (m *mockMetricsStore) Read(ctx context.Context, opts ...pkgmetrics.OpOption) (pkgmetrics.Metrics, error) {

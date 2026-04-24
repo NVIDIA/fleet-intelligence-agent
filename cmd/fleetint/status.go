@@ -31,10 +31,17 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/systemd"
 	"github.com/urfave/cli"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/cmdutil"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
 )
+
+type enrollmentStatus struct {
+	baseURL         string
+	metricsEndpoint string
+	logsEndpoint    string
+}
 
 func statusCommand(cliContext *cli.Context) error {
 	logLevel := cliContext.String("log-level")
@@ -78,25 +85,21 @@ func statusCommand(cliContext *cli.Context) error {
 	defer dbRO.Close()
 	log.Logger.Debugw("successfully opened state file for reading")
 
-	metricsEndpoint, err := pkgmetadata.ReadMetadata(rootCtx, dbRO, "metrics_endpoint")
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("failed to read metrics endpoint: %w", err)
-	}
-	logsEndpoint, err := pkgmetadata.ReadMetadata(rootCtx, dbRO, "logs_endpoint")
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("failed to read logs endpoint: %w", err)
+	enrollment, err := readEnrollmentStatus(rootCtx, dbRO)
+	if err != nil {
+		return err
 	}
 
-	if metricsEndpoint != "" || logsEndpoint != "" {
+	if enrollment.baseURL != "" || enrollment.metricsEndpoint != "" || enrollment.logsEndpoint != "" {
 		fmt.Printf("%s enrolled\n", cmdutil.CheckMark)
-		if metricsEndpoint != "" {
-			fmt.Printf("  metrics endpoint: %s\n", metricsEndpoint)
+		if enrollment.metricsEndpoint != "" {
+			fmt.Printf("  metrics endpoint: %s\n", enrollment.metricsEndpoint)
 		}
-		if logsEndpoint != "" {
-			fmt.Printf("  logs endpoint:    %s\n", logsEndpoint)
+		if enrollment.logsEndpoint != "" {
+			fmt.Printf("  logs endpoint:    %s\n", enrollment.logsEndpoint)
 		}
 	} else {
-		fmt.Printf("%s not enrolled (no endpoint configured)\n", cmdutil.WarningSign)
+		fmt.Printf("%s not enrolled (no backend or legacy endpoints configured)\n", cmdutil.WarningSign)
 	}
 
 	var active bool
@@ -158,4 +161,48 @@ func statusCommand(cliContext *cli.Context) error {
 
 	fmt.Printf("%s successfully checked fleetint health\n", cmdutil.CheckMark)
 	return nil
+}
+
+func readEnrollmentStatus(ctx context.Context, dbRO *sql.DB) (*enrollmentStatus, error) {
+	baseURL, err := pkgmetadata.ReadMetadata(ctx, dbRO, agentstate.MetadataKeyBackendBaseURL)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("failed to read backend base URL: %w", err)
+	}
+
+	status := &enrollmentStatus{baseURL: baseURL}
+	if baseURL != "" {
+		validated, err := endpoint.ValidateBackendEndpoint(baseURL)
+		if err != nil {
+			log.Logger.Warnw("ignoring invalid backend base URL in metadata", "backend_base_url", baseURL, "error", err)
+			status.baseURL = ""
+		} else {
+			status.metricsEndpoint, err = endpoint.JoinPath(validated, "api", "v1", "health", "metrics")
+			if err != nil {
+				return nil, fmt.Errorf("failed to construct metrics endpoint: %w", err)
+			}
+			status.logsEndpoint, err = endpoint.JoinPath(validated, "api", "v1", "health", "logs")
+			if err != nil {
+				return nil, fmt.Errorf("failed to construct logs endpoint: %w", err)
+			}
+			return status, nil
+		}
+	}
+
+	status.metricsEndpoint, err = readLegacyEndpoint(ctx, dbRO, "metrics_endpoint")
+	if err != nil {
+		return nil, err
+	}
+	status.logsEndpoint, err = readLegacyEndpoint(ctx, dbRO, "logs_endpoint")
+	if err != nil {
+		return nil, err
+	}
+	return status, nil
+}
+
+func readLegacyEndpoint(ctx context.Context, dbRO *sql.DB, key string) (string, error) {
+	value, err := pkgmetadata.ReadMetadata(ctx, dbRO, key)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("failed to read %s: %w", key, err)
+	}
+	return value, nil
 }
