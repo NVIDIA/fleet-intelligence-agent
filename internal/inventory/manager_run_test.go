@@ -190,6 +190,12 @@ func TestManagerRunWaitsIntervalBeforeSecondCollect(t *testing.T) {
 	case <-time.After(20 * time.Millisecond):
 	}
 
+	select {
+	case <-src.collectCh:
+	case <-time.After(150 * time.Millisecond):
+		t.Fatal("timed out waiting for second collection")
+	}
+
 	cancel()
 	require.ErrorIs(t, <-done, context.Canceled)
 }

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
@@ -165,7 +166,7 @@ func statusCommand(cliContext *cli.Context) error {
 
 func readEnrollmentStatus(ctx context.Context, dbRO *sql.DB) (*enrollmentStatus, error) {
 	baseURL, err := pkgmetadata.ReadMetadata(ctx, dbRO, agentstate.MetadataKeyBackendBaseURL)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !isMissingMetadata(err) {
 		return nil, fmt.Errorf("failed to read backend base URL: %w", err)
 	}
 
@@ -201,8 +202,12 @@ func readEnrollmentStatus(ctx context.Context, dbRO *sql.DB) (*enrollmentStatus,
 
 func readLegacyEndpoint(ctx context.Context, dbRO *sql.DB, key string) (string, error) {
 	value, err := pkgmetadata.ReadMetadata(ctx, dbRO, key)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !isMissingMetadata(err) {
 		return "", fmt.Errorf("failed to read %s: %w", key, err)
 	}
 	return value, nil
+}
+
+func isMissingMetadata(err error) bool {
+	return errors.Is(err, sql.ErrNoRows) || strings.Contains(strings.ToLower(err.Error()), "no such table")
 }

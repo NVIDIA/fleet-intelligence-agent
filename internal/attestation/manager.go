@@ -129,6 +129,7 @@ func (m *manager) collectOnceForRun(ctx context.Context) (*Result, error) {
 	}
 
 	runCtx, cancel := context.WithTimeout(ctx, m.config.Timeout)
+	defer cancel()
 	done := make(chan struct {
 		result *Result
 		err    error
@@ -136,7 +137,6 @@ func (m *manager) collectOnceForRun(ctx context.Context) (*Result, error) {
 
 	go func() {
 		defer m.runMu.Unlock()
-		defer cancel()
 		result, err := m.CollectOnce(runCtx)
 		done <- struct {
 			result *Result
@@ -148,7 +148,6 @@ func (m *manager) collectOnceForRun(ctx context.Context) (*Result, error) {
 	case result := <-done:
 		return result.result, result.err
 	case <-runCtx.Done():
-		cancel()
 		return nil, runCtx.Err()
 	}
 }

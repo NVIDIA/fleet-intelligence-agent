@@ -109,6 +109,9 @@ func (s *stateSubmitter) Submit(ctx context.Context, result *Result, jwt string)
 		return fmt.Errorf("attestation submission requires result")
 	}
 	if result.NodeUUID == "" {
+		if s.factory == nil || s.factory.state == nil {
+			return fmt.Errorf("%w: node UUID not available in agent state", ErrNotEnrolled)
+		}
 		nodeUUID, ok, err := s.factory.state.GetNodeUUID(ctx)
 		if err != nil {
 			return err

@@ -49,7 +49,10 @@ func (s *sqliteState) GetBackendBaseURL(ctx context.Context) (string, bool, erro
 	value, err := pkgmetadata.ReadMetadata(ctx, db, MetadataKeyBackendBaseURL)
 	switch {
 	case err == nil && value != "":
-		return value, true, nil
+		baseURL, err := endpoint.DeriveBackendBaseURL(value)
+		if err == nil {
+			return baseURL, true, nil
+		}
 	case err == nil || isMetadataAbsentErr(err):
 		// fall through to legacy endpoint keys
 	default:
@@ -64,7 +67,7 @@ func (s *sqliteState) GetBackendBaseURL(ctx context.Context) (string, bool, erro
 		case err == nil:
 			baseURL, err := endpoint.DeriveBackendBaseURL(value)
 			if err != nil {
-				return "", false, fmt.Errorf("derive backend base URL from metadata %q: %w", key, err)
+				continue
 			}
 			return baseURL, true, nil
 		case isMetadataAbsentErr(err):

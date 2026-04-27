@@ -185,6 +185,12 @@ func TestStateProvidersAndSubmitter(t *testing.T) {
 	require.Equal(t, "node-1", recording.lastNodeUUID)
 }
 
+func TestStateBackendSubmitterMissingStateDoesNotPanic(t *testing.T) {
+	err := NewStateBackendSubmitter(nil).Submit(context.Background(), &Result{}, "jwt-token")
+	require.ErrorIs(t, err, ErrNotEnrolled)
+	require.ErrorContains(t, err, "node UUID not available")
+}
+
 func TestStateProvidersPropagateBackendClientConstructionErrors(t *testing.T) {
 	orig := newBackendClient
 	t.Cleanup(func() { newBackendClient = orig })
