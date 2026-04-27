@@ -28,7 +28,6 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
-	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 	"github.com/google/uuid"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
@@ -70,7 +69,6 @@ type collector struct {
 	metricsStore       pkgmetrics.Store
 	eventStore         eventstore.Store
 	componentsRegistry components.Registry
-	nvmlInstance       nvidianvml.Instance
 	machineID          string            // Agent's stable identity from server initialization
 	dcgmGPUIndexes     map[string]string // UUID → DCGM device ID override for GPU indices
 }
@@ -78,13 +76,9 @@ type collector struct {
 // New creates a new health data collector
 func New(
 	cfg *config.HealthExporterConfig,
-	fullConfig *config.Config,
-	allComponentNames []string,
 	metricsStore pkgmetrics.Store,
 	eventStore eventstore.Store,
 	componentsRegistry components.Registry,
-	nvmlInstance nvidianvml.Instance,
-	_ any,
 	machineID string,
 	dcgmGPUIndexes map[string]string,
 ) Collector {
@@ -93,7 +87,6 @@ func New(
 		metricsStore:       metricsStore,
 		eventStore:         eventStore,
 		componentsRegistry: componentsRegistry,
-		nvmlInstance:       nvmlInstance,
 		machineID:          machineID,
 		dcgmGPUIndexes:     dcgmGPUIndexes,
 	}

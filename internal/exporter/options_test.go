@@ -89,13 +89,6 @@ func TestWithComponentsRegistry(t *testing.T) {
 	assert.Nil(t, opts.componentsRegistry)
 }
 
-func TestWithNVMLInstance(t *testing.T) {
-	opts := &exporterOptions{}
-	err := WithNVMLInstance(nil)(opts)
-	require.NoError(t, err)
-	assert.Nil(t, opts.nvmlInstance)
-}
-
 func TestWithHTTPClient(t *testing.T) {
 	tests := []struct {
 		name        string

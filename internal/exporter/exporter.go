@@ -35,7 +35,6 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/converter"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/writer"
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/registry"
 )
 
 // Ensure healthExporter implements the Exporter interface
@@ -76,18 +75,11 @@ func New(ctx context.Context, opts ...ExporterOption) (Exporter, error) {
 	}
 	options.setDefaults()
 
-	// Get all component names for config export
-	allComponentNames := registry.AllComponentNames()
-
 	dataCollector := collector.New(
 		options.config,
-		options.fullConfig,
-		allComponentNames,
 		options.metricsStore,
 		options.eventStore,
 		options.componentsRegistry,
-		options.nvmlInstance,
-		nil,
 		options.machineID,
 		options.dcgmGPUIndexes,
 	)
