@@ -42,10 +42,12 @@ func TestDefault(t *testing.T) {
 		require.NotNil(t, cfg.Inventory)
 		assert.True(t, cfg.Inventory.Enabled)
 		assert.Equal(t, metav1.Duration{Duration: 1 * time.Hour}, cfg.Inventory.Interval)
+		assert.Equal(t, metav1.Duration{Duration: DefaultInventoryTimeout}, cfg.Inventory.Timeout)
 		require.NotNil(t, cfg.Attestation)
 		assert.True(t, cfg.Attestation.Enabled)
 		assert.Equal(t, metav1.Duration{Duration: 5 * time.Minute}, cfg.Attestation.InitialInterval)
 		assert.Equal(t, metav1.Duration{Duration: 24 * time.Hour}, cfg.Attestation.Interval)
+		assert.Equal(t, metav1.Duration{Duration: DefaultAttestationTimeout}, cfg.Attestation.Timeout)
 
 		// State path should be set
 		assert.NotEmpty(t, cfg.State, "State path should be set")
@@ -122,6 +124,22 @@ func TestConfigValidation(t *testing.T) {
 		assert.Contains(t, err.Error(), "inventory.interval must be at least 1 minute")
 	})
 
+	t.Run("inventory sync timeout negative", func(t *testing.T) {
+		cfg := &Config{
+			Address:         ":8080",
+			RetentionPeriod: metav1.Duration{Duration: time.Hour},
+			Inventory: &InventoryConfig{
+				Enabled:  true,
+				Interval: metav1.Duration{Duration: time.Hour},
+				Timeout:  metav1.Duration{Duration: -time.Second},
+			},
+		}
+
+		err := cfg.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "inventory.timeout must not be negative")
+	})
+
 	t.Run("attestation enabled without interval", func(t *testing.T) {
 		cfg := &Config{
 			Address:         ":8080",
@@ -182,6 +200,23 @@ func TestConfigValidation(t *testing.T) {
 		err := cfg.Validate()
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "attestation.initial_interval must be at least 1 minute")
+	})
+
+	t.Run("attestation timeout negative", func(t *testing.T) {
+		cfg := &Config{
+			Address:         ":8080",
+			RetentionPeriod: metav1.Duration{Duration: time.Hour},
+			Attestation: &AttestationConfig{
+				Enabled:         true,
+				InitialInterval: metav1.Duration{Duration: 5 * time.Minute},
+				Interval:        metav1.Duration{Duration: 24 * time.Hour},
+				Timeout:         metav1.Duration{Duration: -time.Second},
+			},
+		}
+
+		err := cfg.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "attestation.timeout must not be negative")
 	})
 }
 

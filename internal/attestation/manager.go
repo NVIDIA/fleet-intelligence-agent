@@ -46,6 +46,7 @@ type Manager interface {
 
 type manager struct {
 	mu               sync.RWMutex
+	runMu            sync.Mutex
 	nodeUUIDProvider func(context.Context) (string, error)
 	jwtProvider      JWTProvider
 	nonceProvider    NonceProvider
@@ -97,7 +98,7 @@ func (m *manager) Run(ctx context.Context) error {
 
 	firstSuccess := false
 	for {
-		_, err := m.CollectOnce(ctx)
+		_, err := m.collectOnceForRun(ctx)
 		nextInterval := m.config.Interval
 		if err == nil {
 			firstSuccess = true
@@ -116,6 +117,39 @@ func (m *manager) Run(ctx context.Context) error {
 		if err := sleepWithContext(ctx, nextInterval); err != nil {
 			return err
 		}
+	}
+}
+
+func (m *manager) collectOnceForRun(ctx context.Context) (*Result, error) {
+	if m.config.Timeout <= 0 {
+		return m.CollectOnce(ctx)
+	}
+	if !m.runMu.TryLock() {
+		return nil, fmt.Errorf("previous attestation workflow is still running")
+	}
+
+	runCtx, cancel := context.WithTimeout(ctx, m.config.Timeout)
+	done := make(chan struct {
+		result *Result
+		err    error
+	}, 1)
+
+	go func() {
+		defer m.runMu.Unlock()
+		defer cancel()
+		result, err := m.CollectOnce(runCtx)
+		done <- struct {
+			result *Result
+			err    error
+		}{result: result, err: err}
+	}()
+
+	select {
+	case result := <-done:
+		return result.result, result.err
+	case <-runCtx.Done():
+		cancel()
+		return nil, runCtx.Err()
 	}
 }
 

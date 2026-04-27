@@ -71,5 +71,6 @@ type AttestationConfig struct {
 	InitialInterval time.Duration
 	Interval        time.Duration
 	RetryInterval   time.Duration
+	Timeout         time.Duration
 	JitterEnabled   bool
 }

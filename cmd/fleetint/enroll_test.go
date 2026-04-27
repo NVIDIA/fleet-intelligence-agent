@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -108,4 +109,35 @@ func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, enrollmentCalled)
+}
+
+func TestEnrollCommandPassesTimeoutContext(t *testing.T) {
+	originalRunPrecheck := runPrecheck
+	originalEnrollWorkflow := performEnrollWorkflow
+	t.Cleanup(func() {
+		runPrecheck = originalRunPrecheck
+		performEnrollWorkflow = originalEnrollWorkflow
+	})
+
+	runPrecheck = func() (precheck.Result, error) {
+		return precheck.Result{
+			Checks: []precheck.Check{
+				{Name: "gpu-present", Message: "ok", Passed: true},
+			},
+		}, nil
+	}
+
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string) error {
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		require.LessOrEqual(t, time.Until(deadline), defaultEnrollTimeout)
+		require.Greater(t, time.Until(deadline), 55*time.Second)
+		return nil
+	}
+
+	app := App()
+	app.Writer = &bytes.Buffer{}
+
+	err := app.Run([]string{"fleetint", "enroll", "--endpoint", "https://example.com", "--token", "token"})
+	require.NoError(t, err)
 }

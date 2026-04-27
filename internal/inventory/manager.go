@@ -36,6 +36,7 @@ type Manager interface {
 type manager struct {
 	mu       sync.RWMutex
 	exportMu sync.Mutex
+	runMu    sync.Mutex
 	source   Source
 	sink     Sink
 	config   InventoryConfig
@@ -54,7 +55,7 @@ func NewManager(source Source, sink Sink, cfg InventoryConfig) Manager {
 }
 
 func (m *manager) Run(ctx context.Context) error {
-	_, err := m.CollectOnce(ctx)
+	_, err := m.collectOnceForRun(ctx)
 	if err != nil {
 		log.Logger.Warnw("initial inventory collection failed", "error", err)
 	}
@@ -70,8 +71,41 @@ func (m *manager) Run(ctx context.Context) error {
 		if err := sleepWithContext(ctx, nextInterval); err != nil {
 			return err
 		}
-		_, err = m.CollectOnce(ctx)
+		_, err = m.collectOnceForRun(ctx)
 		nextInterval = m.nextInterval(err)
+	}
+}
+
+func (m *manager) collectOnceForRun(ctx context.Context) (*Snapshot, error) {
+	if m.config.Timeout <= 0 {
+		return m.CollectOnce(ctx)
+	}
+	if !m.runMu.TryLock() {
+		return nil, fmt.Errorf("previous inventory collection is still running")
+	}
+
+	runCtx, cancel := context.WithTimeout(ctx, m.config.Timeout)
+	done := make(chan struct {
+		snap *Snapshot
+		err  error
+	}, 1)
+
+	go func() {
+		defer m.runMu.Unlock()
+		defer cancel()
+		snap, err := m.CollectOnce(runCtx)
+		done <- struct {
+			snap *Snapshot
+			err  error
+		}{snap: snap, err: err}
+	}()
+
+	select {
+	case result := <-done:
+		return result.snap, result.err
+	case <-runCtx.Done():
+		cancel()
+		return nil, runCtx.Err()
 	}
 }
 

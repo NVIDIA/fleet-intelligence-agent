@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
@@ -38,8 +39,9 @@ import (
 )
 
 var (
-	newBackendClient         = backendclient.New
-	syncInventoryAfterEnroll = syncInventoryOnce
+	newBackendClient               = backendclient.New
+	syncInventoryAfterEnroll       = syncInventoryOnce
+	postEnrollInventorySyncTimeout = time.Minute
 )
 
 // Enroll runs the full enrollment workflow and performs a best-effort initial inventory sync.
@@ -60,10 +62,32 @@ func Enroll(ctx context.Context, baseEndpoint, sakToken string) error {
 	if err := storeConfigInMetadata(ctx, baseURL.String(), jwtToken, sakToken); err != nil {
 		return fmt.Errorf("failed to store configuration: %w", err)
 	}
-	if err := syncInventoryAfterEnroll(ctx); err != nil {
+	syncCtx, cancel := context.WithTimeout(ctx, postEnrollInventorySyncTimeout)
+	defer cancel()
+	if err := runWithContext(syncCtx, func() error {
+		return syncInventoryAfterEnroll(syncCtx)
+	}); err != nil {
 		log.Logger.Warnw("post-enroll inventory sync failed", "error", err)
 	}
 	return nil
+}
+
+func runWithContext(ctx context.Context, fn func() error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- fn()
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func normalizeBackendBaseURL(raw string) (*url.URL, error) {

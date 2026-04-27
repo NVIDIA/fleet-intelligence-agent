@@ -21,6 +21,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli"
 
@@ -28,6 +29,8 @@ import (
 )
 
 var performEnrollWorkflow = enrollment.Enroll
+
+const defaultEnrollTimeout = time.Minute
 
 // resolveToken returns the SAK token from --token, --token-file, or stdin.
 func resolveToken(cliContext *cli.Context) (string, error) {
@@ -96,5 +99,8 @@ func enrollCommand(cliContext *cli.Context) error {
 		fmt.Fprintln(writerFromContext(cliContext), "Proceeding with enrollment because --force was provided")
 	}
 
-	return performEnrollWorkflow(context.Background(), baseEndpoint, sakToken)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultEnrollTimeout)
+	defer cancel()
+
+	return performEnrollWorkflow(ctx, baseEndpoint, sakToken)
 }

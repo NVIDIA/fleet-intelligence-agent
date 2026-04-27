@@ -43,6 +43,17 @@ func (s *countingSource) Collect(context.Context) (*Snapshot, error) {
 	return &Snapshot{MachineID: "machine-1", Hostname: "host-a"}, nil
 }
 
+type blockingSource struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (s *blockingSource) Collect(context.Context) (*Snapshot, error) {
+	close(s.started)
+	<-s.release
+	return &Snapshot{MachineID: "machine-1", Hostname: "host-a"}, nil
+}
+
 func TestManagerCollectOnceErrors(t *testing.T) {
 	_, err := NewManager(nil, nil, InventoryConfig{}).CollectOnce(context.Background())
 	require.ErrorContains(t, err, "inventory source is required")
@@ -131,6 +142,30 @@ func TestManagerRunUsesRetryIntervalWithoutJitter(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.GreaterOrEqual(t, elapsed, 15*time.Millisecond)
 	require.Less(t, elapsed, 100*time.Millisecond)
+}
+
+func TestManagerRunCollectionTimeoutDoesNotOverlapStuckCollection(t *testing.T) {
+	src := &blockingSource{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	mgr := NewManager(src, nil, InventoryConfig{Timeout: 10 * time.Millisecond}).(*manager)
+
+	start := time.Now()
+	_, err := mgr.collectOnceForRun(context.Background())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, time.Since(start), time.Second)
+
+	select {
+	case <-src.started:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for inventory collection to start")
+	}
+
+	_, err = mgr.collectOnceForRun(context.Background())
+	require.ErrorContains(t, err, "previous inventory collection is still running")
+
+	close(src.release)
 }
 
 func TestManagerRunWaitsIntervalBeforeSecondCollect(t *testing.T) {

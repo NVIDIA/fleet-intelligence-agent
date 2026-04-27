@@ -189,6 +189,16 @@ func getInventorySyncInterval(config *config.Config) time.Duration {
 	return 0
 }
 
+func getInventorySyncTimeout(cfg *config.Config) time.Duration {
+	if cfg == nil || cfg.Inventory == nil || !cfg.Inventory.Enabled {
+		return 0
+	}
+	if cfg.Inventory.Timeout.Duration > 0 {
+		return cfg.Inventory.Timeout.Duration
+	}
+	return config.DefaultInventoryTimeout
+}
+
 func getAttestationInterval(config *config.Config) time.Duration {
 	if config == nil || config.Attestation == nil || !config.Attestation.Enabled {
 		return 0
@@ -196,11 +206,14 @@ func getAttestationInterval(config *config.Config) time.Duration {
 	return config.Attestation.Interval.Duration
 }
 
-func getAttestationTimeout(config *config.Config) time.Duration {
-	if config == nil || config.HealthExporter == nil {
+func getAttestationTimeout(cfg *config.Config) time.Duration {
+	if cfg == nil || cfg.Attestation == nil || !cfg.Attestation.Enabled {
 		return 0
 	}
-	return config.HealthExporter.Timeout.Duration
+	if cfg.Attestation.Timeout.Duration > 0 {
+		return cfg.Attestation.Timeout.Duration
+	}
+	return config.DefaultAttestationTimeout
 }
 
 // shouldEnableComponent determines if a component should be enabled based on configuration
@@ -441,6 +454,7 @@ func (s *Server) startInventoryLoop(
 	manager := inventory.NewManager(source, sink, inventory.InventoryConfig{
 		Interval:      interval,
 		RetryInterval: inventoryRetryInterval,
+		Timeout:       getInventorySyncTimeout(cfg),
 		JitterEnabled: true,
 	})
 
@@ -475,6 +489,7 @@ func (s *Server) startAttestationLoop(ctx context.Context, cfg *config.Config) {
 			InitialInterval: cfg.Attestation.InitialInterval.Duration,
 			Interval:        interval,
 			RetryInterval:   attestationRetryInterval,
+			Timeout:         getAttestationTimeout(cfg),
 			JitterEnabled:   true,
 		},
 	)

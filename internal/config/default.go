@@ -42,6 +42,12 @@ const (
 	// Using a unix socket instead of a TCP port restricts access via filesystem permissions,
 	// preventing unauthenticated network access even if a firewall rule is misconfigured.
 	DefaultUnixSocketPath = "/run/fleetint/fleetint.sock"
+
+	// DefaultInventoryTimeout is the maximum duration for one inventory loop attempt.
+	DefaultInventoryTimeout = time.Minute
+
+	// DefaultAttestationTimeout is the maximum duration for one attestation loop attempt.
+	DefaultAttestationTimeout = time.Minute
 )
 
 var (
@@ -78,11 +84,13 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 		Inventory: &InventoryConfig{
 			Enabled:  true,
 			Interval: metav1.Duration{Duration: 1 * time.Hour},
+			Timeout:  metav1.Duration{Duration: DefaultInventoryTimeout},
 		},
 		Attestation: &AttestationConfig{
 			Enabled:         true,
 			InitialInterval: metav1.Duration{Duration: 5 * time.Minute},
 			Interval:        metav1.Duration{Duration: 24 * time.Hour},
+			Timeout:         metav1.Duration{Duration: DefaultAttestationTimeout},
 		},
 		NvidiaToolOverwrites: nvidiacommon.ToolOverwrites{
 			InfinibandClassRootDir: options.InfinibandClassRootDir,

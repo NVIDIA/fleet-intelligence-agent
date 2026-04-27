@@ -131,5 +131,6 @@ type Sink interface {
 type InventoryConfig struct {
 	Interval      time.Duration
 	RetryInterval time.Duration
+	Timeout       time.Duration
 	JitterEnabled bool
 }

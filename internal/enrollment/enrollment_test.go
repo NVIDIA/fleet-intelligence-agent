@@ -20,6 +20,7 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -194,6 +195,77 @@ func TestEnrollWorkflowInventorySyncFailureIsNonFatal(t *testing.T) {
 	t.Setenv("HOME", tmpHome)
 
 	err := Enroll(context.Background(), "https://example.com", "sak-token")
+	require.NoError(t, err)
+}
+
+func TestEnrollWorkflowInventorySyncTimeoutIsNonFatal(t *testing.T) {
+	originalFactory := newBackendClient
+	originalSync := syncInventoryAfterEnroll
+	originalTimeout := postEnrollInventorySyncTimeout
+	t.Cleanup(func() {
+		newBackendClient = originalFactory
+		syncInventoryAfterEnroll = originalSync
+		postEnrollInventorySyncTimeout = originalTimeout
+	})
+
+	newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+		return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
+	}
+	postEnrollInventorySyncTimeout = 10 * time.Millisecond
+
+	syncStarted := make(chan struct{})
+	releaseSync := make(chan struct{})
+	syncInventoryAfterEnroll = func(context.Context) error {
+		close(syncStarted)
+		<-releaseSync
+		return nil
+	}
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	start := time.Now()
+	err := Enroll(context.Background(), "https://example.com", "sak-token")
+	require.NoError(t, err)
+	require.Less(t, time.Since(start), time.Second)
+
+	select {
+	case <-syncStarted:
+	case <-time.After(time.Second):
+		t.Fatal("inventory sync did not start")
+	}
+	close(releaseSync)
+}
+
+func TestEnrollWorkflowInventorySyncUsesRemainingEnrollTimeout(t *testing.T) {
+	originalFactory := newBackendClient
+	originalSync := syncInventoryAfterEnroll
+	originalTimeout := postEnrollInventorySyncTimeout
+	t.Cleanup(func() {
+		newBackendClient = originalFactory
+		syncInventoryAfterEnroll = originalSync
+		postEnrollInventorySyncTimeout = originalTimeout
+	})
+
+	newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+		return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
+	}
+	postEnrollInventorySyncTimeout = time.Minute
+
+	syncInventoryAfterEnroll = func(ctx context.Context) error {
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		require.Less(t, time.Until(deadline), 5*time.Second)
+		return nil
+	}
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := Enroll(ctx, "https://example.com", "sak-token")
 	require.NoError(t, err)
 }
 

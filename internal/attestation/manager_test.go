@@ -58,6 +58,17 @@ func (c *testEvidenceCollector) Collect(context.Context, string) (*SDKResponse, 
 	return c.resp, c.err
 }
 
+type blockingEvidenceCollector struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (c *blockingEvidenceCollector) Collect(context.Context, string) (*SDKResponse, error) {
+	close(c.started)
+	<-c.release
+	return &SDKResponse{ResultCode: 200}, nil
+}
+
 type submitted struct {
 	result *Result
 	jwt    string
@@ -166,6 +177,37 @@ func TestManagerRunUsesRetryIntervalOnFailure(t *testing.T) {
 	require.Equal(t, "collect failed", last.ErrorMessage)
 	require.GreaterOrEqual(t, collector.n, 2)
 	require.GreaterOrEqual(t, submitter.count, 2)
+}
+
+func TestManagerRunTimeoutDoesNotOverlapStuckWorkflow(t *testing.T) {
+	collector := &blockingEvidenceCollector{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	mgr := NewManager(
+		func(context.Context) (string, error) { return "node-1", nil },
+		&testJWTProvider{jwt: "jwt-token"},
+		&testNonceProvider{nonce: "abc123"},
+		collector,
+		&testSubmitter{},
+		AttestationConfig{Timeout: 10 * time.Millisecond},
+	).(*manager)
+
+	start := time.Now()
+	_, err := mgr.collectOnceForRun(context.Background())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, time.Since(start), time.Second)
+
+	select {
+	case <-collector.started:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for attestation workflow to start")
+	}
+
+	_, err = mgr.collectOnceForRun(context.Background())
+	require.ErrorContains(t, err, "previous attestation workflow is still running")
+
+	close(collector.release)
 }
 
 func TestManagerHelpersAndSubmitterErrors(t *testing.T) {

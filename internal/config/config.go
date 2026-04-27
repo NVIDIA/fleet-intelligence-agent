@@ -82,6 +82,9 @@ type InventoryConfig struct {
 
 	// Interval is how often to collect and export inventory.
 	Interval metav1.Duration `json:"interval"`
+
+	// Timeout is the maximum duration allowed for one inventory collection/export attempt.
+	Timeout metav1.Duration `json:"timeout"`
 }
 
 // AttestationConfig holds configuration for the periodic attestation loop.
@@ -95,6 +98,9 @@ type AttestationConfig struct {
 
 	// Interval is how often to run attestation.
 	Interval metav1.Duration `json:"interval"`
+
+	// Timeout is the maximum duration allowed for one attestation nonce/evidence/submit attempt.
+	Timeout metav1.Duration `json:"timeout"`
 }
 
 // HealthExporterConfig holds configuration for the health data exporter
@@ -181,6 +187,12 @@ func (config *Config) Validate() error {
 			return fmt.Errorf("attestation.initial_interval must be at least 1 minute, got %v", config.Attestation.InitialInterval.Duration)
 		}
 	}
+	if err := validateLoopTimeout("inventory", config.Inventory); err != nil {
+		return err
+	}
+	if err := validateLoopTimeout("attestation", config.Attestation); err != nil {
+		return err
+	}
 
 	// Validate health exporter configuration if present
 	if config.HealthExporter != nil {
@@ -230,6 +242,19 @@ func validateLoopConfig(name string, cfg interface {
 	return nil
 }
 
+func validateLoopTimeout(name string, cfg interface {
+	GetEnabled() bool
+	GetTimeout() time.Duration
+}) error {
+	if cfg == nil || !cfg.GetEnabled() {
+		return nil
+	}
+	if cfg.GetTimeout() < 0 {
+		return fmt.Errorf("%s.timeout must not be negative, got %v", name, cfg.GetTimeout())
+	}
+	return nil
+}
+
 func (c *InventoryConfig) GetEnabled() bool {
 	return c != nil && c.Enabled
 }
@@ -241,6 +266,13 @@ func (c *InventoryConfig) GetInterval() time.Duration {
 	return c.Interval.Duration
 }
 
+func (c *InventoryConfig) GetTimeout() time.Duration {
+	if c == nil {
+		return 0
+	}
+	return c.Timeout.Duration
+}
+
 func (c *AttestationConfig) GetEnabled() bool {
 	return c != nil && c.Enabled
 }
@@ -250,6 +282,13 @@ func (c *AttestationConfig) GetInterval() time.Duration {
 		return 0
 	}
 	return c.Interval.Duration
+}
+
+func (c *AttestationConfig) GetTimeout() time.Duration {
+	if c == nil {
+		return 0
+	}
+	return c.Timeout.Duration
 }
 
 func (c *AttestationConfig) GetInitialInterval() time.Duration {
