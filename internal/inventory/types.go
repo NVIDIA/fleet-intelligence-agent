@@ -33,6 +33,7 @@ type Snapshot struct {
 	MachineID               string
 	SystemUUID              string
 	BootID                  string
+	Uptime                  time.Time
 	OperatingSystem         string
 	OSImage                 string
 	KernelVersion           string

@@ -63,7 +63,7 @@ type MachineInfo struct {
 	BootID string `json:"bootID,omitempty"`
 	// Hostname is the current host of machine
 	Hostname string `json:"hostname,omitempty"`
-	// Uptime represents when the machine up
+	// Uptime represents when the machine started.
 	Uptime metav1.Time `json:"uptime,omitempty"`
 
 	// CPUInfo is the CPU info of the machine.

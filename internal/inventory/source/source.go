@@ -71,6 +71,7 @@ func (s *machineInfoSource) Collect(ctx context.Context) (*inventory.Snapshot, e
 		MachineID:               info.MachineID,
 		SystemUUID:              info.SystemUUID,
 		BootID:                  info.BootID,
+		Uptime:                  info.Uptime.Time,
 		OperatingSystem:         info.OperatingSystem,
 		OSImage:                 info.OSImage,
 		KernelVersion:           info.KernelVersion,

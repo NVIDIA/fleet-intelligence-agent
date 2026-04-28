@@ -18,9 +18,11 @@ package source
 import (
 	"context"
 	"testing"
+	"time"
 
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
@@ -36,6 +38,7 @@ func (f fakeMachineInfoCollector) Collect(context.Context) (*machineinfo.Machine
 }
 
 func TestMachineInfoSourceCollect(t *testing.T) {
+	bootTime := time.Date(2026, 4, 28, 12, 30, 0, 0, time.UTC)
 	src := NewMachineInfoSource(fakeMachineInfoCollector{
 		info: &machineinfo.MachineInfo{
 			AgentVersion:            "1.2.3",
@@ -49,6 +52,7 @@ func TestMachineInfoSourceCollect(t *testing.T) {
 			SystemUUID:              "system-uuid",
 			MachineID:               "machine-id",
 			BootID:                  "boot-id",
+			Uptime:                  metav1.NewTime(bootTime),
 			Hostname:                "host-a",
 			CPUInfo: &apiv1.MachineCPUInfo{
 				Type:         "Xeon",
@@ -103,6 +107,7 @@ func TestMachineInfoSourceCollect(t *testing.T) {
 	require.NotNil(t, snap)
 	require.Equal(t, "machine-id", snap.MachineID)
 	require.Equal(t, "host-a", snap.Hostname)
+	require.Equal(t, bootTime, snap.Uptime)
 	require.Equal(t, "10.0.0.10", snap.NetPrivateIP)
 	require.Equal(t, "Xeon", snap.Resources.CPUInfo.Type)
 	require.Equal(t, uint64(1024), snap.Resources.MemoryInfo.TotalBytes)

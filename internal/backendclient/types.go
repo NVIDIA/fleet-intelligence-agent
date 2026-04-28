@@ -33,6 +33,7 @@ type NodeUpsertRequest struct {
 	SystemUUID              string        `json:"systemUUID"`
 	MachineID               string        `json:"machineId"`
 	BootID                  string        `json:"bootID"`
+	Uptime                  *time.Time    `json:"uptime,omitempty"`
 	NetPrivateIP            string        `json:"netPrivateIP,omitempty"`
 }
 

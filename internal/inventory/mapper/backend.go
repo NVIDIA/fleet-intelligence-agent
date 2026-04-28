@@ -18,6 +18,7 @@ package mapper
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory"
@@ -65,6 +66,12 @@ func ToNodeUpsertRequest(s *inventory.Snapshot) *backendclient.NodeUpsertRequest
 		})
 	}
 
+	var uptime *time.Time
+	if !s.Uptime.IsZero() {
+		normalized := s.Uptime.UTC()
+		uptime = &normalized
+	}
+
 	return &backendclient.NodeUpsertRequest{
 		Hostname: s.Hostname,
 		AgentConfig: backendclient.AgentConfig{
@@ -76,6 +83,7 @@ func ToNodeUpsertRequest(s *inventory.Snapshot) *backendclient.NodeUpsertRequest
 		MachineID:               s.MachineID,
 		SystemUUID:              s.SystemUUID,
 		BootID:                  s.BootID,
+		Uptime:                  uptime,
 		OperatingSystem:         s.OperatingSystem,
 		OSImage:                 s.OSImage,
 		KernelVersion:           s.KernelVersion,
