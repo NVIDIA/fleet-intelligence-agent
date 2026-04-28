@@ -214,6 +214,25 @@ func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metr
 	}
 	otlpMetrics = append(otlpMetrics, summaryMetric)
 
+	upMetric := &metricsv1.Metric{
+		Name:        "fleetint_up",
+		Description: "Fleet Intelligence agent liveness. A value of 1 indicates the agent was running when telemetry was exported.",
+		Unit:        "1",
+		Data: &metricsv1.Metric_Gauge{
+			Gauge: &metricsv1.Gauge{
+				DataPoints: []*metricsv1.NumberDataPoint{
+					{
+						TimeUnixNano: uint64(data.Timestamp.UnixNano()),
+						Value: &metricsv1.NumberDataPoint_AsInt{
+							AsInt: 1,
+						},
+					},
+				},
+			},
+		},
+	}
+	otlpMetrics = append(otlpMetrics, upMetric)
+
 	return otlpMetrics
 }
 

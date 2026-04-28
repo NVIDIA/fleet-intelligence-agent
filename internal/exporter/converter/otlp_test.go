@@ -90,7 +90,7 @@ func TestOTLPConverter_Convert_WithMetrics(t *testing.T) {
 	rm := otlpData.Metrics.ResourceMetrics[0]
 	require.Len(t, rm.ScopeMetrics, 1)
 
-	// Should have 2 metrics + 1 summary metric = 3 total
+	// Should have 2 source metrics plus generated agent metrics.
 	metrics := rm.ScopeMetrics[0].Metrics
 	assert.GreaterOrEqual(t, len(metrics), 2)
 
@@ -709,6 +709,40 @@ func TestOTLPConverter_SummaryMetric(t *testing.T) {
 	assert.Equal(t, int64(1), attrMap["metrics_count"])
 	assert.Equal(t, int64(1), attrMap["events_count"])
 	assert.Equal(t, int64(1), attrMap["component_data_count"])
+}
+
+func TestOTLPConverter_UpMetric(t *testing.T) {
+	timestamp := time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC)
+	data := &collector.HealthData{
+		Timestamp: timestamp,
+		MachineID: "test-machine",
+	}
+
+	converter := NewOTLPConverter()
+	otlpData := converter.Convert(data)
+
+	rm := otlpData.Metrics.ResourceMetrics[0]
+	metrics := rm.ScopeMetrics[0].Metrics
+
+	var upMetric *metricsv1.Metric
+	for _, m := range metrics {
+		if m.Name == "fleetint_up" {
+			upMetric = m
+			break
+		}
+	}
+
+	require.NotNil(t, upMetric, "Should have fleetint_up metric")
+	assert.Equal(t, "1", upMetric.Unit)
+	assert.Contains(t, upMetric.Description, "liveness")
+
+	gauge := upMetric.Data.(*metricsv1.Metric_Gauge).Gauge
+	require.Len(t, gauge.DataPoints, 1)
+
+	point := gauge.DataPoints[0]
+	assert.Equal(t, uint64(timestamp.UnixNano()), point.TimeUnixNano)
+	assert.Equal(t, int64(1), point.GetAsInt())
+	assert.Empty(t, point.Attributes)
 }
 
 func TestOTLPConverter_ResourceAttributes(t *testing.T) {
