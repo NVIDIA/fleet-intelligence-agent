@@ -73,7 +73,7 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	}
 
 	// Register utilization fields with DCGM instance for centralized watching
-	if c.dcgmInstance != nil && c.dcgmInstance.DCGMExists() {
+	if c.dcgmInstance != nil {
 		if err := c.dcgmInstance.AddFieldsToWatch(utilizationFields); err != nil {
 			log.Logger.Warnw("failed to register utilization fields", "error", err)
 		} else {
