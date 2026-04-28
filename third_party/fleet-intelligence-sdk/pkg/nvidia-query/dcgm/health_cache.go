@@ -17,6 +17,7 @@ package dcgm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -26,6 +27,8 @@ import (
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 )
+
+var errTransientGroupNotReady = errors.New("dcgm group handle not ready")
 
 // HealthCache manages a shared cache of DCGM health check results.
 // It polls DCGM health status in the background and provides cached results
@@ -113,7 +116,10 @@ func (hc *HealthCache) Poll() error {
 	}
 
 	if !hc.instance.DCGMExists() {
-		return fmt.Errorf("DCGM library not loaded")
+		// DCGM may become available after startup (e.g., hostengine warmup).
+		// Keep polling so the cache can recover automatically.
+		log.Logger.Debugw("DCGM not available yet, skipping health check poll")
+		return nil
 	}
 
 	// Perform health check on the group
@@ -132,7 +138,7 @@ func (hc *HealthCache) Poll() error {
 		}
 
 		// Check if this is a transient error (benign, don't store)
-		if IsTransientError(err) {
+		if errors.Is(err, errTransientGroupNotReady) || IsTransientError(err) {
 			log.Logger.Infow("DCGM transient error, will retry",
 				"component", "health_cache",
 				"error", err)
@@ -253,14 +259,13 @@ func (hc *HealthCache) GetLastUpdateTime() time.Time {
 // This is a helper to access the underlying DCGM API without going through
 // the instance's own caching layer.
 func healthCheckDirect(inst Instance) (*dcgm.HealthResponse, error) {
-	// Type assert to get access to the internal instance
-	internalInst, ok := inst.(*instance)
-	if !ok {
-		return nil, fmt.Errorf("instance is not a *instance type")
+	groupHandle := inst.GetGroupHandle()
+	if groupHandle.GetHandle() == 0 {
+		return nil, fmt.Errorf("%w: DCGM group handle is not initialized", errTransientGroupNotReady)
 	}
 
 	// Call DCGM health check directly on the group
-	healthResp, err := dcgm.HealthCheck(internalInst.groupHandle)
+	healthResp, err := dcgm.HealthCheck(groupHandle)
 	if err != nil {
 		return nil, fmt.Errorf("failed to perform DCGM health check: %w", err)
 	}

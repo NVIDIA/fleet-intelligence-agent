@@ -51,6 +51,8 @@ type component struct {
 	healthCheckInterval time.Duration
 	dcgmInstance        nvidiadcgm.Instance
 	dcgmHealthCache     *nvidiadcgm.HealthCache
+	switchMu            sync.Mutex
+	registeredSwitches  map[uint]struct{}
 
 	eventBucket eventstore.Bucket
 
@@ -72,42 +74,32 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		healthCheckInterval: healthCheckInterval,
 		dcgmInstance:        gpudInstance.DCGMInstance,
 		dcgmHealthCache:     gpudInstance.DCGMHealthCache,
+		registeredSwitches:  make(map[uint]struct{}),
 	}
 
-	// Add NVSwitch entities to DCGM group and register health watches
-	// This component takes ownership of managing NVSwitch entities in DCGM
+	if c.dcgmInstance != nil {
+		// Register health watch systems even if DCGM is not connected yet.
+		// A reconnecting DCGM instance will replay this registration later.
+		healthSystems := dcgm.DCGM_HEALTH_WATCH_NVSWITCH_FATAL | dcgm.DCGM_HEALTH_WATCH_NVSWITCH_NONFATAL
+		if err := c.dcgmInstance.AddHealthWatch(healthSystems); err != nil {
+			log.Logger.Warnw("failed to add NVSwitch health watch", "error", err)
+		} else {
+			log.Logger.Infow("registered DCGM NVSwitch health watch (fatal and non-fatal)")
+		}
+	}
+
+	// Add NVSwitch entities to DCGM group when DCGM is already connected.
 	if c.dcgmInstance != nil && c.dcgmInstance.DCGMExists() {
 		// Query for NVSwitch entities in the system
 		switchEntities, err := dcgm.GetEntityGroupEntities(dcgm.FE_SWITCH)
 		if err != nil {
 			log.Logger.Warnw("failed to get NVSwitch entities", "error", err)
 		} else if len(switchEntities) > 0 {
-			// Add NVSwitch entities to the DCGM group
-			addedCount := 0
-			failedCount := 0
-			for _, switchID := range switchEntities {
-				if err := c.dcgmInstance.AddEntityToGroup(switchID); err != nil {
-					log.Logger.Warnw("failed to add NVSwitch to DCGM group", "switchID", switchID, "error", err)
-					failedCount++
-				} else {
-					addedCount++
-				}
+			if err := c.ensureSwitchEntitiesRegistered(switchEntities); err != nil {
+				log.Logger.Warnw("failed to add NVSwitch entities to DCGM group", "error", err)
 			}
-			log.Logger.Infow("added NVSwitch entities to DCGM group",
-				"totalCount", len(switchEntities),
-				"addedCount", addedCount,
-				"failedCount", failedCount)
 		} else {
 			log.Logger.Debugw("no NVSwitch entities found in system")
-		}
-
-		// Register health watch systems (both fatal and non-fatal)
-		// This registers with DCGM, and the health cache will automatically poll these systems
-		healthSystems := dcgm.DCGM_HEALTH_WATCH_NVSWITCH_FATAL | dcgm.DCGM_HEALTH_WATCH_NVSWITCH_NONFATAL
-		if err := c.dcgmInstance.AddHealthWatch(healthSystems); err != nil {
-			log.Logger.Warnw("failed to add NVSwitch health watch", "error", err)
-		} else {
-			log.Logger.Infow("registered DCGM NVSwitch health watch (fatal and non-fatal)")
 		}
 	}
 
@@ -246,6 +238,9 @@ func (c *component) Check() components.CheckResult {
 	}
 
 	log.Logger.Debugw("found NVSwitch entities", "count", len(switchEntities))
+	if err := c.ensureSwitchEntitiesRegistered(switchEntities); err != nil {
+		log.Logger.Warnw("failed to ensure NVSwitch entities are in DCGM group", "error", err)
+	}
 
 	// Get cached DCGM NVSwitch health check results (both fatal and non-fatal) from shared cache
 	// Check fatal errors
@@ -310,6 +305,39 @@ func (c *component) Check() components.CheckResult {
 	dcgmcommon.EmitNewIncidentEvents(c.ctx, cr.ts, Name, EventNameIncident, c.eventBucket, prevIncidents, cr.incidents)
 
 	return cr
+}
+
+func (c *component) ensureSwitchEntitiesRegistered(switchEntities []uint) error {
+	c.switchMu.Lock()
+	defer c.switchMu.Unlock()
+
+	addedCount := 0
+	failedCount := 0
+
+	for _, switchID := range switchEntities {
+		if _, exists := c.registeredSwitches[switchID]; exists {
+			continue
+		}
+		if err := c.dcgmInstance.AddEntityToGroup(switchID); err != nil {
+			log.Logger.Warnw("failed to add NVSwitch to DCGM group", "switchID", switchID, "error", err)
+			failedCount++
+			continue
+		}
+		c.registeredSwitches[switchID] = struct{}{}
+		addedCount++
+	}
+
+	if addedCount > 0 || failedCount > 0 {
+		log.Logger.Infow("processed NVSwitch entity registration",
+			"totalCount", len(switchEntities),
+			"addedCount", addedCount,
+			"failedCount", failedCount)
+	}
+
+	if failedCount > 0 {
+		return fmt.Errorf("failed to register %d NVSwitch entities", failedCount)
+	}
+	return nil
 }
 
 var _ components.CheckResult = &checkResult{}
