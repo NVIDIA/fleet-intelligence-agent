@@ -17,6 +17,7 @@ package dcgm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -34,6 +35,7 @@ var _ Instance = &instance{}
 const defaultDCGMReconnectInterval = 30 * time.Second
 
 var dcgmReconnectInterval = defaultDCGMReconnectInterval
+var errReconnectAborted = errors.New("dcgm reconnect aborted")
 
 // dcgmInitParams defines how we initialize the go-dcgm client.
 type dcgmInitParams struct {
@@ -199,10 +201,20 @@ func NewWithContext(ctx context.Context) (Instance, error) {
 		if res.err != nil {
 			return nil, res.err
 		}
+		if res.inst == nil || !res.inst.DCGMExists() {
+			log.Logger.Warnw(
+				"DCGM not available at startup; continuing with no-op instance and retrying in background until DCGM is up",
+				"retryInterval", dcgmReconnectInterval.String(),
+			)
+		}
 		return newReconnectingInstance(res.inst, dcgmReconnectInterval), nil
 	case <-ctx.Done():
 		close(abandonCh)
-		log.Logger.Warnw("DCGM initialization timed out, returning no-op instance", "error", ctx.Err())
+		log.Logger.Warnw(
+			"DCGM initialization timed out; continuing with no-op instance and retrying in background until DCGM is up",
+			"error", ctx.Err(),
+			"retryInterval", dcgmReconnectInterval.String(),
+		)
 		return newReconnectingInstance(NewNoOp(), dcgmReconnectInterval), nil
 	}
 }
@@ -472,16 +484,27 @@ var _ Instance = &reconnectingInstance{}
 type reconnectingInstance struct {
 	stateMu   sync.RWMutex
 	currentMu sync.RWMutex
+	// reconnectMu serializes reconnect and shutdown transitions.
+	// Long-running connect operations happen outside this lock.
+	reconnectMu sync.Mutex
 
 	current        Instance
 	watchedSystems dcgm.HealthSystem
 	watchedFields  map[dcgm.Short]struct{}
 	groupEntities  map[uint]struct{}
 	callbacks      []func()
+	shuttingDown   bool
+	generation     uint64
 
 	reconnectInterval time.Duration
 	stopCh            chan struct{}
 	shutdownOnce      sync.Once
+}
+
+type reconnectStateSnapshot struct {
+	groupEntities  []uint
+	watchedSystems dcgm.HealthSystem
+	watchedFields  []dcgm.Short
 }
 
 func newReconnectingInstance(initial Instance, reconnectInterval time.Duration) Instance {
@@ -510,9 +533,21 @@ func newReconnectingInstance(initial Instance, reconnectInterval time.Duration) 
 }
 
 func (inst *reconnectingInstance) reconnectLoop() {
+	retryAttempt := 0
+
 	if !inst.DCGMExists() {
+		log.Logger.Infow("DCGM unavailable, starting background reconnect loop", "retryInterval", inst.reconnectInterval.String())
 		if err := inst.reconnectNow(); err != nil {
-			log.Logger.Debugw("initial DCGM reconnect attempt failed", "error", err)
+			if errors.Is(err, errReconnectAborted) {
+				return
+			}
+			retryAttempt++
+			log.Logger.Infow(
+				"DCGM reconnect attempt failed, will retry",
+				"attempt", retryAttempt,
+				"retryInterval", inst.reconnectInterval.String(),
+				"error", err,
+			)
 		}
 	}
 
@@ -528,19 +563,50 @@ func (inst *reconnectingInstance) reconnectLoop() {
 				continue
 			}
 			if err := inst.reconnectNow(); err != nil {
-				log.Logger.Debugw("DCGM reconnect attempt failed", "error", err)
+				if errors.Is(err, errReconnectAborted) {
+					return
+				}
+				retryAttempt++
+				log.Logger.Infow(
+					"DCGM reconnect attempt failed, will retry",
+					"attempt", retryAttempt,
+					"retryInterval", inst.reconnectInterval.String(),
+					"error", err,
+				)
+				continue
 			}
+			retryAttempt = 0
 		}
 	}
 }
 
 func (inst *reconnectingInstance) reconnectNow() error {
+	inst.reconnectMu.Lock()
+	if inst.shuttingDown {
+		inst.reconnectMu.Unlock()
+		return errReconnectAborted
+	}
+	expectedGeneration := inst.generation
+	inst.reconnectMu.Unlock()
+
 	connectedInst, err := newConnectedInstanceFunc()
 	if err != nil {
 		return err
 	}
 
-	if err := inst.replayState(connectedInst); err != nil {
+	inst.reconnectMu.Lock()
+	defer inst.reconnectMu.Unlock()
+	if inst.shuttingDown || inst.generation != expectedGeneration {
+		_ = connectedInst.Shutdown()
+		return errReconnectAborted
+	}
+
+	// Hold stateMu through replay + current swap so newly-registered watches/fields/entities
+	// cannot slip in between snapshot and swap and get lost on the newly connected instance.
+	inst.stateMu.Lock()
+	snapshot := inst.snapshotStateLocked()
+	if err := inst.replayState(connectedInst, snapshot); err != nil {
+		inst.stateMu.Unlock()
 		_ = connectedInst.Shutdown()
 		return err
 	}
@@ -549,6 +615,7 @@ func (inst *reconnectingInstance) reconnectNow() error {
 	previousInst := inst.current
 	inst.current = connectedInst
 	inst.currentMu.Unlock()
+	inst.stateMu.Unlock()
 
 	inst.runReconnectCallbacks()
 
@@ -560,8 +627,7 @@ func (inst *reconnectingInstance) reconnectNow() error {
 	return nil
 }
 
-func (inst *reconnectingInstance) replayState(connectedInst Instance) error {
-	inst.stateMu.RLock()
+func (inst *reconnectingInstance) snapshotStateLocked() reconnectStateSnapshot {
 	groupEntities := make([]uint, 0, len(inst.groupEntities))
 	for entityID := range inst.groupEntities {
 		groupEntities = append(groupEntities, entityID)
@@ -573,7 +639,18 @@ func (inst *reconnectingInstance) replayState(connectedInst Instance) error {
 	for fieldID := range inst.watchedFields {
 		watchedFields = append(watchedFields, fieldID)
 	}
-	inst.stateMu.RUnlock()
+
+	return reconnectStateSnapshot{
+		groupEntities:  groupEntities,
+		watchedSystems: watchedSystems,
+		watchedFields:  watchedFields,
+	}
+}
+
+func (inst *reconnectingInstance) replayState(connectedInst Instance, snapshot reconnectStateSnapshot) error {
+	groupEntities := snapshot.groupEntities
+	watchedSystems := snapshot.watchedSystems
+	watchedFields := snapshot.watchedFields
 
 	for _, entityID := range groupEntities {
 		if err := connectedInst.AddEntityToGroup(entityID); err != nil {
@@ -755,6 +832,9 @@ func (inst *reconnectingInstance) GetDevices() []DeviceInfo {
 func (inst *reconnectingInstance) Shutdown() error {
 	var shutdownErr error
 	inst.shutdownOnce.Do(func() {
+		inst.reconnectMu.Lock()
+		inst.shuttingDown = true
+		inst.generation++
 		close(inst.stopCh)
 
 		inst.currentMu.Lock()
@@ -765,6 +845,7 @@ func (inst *reconnectingInstance) Shutdown() error {
 		if currentInst != nil {
 			shutdownErr = currentInst.Shutdown()
 		}
+		inst.reconnectMu.Unlock()
 	})
 	return shutdownErr
 }
