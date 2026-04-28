@@ -53,8 +53,14 @@ import (
 	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory"
+	inventorysink "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/sink"
+	inventorysource "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/source"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/registry"
 )
 
@@ -85,6 +91,12 @@ type Server struct {
 	stopOnce sync.Once
 
 	machineID string
+}
+
+type inventoryMachineInfoCollectorFunc func(context.Context) (*machineinfo.MachineInfo, error)
+
+func (f inventoryMachineInfoCollectorFunc) Collect(ctx context.Context) (*machineinfo.MachineInfo, error) {
+	return f(ctx)
 }
 
 // initializeDatabases opens and initializes database connections
@@ -162,6 +174,46 @@ func getHealthCheckInterval(config *config.Config) time.Duration {
 		healthCheckInterval = config.HealthExporter.HealthCheckInterval.Duration
 	}
 	return healthCheckInterval
+}
+
+func getInventorySyncInterval(config *config.Config) time.Duration {
+	if config == nil {
+		return 0
+	}
+	if config.Inventory != nil {
+		if !config.Inventory.Enabled {
+			return 0
+		}
+		return config.Inventory.Interval.Duration
+	}
+	return 0
+}
+
+func getInventorySyncTimeout(cfg *config.Config) time.Duration {
+	if cfg == nil || cfg.Inventory == nil || !cfg.Inventory.Enabled {
+		return 0
+	}
+	if cfg.Inventory.Timeout.Duration > 0 {
+		return cfg.Inventory.Timeout.Duration
+	}
+	return config.DefaultInventoryTimeout
+}
+
+func getAttestationInterval(config *config.Config) time.Duration {
+	if config == nil || config.Attestation == nil || !config.Attestation.Enabled {
+		return 0
+	}
+	return config.Attestation.Interval.Duration
+}
+
+func getAttestationTimeout(cfg *config.Config) time.Duration {
+	if cfg == nil || cfg.Attestation == nil || !cfg.Attestation.Enabled {
+		return 0
+	}
+	if cfg.Attestation.Timeout.Duration > 0 {
+		return cfg.Attestation.Timeout.Duration
+	}
+	return config.DefaultAttestationTimeout
 }
 
 // shouldEnableComponent determines if a component should be enabled based on configuration
@@ -337,17 +389,18 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 		}
 	}
 
+	s.startInventoryLoop(ctx, config, nvmlInstance, dcgmGPUIndexes)
+	s.startAttestationLoop(ctx, config)
+
 	// Create and start health exporter with all dependencies if enabled
 	if config.HealthExporter != nil {
 		var err error
 		s.healthExporter, err = exporter.New(
 			ctx,
 			exporter.WithConfig(config.HealthExporter),
-			exporter.WithFullConfig(config),
 			exporter.WithMetricsStore(metricsSQLiteStore),
 			exporter.WithEventStore(eventStore),
 			exporter.WithComponentsRegistry(s.componentsRegistry),
-			exporter.WithNVMLInstance(nvmlInstance),
 			exporter.WithDatabaseConnections(dbRW, dbRO),
 			exporter.WithMachineID(machineID),
 			exporter.WithDCGMGPUIndexes(dcgmGPUIndexes),
@@ -366,6 +419,84 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 	go s.startServer(ctx, nvmlInstance)
 
 	return s, nil
+}
+
+func (s *Server) startInventoryLoop(
+	ctx context.Context,
+	cfg *config.Config,
+	nvmlInstance nvidianvml.Instance,
+	dcgmGPUIndexes map[string]string,
+) {
+	interval := getInventorySyncInterval(cfg)
+	if interval <= 0 {
+		log.Logger.Infow("inventory loop disabled, skipping")
+		return
+	}
+	log.Logger.Infow("inventory loop starting", "interval", interval)
+
+	allComponents := registry.AllComponentNames()
+	retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
+
+	source := inventorysource.NewMachineInfoSourceWithAgentConfig(
+		inventoryMachineInfoCollectorFunc(func(context.Context) (*machineinfo.MachineInfo, error) {
+			return machineinfo.GetMachineInfo(nvmlInstance, machineinfo.WithDCGMGPUIndexes(dcgmGPUIndexes))
+		}),
+		&inventory.AgentConfig{
+			TotalComponents:        int64(len(allComponents)),
+			RetentionPeriodSeconds: retentionPeriodSeconds,
+			EnabledComponents:      enabledComponents,
+			DisabledComponents:     disabledComponents,
+		},
+	)
+	sink := inventorysink.NewBackendSink(agentstate.NewSQLite())
+	manager := inventory.NewManager(source, sink, inventory.InventoryConfig{
+		Interval:      interval,
+		RetryInterval: inventoryRetryInterval,
+		Timeout:       getInventorySyncTimeout(cfg),
+		JitterEnabled: true,
+	})
+
+	go func() {
+		if err := manager.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			log.Logger.Errorw("inventory loop manager exited", "error", err)
+		}
+	}()
+}
+
+const attestationRetryInterval = 5 * time.Minute
+const inventoryRetryInterval = 1 * time.Minute
+
+func (s *Server) startAttestationLoop(ctx context.Context, cfg *config.Config) {
+	interval := getAttestationInterval(cfg)
+	if interval <= 0 {
+		log.Logger.Infow("attestation loop disabled, skipping")
+		return
+	}
+	log.Logger.Infow("attestation loop starting",
+		"interval", interval,
+		"initial_interval", cfg.Attestation.InitialInterval.Duration)
+
+	state := agentstate.NewSQLite()
+	manager := attestation.NewManager(
+		attestation.NewStateNodeUUIDProvider(state),
+		attestation.NewStateJWTProvider(state),
+		attestation.NewStateNonceProvider(state),
+		attestation.NewCLIEvidenceCollector(getAttestationTimeout(cfg)),
+		attestation.NewStateBackendSubmitter(state),
+		attestation.AttestationConfig{
+			InitialInterval: cfg.Attestation.InitialInterval.Duration,
+			Interval:        interval,
+			RetryInterval:   attestationRetryInterval,
+			Timeout:         getAttestationTimeout(cfg),
+			JitterEnabled:   true,
+		},
+	)
+
+	go func() {
+		if err := manager.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			log.Logger.Errorw("attestation loop exited", "error", err)
+		}
+	}()
 }
 
 // GetHealthExporter returns the health exporter instance (for offline mode access)

@@ -38,6 +38,7 @@ import (
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/writer"
@@ -706,10 +707,7 @@ func TestRefreshConfigFromMetadata(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Insert test data into metadata table using SetMetadata
-		err := pkgmetadata.SetMetadata(ctx, tmpDB, "metrics_endpoint", "https://new-metrics.example.com")
-		require.NoError(t, err)
-		err = pkgmetadata.SetMetadata(ctx, tmpDB, "logs_endpoint", "https://new-logs.example.com")
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "backend_base_url", "https://backend.example.com")
 		require.NoError(t, err)
 		err = pkgmetadata.SetMetadata(ctx, tmpDB, pkgmetadata.MetadataKeyToken, "new-test-token")
 		require.NoError(t, err)
@@ -736,8 +734,8 @@ func TestRefreshConfigFromMetadata(t *testing.T) {
 		he.refreshConfigFromMetadata(ctx)
 
 		// Verify config was updated
-		assert.Equal(t, "https://new-metrics.example.com", he.options.config.MetricsEndpoint)
-		assert.Equal(t, "https://new-logs.example.com", he.options.config.LogsEndpoint)
+		assert.Equal(t, "https://backend.example.com/api/v1/health/metrics", he.options.config.MetricsEndpoint)
+		assert.Equal(t, "https://backend.example.com/api/v1/health/logs", he.options.config.LogsEndpoint)
 		assert.Equal(t, "new-test-token", he.options.config.AuthToken)
 
 		// Cleanup
@@ -751,10 +749,7 @@ func TestRefreshConfigFromMetadata(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Insert empty values using SetMetadata
-		err := pkgmetadata.SetMetadata(ctx, tmpDB, "metrics_endpoint", "")
-		require.NoError(t, err)
-		err = pkgmetadata.SetMetadata(ctx, tmpDB, "logs_endpoint", "")
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "backend_base_url", "")
 		require.NoError(t, err)
 
 		cfg := &config.HealthExporterConfig{
@@ -792,9 +787,7 @@ func TestRefreshConfigFromMetadata(t *testing.T) {
 
 		ctx := context.Background()
 
-		err := pkgmetadata.SetMetadata(ctx, tmpDB, "metrics_endpoint", "http://bad-metrics.example.com")
-		require.NoError(t, err)
-		err = pkgmetadata.SetMetadata(ctx, tmpDB, "logs_endpoint", "https://user@bad-logs.example.com")
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "backend_base_url", "http://bad-backend.example.com")
 		require.NoError(t, err)
 
 		cfg := &config.HealthExporterConfig{
@@ -817,6 +810,41 @@ func TestRefreshConfigFromMetadata(t *testing.T) {
 
 		assert.Empty(t, he.options.config.MetricsEndpoint)
 		assert.Empty(t, he.options.config.LogsEndpoint)
+
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("falls back to legacy endpoints when backend base URL is invalid", func(t *testing.T) {
+		tmpDB := setupTestDB(t)
+		defer tmpDB.Close()
+
+		ctx := context.Background()
+
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "backend_base_url", "http://bad-backend.example.com")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "metrics_endpoint", "https://legacy.example.com/api/v1/health/metrics")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "logs_endpoint", "https://legacy.example.com/api/v1/health/logs")
+		require.NoError(t, err)
+
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithDatabaseConnections(tmpDB, tmpDB),
+			WithMachineID("test-machine-id"),
+		)
+		require.NoError(t, err)
+
+		he := exporter.(*healthExporter)
+		he.refreshConfigFromMetadata(ctx)
+
+		assert.Equal(t, "https://legacy.example.com/api/v1/health/metrics", he.options.config.MetricsEndpoint)
+		assert.Equal(t, "https://legacy.example.com/api/v1/health/logs", he.options.config.LogsEndpoint)
 
 		err = exporter.Stop()
 		require.NoError(t, err)
@@ -932,19 +960,16 @@ func TestRefreshJWTToken(t *testing.T) {
 	})
 
 	t.Run("refreshes token successfully", func(t *testing.T) {
-		// Mock enrollment server
 		expectedToken := "new-jwt-token"
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Verify request
-			assert.Equal(t, http.MethodPost, r.Method)
-			assert.Equal(t, "Bearer test-sak-token", r.Header.Get("Authorization"))
-
-			// Return new token
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, `{"jwt_assertion": "%s"}`, expectedToken)
-		}))
-		defer server.Close()
+		originalFactory := newBackendClient
+		t.Cleanup(func() { newBackendClient = originalFactory })
+		newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+			assert.Equal(t, "https://backend.example.com", rawBaseURL)
+			return &fakeJWTRefreshClient{
+				expectedSAK: "test-sak-token",
+				token:       expectedToken,
+			}, nil
+		}
 
 		tmpDB := setupTestDB(t)
 		defer tmpDB.Close()
@@ -953,7 +978,7 @@ func TestRefreshJWTToken(t *testing.T) {
 		// Setup metadata
 		err := pkgmetadata.SetMetadata(ctx, tmpDB, "sak_token", "test-sak-token")
 		require.NoError(t, err)
-		err = pkgmetadata.SetMetadata(ctx, tmpDB, "enroll_endpoint", server.URL)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "backend_base_url", "https://backend.example.com")
 		require.NoError(t, err)
 
 		cfg := &config.HealthExporterConfig{
@@ -984,6 +1009,164 @@ func TestRefreshJWTToken(t *testing.T) {
 		err = exporter.Stop()
 		require.NoError(t, err)
 	})
+
+	t.Run("refreshes token successfully using legacy enroll endpoint", func(t *testing.T) {
+		expectedToken := "new-jwt-token"
+		originalFactory := newBackendClient
+		t.Cleanup(func() { newBackendClient = originalFactory })
+		newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+			assert.Equal(t, "https://backend.example.com", rawBaseURL)
+			return &fakeJWTRefreshClient{
+				expectedSAK: "test-sak-token",
+				token:       expectedToken,
+			}, nil
+		}
+
+		tmpDB := setupTestDB(t)
+		defer tmpDB.Close()
+
+		ctx := context.Background()
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "sak_token", "test-sak-token")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "enroll_endpoint", "https://backend.example.com/api/v1/health/enroll")
+		require.NoError(t, err)
+
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithDatabaseConnections(tmpDB, tmpDB),
+			WithMachineID("test-machine-id"),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		token, err := he.refreshJWTToken(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, expectedToken, token)
+
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("refreshes token using legacy endpoint when backend base URL is invalid", func(t *testing.T) {
+		expectedToken := "new-jwt-token"
+		originalFactory := newBackendClient
+		t.Cleanup(func() { newBackendClient = originalFactory })
+		newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+			assert.Equal(t, "https://backend.example.com", rawBaseURL)
+			return &fakeJWTRefreshClient{
+				expectedSAK: "test-sak-token",
+				token:       expectedToken,
+			}, nil
+		}
+
+		tmpDB := setupTestDB(t)
+		defer tmpDB.Close()
+
+		ctx := context.Background()
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "sak_token", "test-sak-token")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "backend_base_url", "http://bad-backend.example.com")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "enroll_endpoint", "https://backend.example.com/api/v1/health/enroll")
+		require.NoError(t, err)
+
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithDatabaseConnections(tmpDB, tmpDB),
+			WithMachineID("test-machine-id"),
+		)
+		require.NoError(t, err)
+
+		he := exporter.(*healthExporter)
+
+		token, err := he.refreshJWTToken(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, expectedToken, token)
+
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("refreshes token using later legacy endpoint when earlier one is malformed", func(t *testing.T) {
+		expectedToken := "new-jwt-token"
+		originalFactory := newBackendClient
+		t.Cleanup(func() { newBackendClient = originalFactory })
+		newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+			assert.Equal(t, "https://backend.example.com", rawBaseURL)
+			return &fakeJWTRefreshClient{
+				expectedSAK: "test-sak-token",
+				token:       expectedToken,
+			}, nil
+		}
+
+		tmpDB := setupTestDB(t)
+		defer tmpDB.Close()
+
+		ctx := context.Background()
+		err := pkgmetadata.SetMetadata(ctx, tmpDB, "sak_token", "test-sak-token")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "enroll_endpoint", "https://backend.example.com?bad=query")
+		require.NoError(t, err)
+		err = pkgmetadata.SetMetadata(ctx, tmpDB, "metrics_endpoint", "https://backend.example.com/api/v1/health/metrics")
+		require.NoError(t, err)
+
+		cfg := &config.HealthExporterConfig{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:  metav1.Duration{Duration: 30 * time.Second},
+		}
+
+		exporter, err := New(ctx,
+			WithConfig(cfg),
+			WithDatabaseConnections(tmpDB, tmpDB),
+			WithMachineID("test-machine-id"),
+		)
+		require.NoError(t, err)
+
+		he := exporter.(*healthExporter)
+
+		token, err := he.refreshJWTToken(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, expectedToken, token)
+
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+}
+
+type fakeJWTRefreshClient struct {
+	expectedSAK string
+	token       string
+}
+
+func (f *fakeJWTRefreshClient) Enroll(_ context.Context, sakToken string) (string, error) {
+	if f.expectedSAK != "" && sakToken != f.expectedSAK {
+		return "", fmt.Errorf("unexpected sak token %q", sakToken)
+	}
+	return f.token, nil
+}
+
+func (f *fakeJWTRefreshClient) UpsertNode(context.Context, string, *backendclient.NodeUpsertRequest, string) error {
+	return nil
+}
+
+func (f *fakeJWTRefreshClient) GetNonce(context.Context, string, string) (*backendclient.NonceResponse, error) {
+	return nil, nil
+}
+
+func (f *fakeJWTRefreshClient) SubmitAttestation(context.Context, string, *backendclient.AttestationRequest, string) error {
+	return nil
 }
 
 // TestIntegration provides integration tests

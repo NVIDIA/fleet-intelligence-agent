@@ -89,13 +89,6 @@ func TestWithComponentsRegistry(t *testing.T) {
 	assert.Nil(t, opts.componentsRegistry)
 }
 
-func TestWithNVMLInstance(t *testing.T) {
-	opts := &exporterOptions{}
-	err := WithNVMLInstance(nil)(opts)
-	require.NoError(t, err)
-	assert.Nil(t, opts.nvmlInstance)
-}
-
 func TestWithHTTPClient(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -306,18 +299,6 @@ func TestExporterOptionsValidate(t *testing.T) {
 			},
 			wantErr:     true,
 			expectedErr: "components registry is required when IncludeComponentData is enabled",
-		},
-		{
-			name: "machine info enabled but no NVML instance",
-			setupOpts: func() *exporterOptions {
-				return &exporterOptions{
-					config: &config.HealthExporterConfig{
-						IncludeMachineInfo: true,
-					},
-				}
-			},
-			wantErr:     true,
-			expectedErr: "NVML instance is required when IncludeMachineInfo is enabled",
 		},
 	}
 

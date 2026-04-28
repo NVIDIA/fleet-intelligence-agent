@@ -42,6 +42,12 @@ const (
 	// Using a unix socket instead of a TCP port restricts access via filesystem permissions,
 	// preventing unauthenticated network access even if a firewall rule is misconfigured.
 	DefaultUnixSocketPath = "/run/fleetint/fleetint.sock"
+
+	// DefaultInventoryTimeout is the maximum duration for one inventory loop attempt.
+	DefaultInventoryTimeout = time.Minute
+
+	// DefaultAttestationTimeout is the maximum duration for one attestation loop attempt.
+	DefaultAttestationTimeout = time.Minute
 )
 
 var (
@@ -75,17 +81,24 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 		Address:              DefaultListenAddress,
 		RetentionPeriod:      DefaultRetentionPeriod,
 		EnableFaultInjection: false, // Disabled by default for security
+		Inventory: &InventoryConfig{
+			Enabled:  true,
+			Interval: metav1.Duration{Duration: 1 * time.Hour},
+			Timeout:  metav1.Duration{Duration: DefaultInventoryTimeout},
+		},
+		Attestation: &AttestationConfig{
+			Enabled:         true,
+			InitialInterval: metav1.Duration{Duration: 5 * time.Minute},
+			Interval:        metav1.Duration{Duration: 24 * time.Hour},
+			Timeout:         metav1.Duration{Duration: DefaultAttestationTimeout},
+		},
 		NvidiaToolOverwrites: nvidiacommon.ToolOverwrites{
 			InfinibandClassRootDir: options.InfinibandClassRootDir,
 		},
 		// Health exporter is enabled by default
 		HealthExporter: &HealthExporterConfig{
-			MetricsEndpoint: "",
-			LogsEndpoint:    "",
-			Attestation: AttestationConfig{
-				Interval:      metav1.Duration{Duration: 24 * time.Hour},
-				JitterEnabled: true,
-			},
+			MetricsEndpoint:      "",
+			LogsEndpoint:         "",
 			AuthToken:            "",
 			Interval:             metav1.Duration{Duration: 1 * time.Minute},
 			Timeout:              metav1.Duration{Duration: 30 * time.Second},

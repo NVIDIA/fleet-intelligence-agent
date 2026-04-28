@@ -49,7 +49,7 @@ This repository contains the `fleetint` host agent. The notes below are intended
 - Exporter token refresh and endpoint reload: [`internal/exporter/exporter.go`](internal/exporter/exporter.go)
 - Local HTTP server routes: [`internal/server/server.go`](internal/server/server.go)
 - Optional fault injection handler: [`internal/server/handlers_inject_fault.go`](internal/server/handlers_inject_fault.go)
-- Remote attestation and `nvattest` invocation: [`internal/attestation/attestation.go`](internal/attestation/attestation.go)
+- Remote attestation and `nvattest` invocation: [`internal/attestation/manager.go`](internal/attestation/manager.go), [`internal/attestation/collector.go`](internal/attestation/collector.go)
 
 ### Threat Model
 

@@ -39,6 +39,15 @@ func TestDefault(t *testing.T) {
 		assert.Equal(t, DefaultAPIVersion, cfg.APIVersion)
 		assert.Equal(t, DefaultListenAddress, cfg.Address)
 		assert.Equal(t, DefaultRetentionPeriod, cfg.RetentionPeriod)
+		require.NotNil(t, cfg.Inventory)
+		assert.True(t, cfg.Inventory.Enabled)
+		assert.Equal(t, metav1.Duration{Duration: 1 * time.Hour}, cfg.Inventory.Interval)
+		assert.Equal(t, metav1.Duration{Duration: DefaultInventoryTimeout}, cfg.Inventory.Timeout)
+		require.NotNil(t, cfg.Attestation)
+		assert.True(t, cfg.Attestation.Enabled)
+		assert.Equal(t, metav1.Duration{Duration: 5 * time.Minute}, cfg.Attestation.InitialInterval)
+		assert.Equal(t, metav1.Duration{Duration: 24 * time.Hour}, cfg.Attestation.Interval)
+		assert.Equal(t, metav1.Duration{Duration: DefaultAttestationTimeout}, cfg.Attestation.Timeout)
 
 		// State path should be set
 		assert.NotEmpty(t, cfg.State, "State path should be set")
@@ -84,6 +93,130 @@ func TestConfigValidation(t *testing.T) {
 		err := cfg.Validate()
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "retention_period must be at least 1 minute")
+	})
+
+	t.Run("inventory sync enabled without interval", func(t *testing.T) {
+		cfg := &Config{
+			Address:         ":8080",
+			RetentionPeriod: metav1.Duration{Duration: time.Hour},
+			Inventory: &InventoryConfig{
+				Enabled: true,
+			},
+		}
+
+		err := cfg.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "inventory.interval is required")
+	})
+
+	t.Run("inventory sync interval too short", func(t *testing.T) {
+		cfg := &Config{
+			Address:         ":8080",
+			RetentionPeriod: metav1.Duration{Duration: time.Hour},
+			Inventory: &InventoryConfig{
+				Enabled:  true,
+				Interval: metav1.Duration{Duration: 500 * time.Millisecond},
+			},
+		}
+
+		err := cfg.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "inventory.interval must be at least 1 minute")
+	})
+
+	t.Run("inventory sync timeout negative", func(t *testing.T) {
+		cfg := &Config{
+			Address:         ":8080",
+			RetentionPeriod: metav1.Duration{Duration: time.Hour},
+			Inventory: &InventoryConfig{
+				Enabled:  true,
+				Interval: metav1.Duration{Duration: time.Hour},
+				Timeout:  metav1.Duration{Duration: -time.Second},
+			},
+		}
+
+		err := cfg.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "inventory.timeout must not be negative")
+	})
+
+	t.Run("attestation enabled without interval", func(t *testing.T) {
+		cfg := &Config{
+			Address:         ":8080",
+			RetentionPeriod: metav1.Duration{Duration: time.Hour},
+			Attestation: &AttestationConfig{
+				Enabled:         true,
+				InitialInterval: metav1.Duration{Duration: 5 * time.Minute},
+			},
+		}
+
+		err := cfg.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "attestation.interval is required")
+	})
+
+	t.Run("attestation interval too short", func(t *testing.T) {
+		cfg := &Config{
+			Address:         ":8080",
+			RetentionPeriod: metav1.Duration{Duration: time.Hour},
+			Attestation: &AttestationConfig{
+				Enabled:         true,
+				InitialInterval: metav1.Duration{Duration: 5 * time.Minute},
+				Interval:        metav1.Duration{Duration: 500 * time.Millisecond},
+			},
+		}
+
+		err := cfg.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "attestation.interval must be at least 1 minute")
+	})
+
+	t.Run("attestation enabled without initial interval", func(t *testing.T) {
+		cfg := &Config{
+			Address:         ":8080",
+			RetentionPeriod: metav1.Duration{Duration: time.Hour},
+			Attestation: &AttestationConfig{
+				Enabled:  true,
+				Interval: metav1.Duration{Duration: 24 * time.Hour},
+			},
+		}
+
+		err := cfg.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "attestation.initial_interval is required")
+	})
+
+	t.Run("attestation initial interval too short", func(t *testing.T) {
+		cfg := &Config{
+			Address:         ":8080",
+			RetentionPeriod: metav1.Duration{Duration: time.Hour},
+			Attestation: &AttestationConfig{
+				Enabled:         true,
+				InitialInterval: metav1.Duration{Duration: 500 * time.Millisecond},
+				Interval:        metav1.Duration{Duration: 24 * time.Hour},
+			},
+		}
+
+		err := cfg.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "attestation.initial_interval must be at least 1 minute")
+	})
+
+	t.Run("attestation timeout negative", func(t *testing.T) {
+		cfg := &Config{
+			Address:         ":8080",
+			RetentionPeriod: metav1.Duration{Duration: time.Hour},
+			Attestation: &AttestationConfig{
+				Enabled:         true,
+				InitialInterval: metav1.Duration{Duration: 5 * time.Minute},
+				Interval:        metav1.Duration{Duration: 24 * time.Hour},
+				Timeout:         metav1.Duration{Duration: -time.Second},
+			},
+		}
+
+		err := cfg.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "attestation.timeout must not be negative")
 	})
 }
 
@@ -555,9 +688,6 @@ func TestDefaultWithHealthExporter(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.NotNil(t, cfg.HealthExporter)
-		// Attestation is always enabled, so we just check configuration
-		assert.Equal(t, metav1.Duration{Duration: 24 * time.Hour}, cfg.HealthExporter.Attestation.Interval)
-		assert.True(t, cfg.HealthExporter.Attestation.JitterEnabled)
 		assert.Equal(t, metav1.Duration{Duration: 1 * time.Minute}, cfg.HealthExporter.Interval)
 		assert.Equal(t, metav1.Duration{Duration: 30 * time.Second}, cfg.HealthExporter.Timeout)
 		assert.True(t, cfg.HealthExporter.IncludeMetrics)
@@ -634,12 +764,8 @@ func TestToConfigEntries(t *testing.T) {
 			RetentionPeriod: metav1.Duration{Duration: 24 * time.Hour},
 			Components:      []string{},
 			HealthExporter: &HealthExporterConfig{
-				MetricsEndpoint: "https://example.com/metrics",
-				LogsEndpoint:    "https://example.com/logs",
-				Attestation: AttestationConfig{
-					Interval:      metav1.Duration{Duration: 24 * time.Hour},
-					JitterEnabled: true,
-				},
+				MetricsEndpoint:      "https://example.com/metrics",
+				LogsEndpoint:         "https://example.com/logs",
 				Interval:             metav1.Duration{Duration: 1 * time.Minute},
 				Timeout:              metav1.Duration{Duration: 30 * time.Second},
 				IncludeMetrics:       true,
@@ -662,7 +788,6 @@ func TestToConfigEntries(t *testing.T) {
 		// Check for health exporter entries
 		foundMetricsEndpoint := false
 		foundLogsEndpoint := false
-		foundAttestation := false
 		foundAuthToken := false
 
 		for _, entry := range entries {
@@ -672,10 +797,6 @@ func TestToConfigEntries(t *testing.T) {
 			if entry.Key == "health_exporter.logs_endpoint" {
 				foundLogsEndpoint = true
 			}
-			if entry.Key == "health_exporter.attestation_jitter_enabled" {
-				foundAttestation = true
-				assert.Equal(t, "true", entry.Value)
-			}
 			if entry.Key == "auth_token" || entry.Key == "health_exporter.auth_token" {
 				foundAuthToken = true
 			}
@@ -684,7 +805,6 @@ func TestToConfigEntries(t *testing.T) {
 		// Endpoints are excluded - they're enrollment-assigned, not user config
 		assert.False(t, foundMetricsEndpoint, "metrics_endpoint should not be exported")
 		assert.False(t, foundLogsEndpoint, "logs_endpoint should not be exported")
-		assert.True(t, foundAttestation)
 		assert.False(t, foundAuthToken, "auth_token should not be exported")
 	})
 
@@ -821,4 +941,18 @@ func TestGetComponentLists(t *testing.T) {
 		// Should be empty array "[]", not null
 		assert.Equal(t, "[]", string(disabledJSON))
 	})
+}
+
+func TestInventoryAgentConfig(t *testing.T) {
+	allComponents := []string{"cpu", "disk", "memory", "gpu"}
+	cfg := &Config{
+		APIVersion:      "v1",
+		RetentionPeriod: metav1.Duration{Duration: 24 * time.Hour},
+		Components:      []string{"*", "-memory", "-disk"},
+	}
+
+	retentionPeriodSeconds, enabled, disabled := cfg.InventoryAgentConfig(allComponents)
+	assert.Equal(t, int64(86400), retentionPeriodSeconds)
+	assert.ElementsMatch(t, []string{"cpu", "gpu"}, enabled)
+	assert.ElementsMatch(t, []string{"memory", "disk"}, disabled)
 }

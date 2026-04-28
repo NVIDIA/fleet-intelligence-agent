@@ -177,10 +177,10 @@ func TestCSVConverter_Convert_MachineInfo(t *testing.T) {
 	timestamp := "20251105_120000"
 
 	machineInfo := &machineinfo.MachineInfo{
-		FleetintVersion: "0.1.5",
-		DCGMVersion:     "4.2.3",
-		OSImage:         "Ubuntu 22.04",
-		KernelVersion:   "5.15.0",
+		AgentVersion:  "0.1.5",
+		DCGMVersion:   "4.2.3",
+		OSImage:       "Ubuntu 22.04",
+		KernelVersion: "5.15.0",
 		CPUInfo: &apiv1.MachineCPUInfo{
 			Type:         "Intel",
 			Manufacturer: "Intel",
@@ -279,7 +279,7 @@ func TestCSVConverter_Convert_AllData(t *testing.T) {
 			},
 		},
 		MachineInfo: &machineinfo.MachineInfo{
-			FleetintVersion: "0.1.5",
+			AgentVersion: "0.1.5",
 		},
 	}
 

@@ -16,6 +16,8 @@
 package converter
 
 import (
+	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -28,7 +30,6 @@ import (
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/attestation"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
@@ -89,7 +90,7 @@ func TestOTLPConverter_Convert_WithMetrics(t *testing.T) {
 	rm := otlpData.Metrics.ResourceMetrics[0]
 	require.Len(t, rm.ScopeMetrics, 1)
 
-	// Should have 2 metrics + 1 summary metric = 3 total
+	// Should have 2 source metrics plus generated agent metrics.
 	metrics := rm.ScopeMetrics[0].Metrics
 	assert.GreaterOrEqual(t, len(metrics), 2)
 
@@ -309,21 +310,12 @@ func TestOTLPConverter_Convert_WithComponentData(t *testing.T) {
 	assert.True(t, found, "Should find component data log")
 }
 
-func TestOTLPConverter_Convert_WithMachineInfo(t *testing.T) {
+func TestOTLPConverter_Convert_IgnoresMachineInfoInResource(t *testing.T) {
 	data := &collector.HealthData{
 		Timestamp: time.Now(),
 		MachineID: "test-machine",
 		MachineInfo: &machineinfo.MachineInfo{
-			FleetintVersion: "0.1.5",
-			DCGMVersion:     "4.2.3",
-			OSImage:         "Ubuntu 22.04",
-			KernelVersion:   "5.15.0",
-			CPUInfo: &apiv1.MachineCPUInfo{
-				Type:         "Intel",
-				Manufacturer: "Intel",
-				Architecture: "x86_64",
-				LogicalCores: 8,
-			},
+			DCGMVersion: "4.2.3",
 		},
 	}
 
@@ -333,82 +325,13 @@ func TestOTLPConverter_Convert_WithMachineInfo(t *testing.T) {
 	require.NotNil(t, otlpData)
 	require.NotNil(t, otlpData.Metrics)
 
-	// Check resource has machine info attributes
 	rm := otlpData.Metrics.ResourceMetrics[0]
 	assert.NotNil(t, rm.Resource)
 	assert.Greater(t, len(rm.Resource.Attributes), 0)
 
-	// Verify machine info is embedded in resource attributes
-	// The attributes may have different keys based on how machine info is flattened
-	attrCount := len(rm.Resource.Attributes)
-	assert.Greater(t, attrCount, 2, "Should have multiple resource attributes including machine info")
-
-	// Check that some attributes exist (the exact key names may vary)
-	attrKeys := make([]string, 0, len(rm.Resource.Attributes))
 	for _, attr := range rm.Resource.Attributes {
-		attrKeys = append(attrKeys, attr.Key)
+		assert.NotEqual(t, "dcgmVersion", attr.Key)
 	}
-	// Should have at least service.name and machine.id
-	hasServiceName := false
-	for _, key := range attrKeys {
-		if key == "service.name" {
-			hasServiceName = true
-			break
-		}
-	}
-	assert.True(t, hasServiceName, "Should have service.name attribute")
-	assert.Equal(t, "4.2.3", findAttribute(t, rm.Resource.Attributes, "dcgmVersion").GetStringValue())
-}
-
-func TestOTLPConverter_Convert_WithAttestationData(t *testing.T) {
-	attestationData := &attestation.AttestationData{
-		Success: true,
-		SDKResponse: attestation.AttestationSDKResponse{
-			Evidences: []attestation.EvidenceItem{
-				{
-					Arch:          "BLACKWELL",
-					Certificate:   "test-cert",
-					DriverVersion: "575.28",
-					Evidence:      "test-evidence",
-					Nonce:         "test-nonce",
-					VBIOSVersion:  "96.00.AF.00.01",
-					Version:       "1.0",
-				},
-			},
-			ResultCode:    0,
-			ResultMessage: "Ok",
-		},
-		NonceRefreshTimestamp: time.Date(2025, 11, 5, 12, 0, 0, 0, time.UTC),
-	}
-
-	data := &collector.HealthData{
-		Timestamp:       time.Now(),
-		MachineID:       "test-machine",
-		AttestationData: attestationData,
-	}
-
-	converter := NewOTLPConverter()
-	otlpData := converter.Convert(data)
-
-	require.NotNil(t, otlpData)
-	require.NotNil(t, otlpData.Logs)
-
-	// Should NOT have attestation logs
-	rl := otlpData.Logs.ResourceLogs[0]
-	logs := rl.ScopeLogs[0].LogRecords
-	assert.Empty(t, logs, "Should not have attestation logs")
-
-	// Should have attestation data in resource attributes
-	rm := otlpData.Metrics.ResourceMetrics[0]
-	attrs := rm.Resource.Attributes
-	foundAttestation := false
-	for _, attr := range attrs {
-		if contains(attr.Key, "attestation") {
-			foundAttestation = true
-			break
-		}
-	}
-	assert.True(t, foundAttestation, "Should have attestation data in resource attributes")
 }
 
 func TestOTLPConverter_ConvertStructToOTLPAttributes(t *testing.T) {
@@ -699,13 +622,9 @@ func TestOTLPConverter_ConvertLabelsToOTLPAttributes_EnrichesGPUIndex(t *testing
 func TestBuildGPUUUIDToIndexMap(t *testing.T) {
 	t.Run("builds map from machine info", func(t *testing.T) {
 		data := &collector.HealthData{
-			MachineInfo: &machineinfo.MachineInfo{
-				GPUInfo: &apiv1.MachineGPUInfo{
-					GPUs: []apiv1.MachineGPUInstance{
-						{UUID: "GPU-abc-123", GPUIndex: "0"},
-						{UUID: "GPU-def-456", GPUIndex: "1"},
-					},
-				},
+			GPUUUIDToIndex: map[string]string{
+				"GPU-abc-123": "0",
+				"GPU-def-456": "1",
 			},
 		}
 
@@ -721,9 +640,9 @@ func TestBuildGPUUUIDToIndexMap(t *testing.T) {
 		assert.Empty(t, m)
 	})
 
-	t.Run("returns empty map when GPU info is nil", func(t *testing.T) {
+	t.Run("returns empty map when mapping is nil", func(t *testing.T) {
 		data := &collector.HealthData{
-			MachineInfo: &machineinfo.MachineInfo{},
+			GPUUUIDToIndex: nil,
 		}
 		m := buildGPUUUIDToIndexMap(data)
 		assert.Empty(t, m)
@@ -731,14 +650,10 @@ func TestBuildGPUUUIDToIndexMap(t *testing.T) {
 
 	t.Run("skips entries with empty uuid or index", func(t *testing.T) {
 		data := &collector.HealthData{
-			MachineInfo: &machineinfo.MachineInfo{
-				GPUInfo: &apiv1.MachineGPUInfo{
-					GPUs: []apiv1.MachineGPUInstance{
-						{UUID: "GPU-abc-123", GPUIndex: "0"},
-						{UUID: "", GPUIndex: "1"},
-						{UUID: "GPU-ghi-789", GPUIndex: ""},
-					},
-				},
+			GPUUUIDToIndex: map[string]string{
+				"GPU-abc-123": "0",
+				"":            "1",
+				"GPU-ghi-789": "",
 			},
 		}
 
@@ -746,55 +661,6 @@ func TestBuildGPUUUIDToIndexMap(t *testing.T) {
 		assert.Equal(t, "0", m["GPU-abc-123"])
 		assert.Len(t, m, 1)
 	})
-}
-
-func TestOTLPConverter_GetAttestationEvidencesCount(t *testing.T) {
-	tests := []struct {
-		name          string
-		data          *collector.HealthData
-		expectedCount int
-	}{
-		{
-			name: "with_evidences",
-			data: &collector.HealthData{
-				AttestationData: &attestation.AttestationData{
-					SDKResponse: attestation.AttestationSDKResponse{
-						Evidences: []attestation.EvidenceItem{
-							{Arch: "BLACKWELL"},
-							{Arch: "HOPPER"},
-						},
-					},
-				},
-			},
-			expectedCount: 2,
-		},
-		{
-			name: "nil_attestation",
-			data: &collector.HealthData{
-				AttestationData: nil,
-			},
-			expectedCount: 0,
-		},
-		{
-			name: "empty_evidences",
-			data: &collector.HealthData{
-				AttestationData: &attestation.AttestationData{
-					SDKResponse: attestation.AttestationSDKResponse{
-						Evidences: []attestation.EvidenceItem{},
-					},
-				},
-			},
-			expectedCount: 0,
-		},
-	}
-
-	converter := &otlpConverter{}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			count := converter.getAttestationEvidencesCount(tt.data)
-			assert.Equal(t, tt.expectedCount, count)
-		})
-	}
 }
 
 func TestOTLPConverter_SummaryMetric(t *testing.T) {
@@ -845,6 +711,40 @@ func TestOTLPConverter_SummaryMetric(t *testing.T) {
 	assert.Equal(t, int64(1), attrMap["component_data_count"])
 }
 
+func TestOTLPConverter_UpMetric(t *testing.T) {
+	timestamp := time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC)
+	data := &collector.HealthData{
+		Timestamp: timestamp,
+		MachineID: "test-machine",
+	}
+
+	converter := NewOTLPConverter()
+	otlpData := converter.Convert(data)
+
+	rm := otlpData.Metrics.ResourceMetrics[0]
+	metrics := rm.ScopeMetrics[0].Metrics
+
+	var upMetric *metricsv1.Metric
+	for _, m := range metrics {
+		if m.Name == "fleetint_agent_up" {
+			upMetric = m
+			break
+		}
+	}
+
+	require.NotNil(t, upMetric, "Should have fleetint_agent_up metric")
+	assert.Equal(t, "1", upMetric.Unit)
+	assert.Contains(t, upMetric.Description, "liveness")
+
+	gauge := upMetric.Data.(*metricsv1.Metric_Gauge).Gauge
+	require.Len(t, gauge.DataPoints, 1)
+
+	point := gauge.DataPoints[0]
+	assert.Equal(t, uint64(timestamp.UnixNano()), point.TimeUnixNano)
+	assert.Equal(t, int64(1), point.GetAsInt())
+	assert.Empty(t, point.Attributes)
+}
+
 func TestOTLPConverter_ResourceAttributes(t *testing.T) {
 	data := &collector.HealthData{
 		Timestamp: time.Now(),
@@ -881,6 +781,37 @@ func TestOTLPConverter_Interface(t *testing.T) {
 	assert.NotNil(t, converter)
 }
 
+func TestResolveOTLPHostname(t *testing.T) {
+	origHostEnv, hadHostEnv := os.LookupEnv("HOSTNAME")
+	origOSHostname := osHostname
+	t.Cleanup(func() {
+		osHostname = origOSHostname
+		if hadHostEnv {
+			_ = os.Setenv("HOSTNAME", origHostEnv)
+		} else {
+			_ = os.Unsetenv("HOSTNAME")
+		}
+	})
+
+	t.Run("falls back to hostname env", func(t *testing.T) {
+		_ = os.Setenv("HOSTNAME", "pod-host-a")
+		osHostname = func() (string, error) { return "os-host-a", nil }
+		assert.Equal(t, "pod-host-a", resolveOTLPHostname())
+	})
+
+	t.Run("falls back to os hostname", func(t *testing.T) {
+		_ = os.Unsetenv("HOSTNAME")
+		osHostname = func() (string, error) { return "os-host-a", nil }
+		assert.Equal(t, "os-host-a", resolveOTLPHostname())
+	})
+
+	t.Run("returns empty on hostname error", func(t *testing.T) {
+		_ = os.Unsetenv("HOSTNAME")
+		osHostname = func() (string, error) { return "", errors.New("boom") }
+		assert.Equal(t, "", resolveOTLPHostname())
+	})
+}
+
 func TestOTLPConverter_Convert_AllData(t *testing.T) {
 	// Test with all data types combined
 	data := &collector.HealthData{
@@ -897,20 +828,6 @@ func TestOTLPConverter_Convert_AllData(t *testing.T) {
 				"health": "healthy",
 				"reason": "All OK",
 			},
-		},
-		MachineInfo: &machineinfo.MachineInfo{
-			FleetintVersion: "0.1.5",
-		},
-		AttestationData: &attestation.AttestationData{
-			Success: true,
-			SDKResponse: attestation.AttestationSDKResponse{
-				Evidences: []attestation.EvidenceItem{
-					{Arch: "BLACKWELL", VBIOSVersion: "96.00"},
-				},
-				ResultCode:    0,
-				ResultMessage: "Ok",
-			},
-			NonceRefreshTimestamp: time.Now(),
 		},
 	}
 
@@ -930,7 +847,6 @@ func TestOTLPConverter_Convert_AllData(t *testing.T) {
 	rl := otlpData.Logs.ResourceLogs[0]
 	assert.Greater(t, len(rl.ScopeLogs[0].LogRecords), 0)
 
-	// Verify resource has attributes from machine info
 	assert.Greater(t, len(rm.Resource.Attributes), 0)
 }
 

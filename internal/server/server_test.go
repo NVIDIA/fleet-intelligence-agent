@@ -79,6 +79,147 @@ func TestGetHealthCheckInterval(t *testing.T) {
 	}
 }
 
+func TestGetInventorySyncInterval(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *config.Config
+		expected time.Duration
+	}{
+		{
+			name:     "nil config",
+			config:   nil,
+			expected: 0,
+		},
+		{
+			name: "uses inventory sync config",
+			config: &config.Config{
+				Inventory: &config.InventoryConfig{
+					Enabled:  true,
+					Interval: metav1.Duration{Duration: 2 * time.Minute},
+				},
+			},
+			expected: 2 * time.Minute,
+		},
+		{
+			name: "disabled inventory sync",
+			config: &config.Config{
+				Inventory: &config.InventoryConfig{
+					Enabled:  false,
+					Interval: metav1.Duration{Duration: 2 * time.Minute},
+				},
+			},
+			expected: 0,
+		},
+		{
+			name:     "no inventory or exporter config",
+			config:   &config.Config{},
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, getInventorySyncInterval(tt.config))
+		})
+	}
+}
+
+func TestGetInventorySyncTimeout(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *config.Config
+		expected time.Duration
+	}{
+		{
+			name:     "nil config",
+			config:   nil,
+			expected: 0,
+		},
+		{
+			name: "uses inventory timeout",
+			config: &config.Config{
+				Inventory: &config.InventoryConfig{
+					Enabled: true,
+					Timeout: metav1.Duration{Duration: 45 * time.Second},
+				},
+			},
+			expected: 45 * time.Second,
+		},
+		{
+			name: "falls back to default when enabled and unset",
+			config: &config.Config{
+				Inventory: &config.InventoryConfig{Enabled: true},
+			},
+			expected: config.DefaultInventoryTimeout,
+		},
+		{
+			name: "disabled inventory sync",
+			config: &config.Config{
+				Inventory: &config.InventoryConfig{Enabled: false},
+			},
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, getInventorySyncTimeout(tt.config))
+		})
+	}
+}
+
+func TestGetAttestationSettings(t *testing.T) {
+	tests := []struct {
+		name         string
+		config       *config.Config
+		wantInterval time.Duration
+		wantTimeout  time.Duration
+	}{
+		{
+			name:         "nil config",
+			config:       nil,
+			wantInterval: 0,
+			wantTimeout:  0,
+		},
+		{
+			name:         "no attestation",
+			config:       &config.Config{},
+			wantInterval: 0,
+			wantTimeout:  0,
+		},
+		{
+			name: "uses attestation settings",
+			config: &config.Config{
+				Attestation: &config.AttestationConfig{
+					Enabled:  true,
+					Interval: metav1.Duration{Duration: 6 * time.Hour},
+					Timeout:  metav1.Duration{Duration: 45 * time.Second},
+				},
+			},
+			wantInterval: 6 * time.Hour,
+			wantTimeout:  45 * time.Second,
+		},
+		{
+			name: "uses default attestation timeout when enabled and unset",
+			config: &config.Config{
+				Attestation: &config.AttestationConfig{
+					Enabled:  true,
+					Interval: metav1.Duration{Duration: 6 * time.Hour},
+				},
+			},
+			wantInterval: 6 * time.Hour,
+			wantTimeout:  config.DefaultAttestationTimeout,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.wantInterval, getAttestationInterval(tt.config))
+			assert.Equal(t, tt.wantTimeout, getAttestationTimeout(tt.config))
+		})
+	}
+}
+
 // TestShouldEnableComponent tests the shouldEnableComponent function.
 func TestShouldEnableComponent(t *testing.T) {
 	tests := []struct {

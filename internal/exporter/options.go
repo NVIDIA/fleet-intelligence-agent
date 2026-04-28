@@ -24,7 +24,6 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
-	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
@@ -38,11 +37,9 @@ type ExporterOption func(*exporterOptions) error
 // Configuration values should be sourced from config.HealthExporterConfig.
 type exporterOptions struct {
 	config             *config.HealthExporterConfig
-	fullConfig         *config.Config // Full agent config for daily config export
 	metricsStore       pkgmetrics.Store
 	eventStore         eventstore.Store
 	componentsRegistry components.Registry
-	nvmlInstance       nvidianvml.Instance
 	httpClient         *http.Client
 	timeout            time.Duration
 	dbRW               *sql.DB           // Read-write database connection
@@ -59,14 +56,6 @@ func WithConfig(config *config.HealthExporterConfig) ExporterOption {
 		}
 		c.config = config
 		c.timeout = config.Timeout.Duration
-		return nil
-	}
-}
-
-// WithFullConfig sets the full agent configuration for daily config export
-func WithFullConfig(cfg *config.Config) ExporterOption {
-	return func(c *exporterOptions) error {
-		c.fullConfig = cfg
 		return nil
 	}
 }
@@ -91,14 +80,6 @@ func WithEventStore(store eventstore.Store) ExporterOption {
 func WithComponentsRegistry(registry components.Registry) ExporterOption {
 	return func(c *exporterOptions) error {
 		c.componentsRegistry = registry
-		return nil
-	}
-}
-
-// WithNVMLInstance sets the NVML instance
-func WithNVMLInstance(instance nvidianvml.Instance) ExporterOption {
-	return func(c *exporterOptions) error {
-		c.nvmlInstance = instance
 		return nil
 	}
 }
@@ -178,10 +159,6 @@ func (c *exporterOptions) validate() error {
 
 	if c.config.IncludeComponentData && c.componentsRegistry == nil {
 		return errors.New("components registry is required when IncludeComponentData is enabled")
-	}
-
-	if c.config.IncludeMachineInfo && c.nvmlInstance == nil {
-		return errors.New("NVML instance is required when IncludeMachineInfo is enabled")
 	}
 
 	// Machine ID is always required - it should be set by server via WithMachineID

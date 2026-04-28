@@ -17,10 +17,10 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,12 +50,10 @@ func TestEnrollCommandPrecheckError(t *testing.T) {
 
 func TestEnrollCommandBlocksOnFailedPrecheck(t *testing.T) {
 	originalRunPrecheck := runPrecheck
-	originalPerformEnrollment := performEnrollment
-	originalStoreConfig := storeEnrollmentConfig
+	originalEnrollWorkflow := performEnrollWorkflow
 	t.Cleanup(func() {
 		runPrecheck = originalRunPrecheck
-		performEnrollment = originalPerformEnrollment
-		storeEnrollmentConfig = originalStoreConfig
+		performEnrollWorkflow = originalEnrollWorkflow
 	})
 
 	enrollmentCalled := false
@@ -66,11 +64,8 @@ func TestEnrollCommandBlocksOnFailedPrecheck(t *testing.T) {
 			},
 		}, nil
 	}
-	performEnrollment = func(enrollEndpoint, sakToken string) (string, error) {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string) error {
 		enrollmentCalled = true
-		return "jwt-token", nil
-	}
-	storeEnrollmentConfig = func(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken string) error {
 		return nil
 	}
 
@@ -88,12 +83,10 @@ func TestEnrollCommandBlocksOnFailedPrecheck(t *testing.T) {
 
 func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 	originalRunPrecheck := runPrecheck
-	originalPerformEnrollment := performEnrollment
-	originalStoreConfig := storeEnrollmentConfig
+	originalEnrollWorkflow := performEnrollWorkflow
 	t.Cleanup(func() {
 		runPrecheck = originalRunPrecheck
-		performEnrollment = originalPerformEnrollment
-		storeEnrollmentConfig = originalStoreConfig
+		performEnrollWorkflow = originalEnrollWorkflow
 	})
 
 	enrollmentCalled := false
@@ -104,11 +97,8 @@ func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 			},
 		}, nil
 	}
-	performEnrollment = func(enrollEndpoint, sakToken string) (string, error) {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string) error {
 		enrollmentCalled = true
-		return "jwt-token", nil
-	}
-	storeEnrollmentConfig = func(enrollEndpoint, metricsEndpoint, logsEndpoint, nonceEndpoint, jwtToken, sakToken string) error {
 		return nil
 	}
 
@@ -121,34 +111,33 @@ func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 	assert.True(t, enrollmentCalled)
 }
 
-func TestStoreConfigInMetadataSecuresFreshStateFile(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("test expects non-root default state path resolution")
+func TestEnrollCommandPassesTimeoutContext(t *testing.T) {
+	originalRunPrecheck := runPrecheck
+	originalEnrollWorkflow := performEnrollWorkflow
+	t.Cleanup(func() {
+		runPrecheck = originalRunPrecheck
+		performEnrollWorkflow = originalEnrollWorkflow
+	})
+
+	runPrecheck = func() (precheck.Result, error) {
+		return precheck.Result{
+			Checks: []precheck.Check{
+				{Name: "gpu-present", Message: "ok", Passed: true},
+			},
+		}, nil
 	}
 
-	tmpHome := t.TempDir()
-	t.Setenv("HOME", tmpHome)
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string) error {
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		require.LessOrEqual(t, time.Until(deadline), defaultEnrollTimeout)
+		require.Greater(t, time.Until(deadline), 55*time.Second)
+		return nil
+	}
 
-	err := storeConfigInMetadata(
-		"https://example.com/api/v1/health/enroll",
-		"https://example.com/api/v1/health/metrics",
-		"https://example.com/api/v1/health/logs",
-		"https://example.com/api/v1/health/nonce",
-		"jwt-token",
-		"sak-token",
-	)
+	app := App()
+	app.Writer = &bytes.Buffer{}
+
+	err := app.Run([]string{"fleetint", "enroll", "--endpoint", "https://example.com", "--token", "token"})
 	require.NoError(t, err)
-
-	stateFile := filepath.Join(tmpHome, ".fleetint", "fleetint.state")
-	for _, candidate := range []string{stateFile, stateFile + "-wal", stateFile + "-shm"} {
-		info, err := os.Stat(candidate)
-		if os.IsNotExist(err) {
-			if candidate == stateFile {
-				require.NoError(t, err)
-			}
-			continue
-		}
-		require.NoError(t, err)
-		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
-	}
 }

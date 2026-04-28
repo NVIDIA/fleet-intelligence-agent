@@ -202,15 +202,6 @@ func configureHealthExporterFromEnv(cfg *config.Config) error {
 		return err
 	}
 
-	// FLEETINT_ATTESTATION_JITTER_ENABLED - Enable/disable attestation jitter
-	if err := setBoolFromEnv("FLEETINT_ATTESTATION_JITTER_ENABLED", &he.Attestation.JitterEnabled, "set attestation jitter enabled from env", "attestation_jitter_enabled"); err != nil {
-		return err
-	}
-
-	if err := setDurationFromEnv("FLEETINT_ATTESTATION_INTERVAL", &he.Attestation.Interval, "set attestation interval from env", "attestation_interval", 0, 0); err != nil {
-		return err
-	}
-
 	// Lookbacks
 	if err := setDurationFromEnv("FLEETINT_METRICS_LOOKBACK", &he.MetricsLookback, "set health exporter metrics lookback from env", "metrics_lookback", 0, 0); err != nil {
 		return err
@@ -228,6 +219,29 @@ func configureHealthExporterFromEnv(cfg *config.Config) error {
 		return err
 	}
 
+	return nil
+}
+
+func configureLoopConfigFromEnv(cfg *config.Config) error {
+	if cfg.Inventory != nil {
+		if err := setBoolFromEnv("FLEETINT_INVENTORY_ENABLED", &cfg.Inventory.Enabled, "set inventory enabled from env", "inventory_enabled"); err != nil {
+			return err
+		}
+		if err := setDurationFromEnv("FLEETINT_INVENTORY_INTERVAL", &cfg.Inventory.Interval, "set inventory interval from env", "inventory_interval", time.Minute, 0); err != nil {
+			return err
+		}
+	}
+	if cfg.Attestation != nil {
+		if err := setBoolFromEnv("FLEETINT_ATTESTATION_ENABLED", &cfg.Attestation.Enabled, "set attestation enabled from env", "attestation_enabled"); err != nil {
+			return err
+		}
+		if err := setDurationFromEnv("FLEETINT_ATTESTATION_INITIAL_INTERVAL", &cfg.Attestation.InitialInterval, "set attestation initial interval from env", "attestation_initial_interval", time.Minute, 0); err != nil {
+			return err
+		}
+		if err := setDurationFromEnv("FLEETINT_ATTESTATION_INTERVAL", &cfg.Attestation.Interval, "set attestation interval from env", "attestation_interval", time.Minute, 0); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -309,6 +323,9 @@ func runCommand(cliContext *cli.Context) error {
 	// Apply environment variable overrides to health exporter configuration
 	if err := configureHealthExporterFromEnv(cfg); err != nil {
 		return fmt.Errorf("failed to configure health exporter from environment variables: %w", err)
+	}
+	if err := configureLoopConfigFromEnv(cfg); err != nil {
+		return fmt.Errorf("failed to configure loop settings from environment variables: %w", err)
 	}
 	log.Logger.Infow("health exporter configuration", "cfg", cfg.HealthExporter)
 
