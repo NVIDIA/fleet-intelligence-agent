@@ -24,6 +24,7 @@ Common values (defaults from `values.yaml`):
 | `securityContext.runAsGroup` | `0` | Run as root group. |
 | `env.DCGM_URL` | `nvidia-dcgm.gpu-operator.svc:5555` | DCGM HostEngine endpoint. |
 | `env.DCGM_URL_IS_UNIX_SOCKET` | `"false"` | Treat `DCGM_URL` as a unix socket path. |
+| `env.MALLOC_ARENA_MAX` | `4` | glibc arena cap to help constrain RSS for DCGM/cgo-heavy workloads. |
 | `env.FLEETINT_COLLECT_INTERVAL` | `"1m"` | Data collection interval (1s to 24h). |
 | `env.FLEETINT_INCLUDE_METRICS` | `"true"` | Include metrics in export. |
 | `env.FLEETINT_INCLUDE_EVENTS` | `"true"` | Include events in export. |

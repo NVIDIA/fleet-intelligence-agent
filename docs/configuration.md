@@ -41,6 +41,7 @@ These environment variables are read by `fleetint run` at startup.
 | --- | --- | --- | --- | --- |
 | `DCGM_URL` | DCGM HostEngine address used by the agent for DCGM-backed components. | bare metal: `localhost`, Helm chart: `nvidia-dcgm.gpu-operator.svc:5555` | `/etc/default/fleetint` | `env.DCGM_URL` |
 | `DCGM_URL_IS_UNIX_SOCKET` | Treat `DCGM_URL` as a Unix socket path instead of a network address. | `false` | `/etc/default/fleetint` | `env.DCGM_URL_IS_UNIX_SOCKET` |
+| `MALLOC_ARENA_MAX` | glibc arena cap to constrain RSS growth for DCGM/cgo-heavy workloads. | `4` | `/etc/default/fleetint` | `env.MALLOC_ARENA_MAX` |
 | `FLEETINT_COLLECT_INTERVAL` | Export interval for health data. Valid range: `1s` to `24h`. | `1m` | `/etc/default/fleetint` | `env.FLEETINT_COLLECT_INTERVAL` |
 | `FLEETINT_INCLUDE_METRICS` | Include metrics data in export payloads. | `true` | `/etc/default/fleetint` | `env.FLEETINT_INCLUDE_METRICS` |
 | `FLEETINT_INCLUDE_EVENTS` | Include event data in export payloads. | `true` | `/etc/default/fleetint` | `env.FLEETINT_INCLUDE_EVENTS` |
@@ -71,6 +72,7 @@ sudoedit /etc/default/fleetint
 FLEETINT_FLAGS="--log-level=info --components=all,-accelerator-nvidia-dcgm-prof"
 DCGM_URL="localhost"
 DCGM_URL_IS_UNIX_SOCKET="false"
+MALLOC_ARENA_MAX="4"
 FLEETINT_COLLECT_INTERVAL="2m"
 FLEETINT_INCLUDE_EVENTS="false"
 FLEETINT_CHECK_INTERVAL="30s"
@@ -92,6 +94,7 @@ components: all,-accelerator-nvidia-dcgm-prof
 env:
   DCGM_URL: "nvidia-dcgm.gpu-operator.svc:5555"
   DCGM_URL_IS_UNIX_SOCKET: "false"
+  MALLOC_ARENA_MAX: "4"
   FLEETINT_COLLECT_INTERVAL: "2m"
   FLEETINT_INCLUDE_EVENTS: "false"
   FLEETINT_CHECK_INTERVAL: "30s"
