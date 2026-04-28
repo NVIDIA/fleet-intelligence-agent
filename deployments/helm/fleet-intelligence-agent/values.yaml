@@ -31,6 +31,7 @@ securityContext:
 env:
   DCGM_URL: nvidia-dcgm.gpu-operator.svc:5555
   DCGM_URL_IS_UNIX_SOCKET: "false"
+  MALLOC_ARENA_MAX: 4
   FLEETINT_COLLECT_INTERVAL: "1m"
   FLEETINT_INCLUDE_METRICS: "true"
   FLEETINT_INCLUDE_EVENTS: "true"
