@@ -266,6 +266,111 @@ func TestReconnectingInstanceInvokesReconnectCallbacks(t *testing.T) {
 	}
 }
 
+func TestReconnectingInstanceDoesNotDropRegistrationsDuringReplay(t *testing.T) {
+	originalNewConnectedInstanceFunc := newConnectedInstanceFunc
+	defer func() {
+		newConnectedInstanceFunc = originalNewConnectedInstanceFunc
+	}()
+
+	mock := newBlockingReplayMockInstance()
+	newConnectedInstanceFunc = func() (Instance, error) {
+		return mock, nil
+	}
+
+	internalInst := &reconnectingInstance{
+		current:           NewNoOp(),
+		watchedFields:     make(map[dcgm.Short]struct{}),
+		groupEntities:     make(map[uint]struct{}),
+		reconnectInterval: time.Hour,
+		stopCh:            make(chan struct{}),
+	}
+	defer internalInst.Shutdown()
+
+	if err := internalInst.AddHealthWatch(dcgm.DCGM_HEALTH_WATCH_PCIE); err != nil {
+		t.Fatalf("AddHealthWatch(PCIE) failed: %v", err)
+	}
+
+	reconnectErrCh := make(chan error, 1)
+	go func() {
+		reconnectErrCh <- internalInst.reconnectNow()
+	}()
+
+	<-mock.firstAddHealthStarted
+
+	addErrCh := make(chan error, 1)
+	go func() {
+		addErrCh <- internalInst.AddHealthWatch(dcgm.DCGM_HEALTH_WATCH_THERMAL)
+	}()
+
+	select {
+	case err := <-addErrCh:
+		t.Fatalf("expected AddHealthWatch to wait for reconnect swap, got early return: %v", err)
+	case <-time.After(50 * time.Millisecond):
+		// expected: blocked until reconnect replay + swap complete
+	}
+
+	close(mock.unblockFirstAddHealth)
+
+	if err := <-reconnectErrCh; err != nil {
+		t.Fatalf("reconnectNow() failed: %v", err)
+	}
+	if err := <-addErrCh; err != nil {
+		t.Fatalf("AddHealthWatch(THERMAL) failed: %v", err)
+	}
+
+	expectedSystems := dcgm.DCGM_HEALTH_WATCH_PCIE | dcgm.DCGM_HEALTH_WATCH_THERMAL
+	if mock.watchedSystems != expectedSystems {
+		t.Fatalf("expected watched systems 0x%x after replay window, got 0x%x", expectedSystems, mock.watchedSystems)
+	}
+}
+
+func TestReconnectingInstanceAbortsInFlightReconnectOnShutdown(t *testing.T) {
+	originalNewConnectedInstanceFunc := newConnectedInstanceFunc
+	defer func() {
+		newConnectedInstanceFunc = originalNewConnectedInstanceFunc
+	}()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	mock := newMockTrackingInstance()
+	newConnectedInstanceFunc = func() (Instance, error) {
+		close(started)
+		<-release
+		return mock, nil
+	}
+
+	internalInst := &reconnectingInstance{
+		current:           NewNoOp(),
+		watchedFields:     make(map[dcgm.Short]struct{}),
+		groupEntities:     make(map[uint]struct{}),
+		reconnectInterval: time.Hour,
+		stopCh:            make(chan struct{}),
+	}
+
+	reconnectErrCh := make(chan error, 1)
+	go func() {
+		reconnectErrCh <- internalInst.reconnectNow()
+	}()
+
+	<-started
+	shutdownErr := internalInst.Shutdown()
+	if shutdownErr != nil {
+		t.Fatalf("Shutdown() failed: %v", shutdownErr)
+	}
+	close(release)
+
+	reconnectErr := <-reconnectErrCh
+	if !errors.Is(reconnectErr, errReconnectAborted) {
+		t.Fatalf("expected reconnect to abort with %v, got %v", errReconnectAborted, reconnectErr)
+	}
+
+	internalInst.currentMu.RLock()
+	defer internalInst.currentMu.RUnlock()
+	if internalInst.current != nil {
+		t.Fatalf("expected current instance to remain nil after shutdown")
+	}
+}
+
 func TestNewWithContextReturnsUnderlyingError(t *testing.T) {
 	originalNewInstanceFunc := newInstanceFunc
 	defer func() {
@@ -606,3 +711,26 @@ func (m *mockTrackingInstance) GetLatestValuesForFields(deviceID uint, fields []
 func (m *mockTrackingInstance) GetGroupHandle() dcgm.GroupHandle { return dcgm.GroupHandle{} }
 func (m *mockTrackingInstance) GetDevices() []DeviceInfo         { return nil }
 func (m *mockTrackingInstance) Shutdown() error                  { return nil }
+
+type blockingReplayMockInstance struct {
+	*mockTrackingInstance
+	firstAddHealthStarted chan struct{}
+	unblockFirstAddHealth chan struct{}
+	blockFirstAddHealth   sync.Once
+}
+
+func newBlockingReplayMockInstance() *blockingReplayMockInstance {
+	return &blockingReplayMockInstance{
+		mockTrackingInstance:  newMockTrackingInstance(),
+		firstAddHealthStarted: make(chan struct{}),
+		unblockFirstAddHealth: make(chan struct{}),
+	}
+}
+
+func (m *blockingReplayMockInstance) AddHealthWatch(system dcgm.HealthSystem) error {
+	m.blockFirstAddHealth.Do(func() {
+		close(m.firstAddHealthStarted)
+		<-m.unblockFirstAddHealth
+	})
+	return m.mockTrackingInstance.AddHealthWatch(system)
+}
