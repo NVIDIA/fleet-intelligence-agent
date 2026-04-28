@@ -726,13 +726,13 @@ func TestOTLPConverter_UpMetric(t *testing.T) {
 
 	var upMetric *metricsv1.Metric
 	for _, m := range metrics {
-		if m.Name == "fleetint_up" {
+		if m.Name == "fleetint_agent_up" {
 			upMetric = m
 			break
 		}
 	}
 
-	require.NotNil(t, upMetric, "Should have fleetint_up metric")
+	require.NotNil(t, upMetric, "Should have fleetint_agent_up metric")
 	assert.Equal(t, "1", upMetric.Unit)
 	assert.Contains(t, upMetric.Description, "liveness")
 
