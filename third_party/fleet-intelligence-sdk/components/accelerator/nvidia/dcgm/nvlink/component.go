@@ -78,7 +78,7 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	}
 
 	// Only initialize if DCGM is available
-	if c.dcgmInstance != nil && c.dcgmInstance.DCGMExists() {
+	if c.dcgmInstance != nil {
 		// Register this component's health watch system with DCGM
 		if err := c.dcgmInstance.AddHealthWatch(dcgm.DCGM_HEALTH_WATCH_NVLINK); err != nil {
 			log.Logger.Warnw("failed to add NVLink health watch", "error", err)
