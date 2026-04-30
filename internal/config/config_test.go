@@ -147,7 +147,7 @@ func TestConfigValidation(t *testing.T) {
 
 		err := cfg.Validate()
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "attestation.interval must be at least 1h0m0s")
+		assert.Contains(t, err.Error(), "attestation.interval must be at least 5m0s")
 	})
 
 }

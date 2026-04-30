@@ -54,7 +54,7 @@ These environment variables are read by `fleetint run` at startup.
 | `FLEETINT_INVENTORY_ENABLED` | Enable or disable the inventory loop. | `true` | `/etc/default/fleetint` | `env.FLEETINT_INVENTORY_ENABLED` |
 | `FLEETINT_INVENTORY_INTERVAL` | Inventory loop interval override. Minimum: `5m`. | `1h` | `/etc/default/fleetint` | `env.FLEETINT_INVENTORY_INTERVAL` |
 | `FLEETINT_ATTESTATION_ENABLED` | Enable or disable the attestation loop. | `true` | `/etc/default/fleetint` | `env.FLEETINT_ATTESTATION_ENABLED` |
-| `FLEETINT_ATTESTATION_INTERVAL` | Attestation interval override. Minimum: `1h`. | `24h` | `/etc/default/fleetint` | `env.FLEETINT_ATTESTATION_INTERVAL` |
+| `FLEETINT_ATTESTATION_INTERVAL` | Attestation interval override. Minimum: `5m`. | `24h` | `/etc/default/fleetint` | `env.FLEETINT_ATTESTATION_INTERVAL` |
 | `HTTP_PROXY` | Proxy URL for outbound HTTP requests. | empty | `/etc/default/fleetint` | `env.HTTP_PROXY` |
 | `HTTPS_PROXY` | Proxy URL for outbound HTTPS requests. | empty | `/etc/default/fleetint` | `env.HTTPS_PROXY` |
 

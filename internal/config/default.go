@@ -53,7 +53,7 @@ const (
 	MinInventoryInterval = 5 * time.Minute
 
 	// MinAttestationInterval is the shortest supported steady-state attestation interval.
-	MinAttestationInterval = time.Hour
+	MinAttestationInterval = 5 * time.Minute
 )
 
 var (

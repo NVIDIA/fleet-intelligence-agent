@@ -37,7 +37,7 @@ Common values (defaults from `values.yaml`):
 | `env.FLEETINT_INVENTORY_ENABLED` | `"true"` | Enable or disable the inventory loop. |
 | `env.FLEETINT_INVENTORY_INTERVAL` | `"1h"` | Inventory loop interval override. Minimum: `5m`. |
 | `env.FLEETINT_ATTESTATION_ENABLED` | `"true"` | Enable or disable the attestation loop. |
-| `env.FLEETINT_ATTESTATION_INTERVAL` | `"24h"` | Attestation interval override. Minimum: `1h`. |
+| `env.FLEETINT_ATTESTATION_INTERVAL` | `"24h"` | Attestation interval override. Minimum: `5m`. |
 | `env.HTTP_PROXY` | `""` | Optional HTTP proxy for outbound requests. |
 | `env.HTTPS_PROXY` | `""` | Optional HTTPS proxy for outbound requests. |
 | `logLevel` | `warn` | Log level. |
