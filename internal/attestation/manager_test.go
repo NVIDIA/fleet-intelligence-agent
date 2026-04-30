@@ -18,6 +18,7 @@ package attestation
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -265,8 +266,12 @@ func TestAttestationStartupJitterHelper(t *testing.T) {
 }
 
 func TestManagerRunUsesRetryIntervalWhenNotEnrolled(t *testing.T) {
+	var attempts atomic.Int32
 	mgr := NewManager(
-		func(context.Context) (string, error) { return "", ErrNotEnrolled },
+		func(context.Context) (string, error) {
+			attempts.Add(1)
+			return "", ErrNotEnrolled
+		},
 		&testJWTProvider{jwt: "jwt-token"},
 		&testNonceProvider{nonce: "abc123"},
 		&testEvidenceCollector{resp: &SDKResponse{ResultCode: 200}},
@@ -284,6 +289,7 @@ func TestManagerRunUsesRetryIntervalWhenNotEnrolled(t *testing.T) {
 	elapsed := time.Since(start)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.GreaterOrEqual(t, attempts.Load(), int32(2))
 	require.GreaterOrEqual(t, elapsed, 15*time.Millisecond)
 	require.Less(t, elapsed, 100*time.Millisecond)
 }
