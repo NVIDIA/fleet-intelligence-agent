@@ -19,14 +19,57 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/precheck"
 )
+
+var loopEnvKeys = []string{
+	"FLEETINT_INVENTORY_ENABLED",
+	"FLEETINT_INVENTORY_INTERVAL",
+	"FLEETINT_ATTESTATION_ENABLED",
+	"FLEETINT_ATTESTATION_INTERVAL",
+}
+
+func isolateLoopEnv(t *testing.T) {
+	t.Helper()
+	originals := make(map[string]string, len(loopEnvKeys))
+	exists := make(map[string]bool, len(loopEnvKeys))
+	for _, key := range loopEnvKeys {
+		value, ok := os.LookupEnv(key)
+		if ok {
+			originals[key] = value
+			exists[key] = true
+			require.NoError(t, os.Unsetenv(key))
+		}
+	}
+	t.Cleanup(func() {
+		for _, key := range loopEnvKeys {
+			if exists[key] {
+				_ = os.Setenv(key, originals[key])
+			} else {
+				_ = os.Unsetenv(key)
+			}
+		}
+	})
+}
+
+func useMissingFleetintEnvFile(t *testing.T) {
+	t.Helper()
+	isolateLoopEnv(t)
+	originalPath := fleetintEnvFilePath
+	fleetintEnvFilePath = filepath.Join(t.TempDir(), "missing-fleetint-env")
+	t.Cleanup(func() {
+		fleetintEnvFilePath = originalPath
+	})
+}
 
 func TestEnrollCommandPrecheckError(t *testing.T) {
 	originalRunPrecheck := runPrecheck
@@ -64,7 +107,7 @@ func TestEnrollCommandBlocksOnFailedPrecheck(t *testing.T) {
 			},
 		}, nil
 	}
-	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string) error {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
 		enrollmentCalled = true
 		return nil
 	}
@@ -82,6 +125,8 @@ func TestEnrollCommandBlocksOnFailedPrecheck(t *testing.T) {
 }
 
 func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
+	useMissingFleetintEnvFile(t)
+
 	originalRunPrecheck := runPrecheck
 	originalEnrollWorkflow := performEnrollWorkflow
 	t.Cleanup(func() {
@@ -97,7 +142,7 @@ func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 			},
 		}, nil
 	}
-	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string) error {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
 		enrollmentCalled = true
 		return nil
 	}
@@ -112,6 +157,8 @@ func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 }
 
 func TestEnrollCommandPassesTimeoutContext(t *testing.T) {
+	useMissingFleetintEnvFile(t)
+
 	originalRunPrecheck := runPrecheck
 	originalEnrollWorkflow := performEnrollWorkflow
 	t.Cleanup(func() {
@@ -127,11 +174,57 @@ func TestEnrollCommandPassesTimeoutContext(t *testing.T) {
 		}, nil
 	}
 
-	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string) error {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
 		deadline, ok := ctx.Deadline()
 		require.True(t, ok)
 		require.LessOrEqual(t, time.Until(deadline), defaultEnrollTimeout)
 		require.Greater(t, time.Until(deadline), 55*time.Second)
+		return nil
+	}
+
+	app := App()
+	app.Writer = &bytes.Buffer{}
+
+	err := app.Run([]string{"fleetint", "enroll", "--endpoint", "https://example.com", "--token", "token"})
+	require.NoError(t, err)
+}
+
+func TestEnrollCommandPassesEffectiveLoopConfig(t *testing.T) {
+	isolateLoopEnv(t)
+
+	originalRunPrecheck := runPrecheck
+	originalEnrollWorkflow := performEnrollWorkflow
+	originalEnvFilePath := fleetintEnvFilePath
+	t.Cleanup(func() {
+		runPrecheck = originalRunPrecheck
+		performEnrollWorkflow = originalEnrollWorkflow
+		fleetintEnvFilePath = originalEnvFilePath
+	})
+
+	runPrecheck = func() (precheck.Result, error) {
+		return precheck.Result{
+			Checks: []precheck.Check{
+				{Name: "gpu-present", Message: "ok", Passed: true},
+			},
+		}, nil
+	}
+	envFilePath := filepath.Join(t.TempDir(), "fleetint.env")
+	require.NoError(t, os.WriteFile(envFilePath, []byte(`
+FLEETINT_INVENTORY_ENABLED="false"
+FLEETINT_INVENTORY_INTERVAL="15m"
+FLEETINT_ATTESTATION_ENABLED="true"
+FLEETINT_ATTESTATION_INTERVAL="6h"
+`), 0o600))
+	fleetintEnvFilePath = envFilePath
+
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
+		require.NotNil(t, cfg)
+		require.NotNil(t, cfg.Inventory)
+		require.False(t, cfg.Inventory.Enabled)
+		require.Equal(t, 15*time.Minute, cfg.Inventory.Interval.Duration)
+		require.NotNil(t, cfg.Attestation)
+		require.True(t, cfg.Attestation.Enabled)
+		require.Equal(t, 6*time.Hour, cfg.Attestation.Interval.Duration)
 		return nil
 	}
 

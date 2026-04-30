@@ -46,6 +46,11 @@ var (
 
 // Enroll runs the full enrollment workflow and performs a best-effort initial inventory sync.
 func Enroll(ctx context.Context, baseEndpoint, sakToken string) error {
+	return EnrollWithConfig(ctx, baseEndpoint, sakToken, nil)
+}
+
+// EnrollWithConfig runs the full enrollment workflow and uses cfg for best-effort inventory metadata.
+func EnrollWithConfig(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
 	baseURL, err := normalizeBackendBaseURL(baseEndpoint)
 	if err != nil {
 		return fmt.Errorf("invalid enrollment endpoint: %w", err)
@@ -65,7 +70,7 @@ func Enroll(ctx context.Context, baseEndpoint, sakToken string) error {
 	syncCtx, cancel := context.WithTimeout(ctx, postEnrollInventorySyncTimeout)
 	defer cancel()
 	if err := runWithContext(syncCtx, func() error {
-		return syncInventoryAfterEnroll(syncCtx)
+		return syncInventoryAfterEnroll(syncCtx, cfg)
 	}); err != nil {
 		log.Logger.Warnw("post-enroll inventory sync failed", "error", err)
 	}
@@ -143,14 +148,17 @@ func (f machineInfoCollectorFunc) Collect(ctx context.Context) (*machineinfo.Mac
 	return f(ctx)
 }
 
-func syncInventoryOnce(ctx context.Context) error {
+func syncInventoryOnce(ctx context.Context, cfg *config.Config) error {
 	state := agentstate.NewSQLite()
 	sink := inventorysink.NewBackendSink(state)
 	allComponents := registry.AllComponentNames()
 
-	cfg, err := config.Default(ctx)
-	if err != nil {
-		return fmt.Errorf("load default config for inventory sync: %w", err)
+	if cfg == nil {
+		var err error
+		cfg, err = config.Default(ctx)
+		if err != nil {
+			return fmt.Errorf("load default config for inventory sync: %w", err)
+		}
 	}
 	retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
 	inventoryEnabled, inventoryIntervalSeconds := cfg.InventoryLoopAgentConfig()

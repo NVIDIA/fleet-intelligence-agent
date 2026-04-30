@@ -25,10 +25,14 @@ import (
 
 	"github.com/urfave/cli"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/enrollment"
 )
 
-var performEnrollWorkflow = enrollment.Enroll
+var (
+	performEnrollWorkflow = enrollment.EnrollWithConfig
+	fleetintEnvFilePath   = config.DefaultEnvFilePath
+)
 
 const defaultEnrollTimeout = time.Minute
 
@@ -102,5 +106,16 @@ func enrollCommand(cliContext *cli.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultEnrollTimeout)
 	defer cancel()
 
-	return performEnrollWorkflow(ctx, baseEndpoint, sakToken)
+	cfg, err := config.Default(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load default config: %w", err)
+	}
+	if err := config.LoadEnvFileDefaults(fleetintEnvFilePath); err != nil {
+		return err
+	}
+	if err := configureLoopConfigFromEnv(cfg); err != nil {
+		return fmt.Errorf("failed to configure loop settings from environment variables: %w", err)
+	}
+
+	return performEnrollWorkflow(ctx, baseEndpoint, sakToken, cfg)
 }
