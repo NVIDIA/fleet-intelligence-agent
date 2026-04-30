@@ -46,10 +46,14 @@ func TestToNodeUpsertRequest(t *testing.T) {
 		ContainerRuntimeVersion: "containerd://1.7.13",
 		NetPrivateIP:            "10.0.0.10",
 		AgentConfig: inventory.AgentConfig{
-			TotalComponents:        30,
-			RetentionPeriodSeconds: 86400,
-			EnabledComponents:      []string{"cpu", "gpu"},
-			DisabledComponents:     []string{"disk"},
+			TotalComponents:            30,
+			RetentionPeriodSeconds:     86400,
+			EnabledComponents:          []string{"cpu", "gpu"},
+			DisabledComponents:         []string{"disk"},
+			InventoryEnabled:           true,
+			InventoryIntervalSeconds:   3600,
+			AttestationEnabled:         true,
+			AttestationIntervalSeconds: 86400,
 		},
 		Resources: inventory.Resources{
 			CPUInfo: inventory.CPUInfo{
@@ -109,6 +113,10 @@ func TestToNodeUpsertRequest(t *testing.T) {
 	require.Equal(t, int64(86400), req.AgentConfig.RetentionPeriodSeconds)
 	require.Equal(t, []string{"cpu", "gpu"}, req.AgentConfig.EnabledComponents)
 	require.Equal(t, []string{"disk"}, req.AgentConfig.DisabledComponents)
+	require.True(t, req.AgentConfig.InventoryEnabled)
+	require.Equal(t, int64(3600), req.AgentConfig.InventoryIntervalSeconds)
+	require.True(t, req.AgentConfig.AttestationEnabled)
+	require.Equal(t, int64(86400), req.AgentConfig.AttestationIntervalSeconds)
 	require.Equal(t, "64", req.Resources.CPUInfo.LogicalCores)
 	require.Equal(t, "1024", req.Resources.MemoryInfo.TotalBytes)
 	require.Equal(t, "H100", req.Resources.GPUInfo.Product)

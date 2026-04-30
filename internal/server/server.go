@@ -435,16 +435,22 @@ func (s *Server) startInventoryLoop(
 
 	allComponents := registry.AllComponentNames()
 	retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
+	inventoryEnabled, inventoryIntervalSeconds := cfg.InventoryLoopAgentConfig()
+	attestationEnabled, attestationIntervalSeconds := cfg.AttestationLoopAgentConfig()
 
 	source := inventorysource.NewMachineInfoSourceWithAgentConfig(
 		inventoryMachineInfoCollectorFunc(func(context.Context) (*machineinfo.MachineInfo, error) {
 			return machineinfo.GetMachineInfo(nvmlInstance, machineinfo.WithDCGMGPUIndexes(dcgmGPUIndexes))
 		}),
 		&inventory.AgentConfig{
-			TotalComponents:        int64(len(allComponents)),
-			RetentionPeriodSeconds: retentionPeriodSeconds,
-			EnabledComponents:      enabledComponents,
-			DisabledComponents:     disabledComponents,
+			TotalComponents:            int64(len(allComponents)),
+			RetentionPeriodSeconds:     retentionPeriodSeconds,
+			EnabledComponents:          enabledComponents,
+			DisabledComponents:         disabledComponents,
+			InventoryEnabled:           inventoryEnabled,
+			InventoryIntervalSeconds:   inventoryIntervalSeconds,
+			AttestationEnabled:         attestationEnabled,
+			AttestationIntervalSeconds: attestationIntervalSeconds,
 		},
 	)
 	sink := inventorysink.NewBackendSink(agentstate.NewSQLite())

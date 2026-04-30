@@ -881,10 +881,26 @@ func TestInventoryAgentConfig(t *testing.T) {
 		APIVersion:      "v1",
 		RetentionPeriod: metav1.Duration{Duration: 24 * time.Hour},
 		Components:      []string{"*", "-memory", "-disk"},
+		Inventory: &InventoryConfig{
+			Enabled:  true,
+			Interval: metav1.Duration{Duration: time.Hour},
+		},
+		Attestation: &AttestationConfig{
+			Enabled:  true,
+			Interval: metav1.Duration{Duration: 24 * time.Hour},
+		},
 	}
 
 	retentionPeriodSeconds, enabled, disabled := cfg.InventoryAgentConfig(allComponents)
 	assert.Equal(t, int64(86400), retentionPeriodSeconds)
 	assert.ElementsMatch(t, []string{"cpu", "gpu"}, enabled)
 	assert.ElementsMatch(t, []string{"memory", "disk"}, disabled)
+
+	inventoryEnabled, inventoryIntervalSeconds := cfg.InventoryLoopAgentConfig()
+	assert.True(t, inventoryEnabled)
+	assert.Equal(t, int64(3600), inventoryIntervalSeconds)
+
+	attestationEnabled, attestationIntervalSeconds := cfg.AttestationLoopAgentConfig()
+	assert.True(t, attestationEnabled)
+	assert.Equal(t, int64(86400), attestationIntervalSeconds)
 }

@@ -48,10 +48,14 @@ type Snapshot struct {
 }
 
 type AgentConfig struct {
-	TotalComponents        int64
-	RetentionPeriodSeconds int64
-	EnabledComponents      []string
-	DisabledComponents     []string
+	TotalComponents            int64
+	RetentionPeriodSeconds     int64
+	EnabledComponents          []string
+	DisabledComponents         []string
+	InventoryEnabled           bool
+	InventoryIntervalSeconds   int64
+	AttestationEnabled         bool
+	AttestationIntervalSeconds int64
 }
 
 type Resources struct {

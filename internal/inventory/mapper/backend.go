@@ -75,10 +75,14 @@ func ToNodeUpsertRequest(s *inventory.Snapshot) *backendclient.NodeUpsertRequest
 	return &backendclient.NodeUpsertRequest{
 		Hostname: s.Hostname,
 		AgentConfig: backendclient.AgentConfig{
-			TotalComponents:        s.AgentConfig.TotalComponents,
-			RetentionPeriodSeconds: s.AgentConfig.RetentionPeriodSeconds,
-			EnabledComponents:      append([]string(nil), s.AgentConfig.EnabledComponents...),
-			DisabledComponents:     append([]string(nil), s.AgentConfig.DisabledComponents...),
+			TotalComponents:            s.AgentConfig.TotalComponents,
+			RetentionPeriodSeconds:     s.AgentConfig.RetentionPeriodSeconds,
+			EnabledComponents:          append([]string(nil), s.AgentConfig.EnabledComponents...),
+			DisabledComponents:         append([]string(nil), s.AgentConfig.DisabledComponents...),
+			InventoryEnabled:           s.AgentConfig.InventoryEnabled,
+			InventoryIntervalSeconds:   s.AgentConfig.InventoryIntervalSeconds,
+			AttestationEnabled:         s.AgentConfig.AttestationEnabled,
+			AttestationIntervalSeconds: s.AgentConfig.AttestationIntervalSeconds,
 		},
 		MachineID:               s.MachineID,
 		SystemUUID:              s.SystemUUID,

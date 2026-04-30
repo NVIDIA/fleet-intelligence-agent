@@ -46,10 +46,14 @@ type NodeResources struct {
 }
 
 type AgentConfig struct {
-	TotalComponents        int64    `json:"totalComponents,omitempty"`
-	RetentionPeriodSeconds int64    `json:"retentionPeriodSeconds,omitempty"`
-	EnabledComponents      []string `json:"enabledComponents,omitempty"`
-	DisabledComponents     []string `json:"disabledComponents,omitempty"`
+	TotalComponents            int64    `json:"totalComponents,omitempty"`
+	RetentionPeriodSeconds     int64    `json:"retentionPeriodSeconds,omitempty"`
+	EnabledComponents          []string `json:"enabledComponents,omitempty"`
+	DisabledComponents         []string `json:"disabledComponents,omitempty"`
+	InventoryEnabled           bool     `json:"inventoryEnabled"`
+	InventoryIntervalSeconds   int64    `json:"inventoryIntervalSeconds,omitempty"`
+	AttestationEnabled         bool     `json:"attestationEnabled"`
+	AttestationIntervalSeconds int64    `json:"attestationIntervalSeconds,omitempty"`
 }
 
 type CPUInfo struct {

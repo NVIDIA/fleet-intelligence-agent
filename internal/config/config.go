@@ -331,6 +331,20 @@ func (config *Config) InventoryAgentConfig(allComponentNames []string) (retentio
 	return int64(config.RetentionPeriod.Seconds()), enabled, disabled
 }
 
+func (config *Config) InventoryLoopAgentConfig() (enabled bool, intervalSeconds int64) {
+	if config == nil || config.Inventory == nil {
+		return false, 0
+	}
+	return config.Inventory.Enabled, int64(config.Inventory.Interval.Seconds())
+}
+
+func (config *Config) AttestationLoopAgentConfig() (enabled bool, intervalSeconds int64) {
+	if config == nil || config.Attestation == nil {
+		return false, 0
+	}
+	return config.Attestation.Enabled, int64(config.Attestation.Interval.Seconds())
+}
+
 // getComponentLists computes enabled/disabled lists from config rules against all available components.
 func (config *Config) getComponentLists(allComponentNames []string) (enabled, disabled []string) {
 	enabled, disabled = []string{}, []string{}
