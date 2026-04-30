@@ -82,9 +82,6 @@ type InventoryConfig struct {
 
 	// Interval is how often to collect and export inventory.
 	Interval metav1.Duration `json:"interval"`
-
-	// Timeout is the maximum duration allowed for one inventory collection/export attempt.
-	Timeout metav1.Duration `json:"timeout"`
 }
 
 // AttestationConfig holds configuration for the periodic attestation loop.
@@ -92,15 +89,8 @@ type AttestationConfig struct {
 	// Enabled controls whether the periodic attestation loop runs.
 	Enabled bool `json:"enabled"`
 
-	// InitialInterval is how often to check enrollment and attempt the first attestation run
-	// before switching to the steady-state interval after the first successful attestation.
-	InitialInterval metav1.Duration `json:"initial_interval"`
-
 	// Interval is how often to run attestation.
 	Interval metav1.Duration `json:"interval"`
-
-	// Timeout is the maximum duration allowed for one attestation nonce/evidence/submit attempt.
-	Timeout metav1.Duration `json:"timeout"`
 }
 
 // HealthExporterConfig holds configuration for the health data exporter
@@ -173,27 +163,12 @@ func (config *Config) Validate() error {
 		return fmt.Errorf("retention_period must be at least 1 minute, got %v", config.RetentionPeriod.Duration)
 	}
 
-	if err := validateLoopConfig("inventory", config.Inventory); err != nil {
+	if err := validateLoopConfig("inventory", config.Inventory, MinInventoryInterval); err != nil {
 		return err
 	}
-	if err := validateLoopConfig("attestation", config.Attestation); err != nil {
+	if err := validateLoopConfig("attestation", config.Attestation, MinAttestationInterval); err != nil {
 		return err
 	}
-	if config.Attestation != nil && config.Attestation.Enabled {
-		if config.Attestation.InitialInterval.Duration <= 0 {
-			return errors.New("attestation.initial_interval is required when attestation is enabled")
-		}
-		if config.Attestation.InitialInterval.Duration < time.Minute {
-			return fmt.Errorf("attestation.initial_interval must be at least 1 minute, got %v", config.Attestation.InitialInterval.Duration)
-		}
-	}
-	if err := validateLoopTimeout("inventory", config.Inventory); err != nil {
-		return err
-	}
-	if err := validateLoopTimeout("attestation", config.Attestation); err != nil {
-		return err
-	}
-
 	// Validate health exporter configuration if present
 	if config.HealthExporter != nil {
 		// Validate health check interval
@@ -229,28 +204,15 @@ func (config *Config) Validate() error {
 func validateLoopConfig(name string, cfg interface {
 	GetEnabled() bool
 	GetInterval() time.Duration
-}) error {
+}, minInterval time.Duration) error {
 	if cfg == nil || !cfg.GetEnabled() {
 		return nil
 	}
 	if cfg.GetInterval() <= 0 {
 		return fmt.Errorf("%s.interval is required when %s is enabled", name, name)
 	}
-	if cfg.GetInterval() < time.Minute {
-		return fmt.Errorf("%s.interval must be at least 1 minute, got %v", name, cfg.GetInterval())
-	}
-	return nil
-}
-
-func validateLoopTimeout(name string, cfg interface {
-	GetEnabled() bool
-	GetTimeout() time.Duration
-}) error {
-	if cfg == nil || !cfg.GetEnabled() {
-		return nil
-	}
-	if cfg.GetTimeout() < 0 {
-		return fmt.Errorf("%s.timeout must not be negative, got %v", name, cfg.GetTimeout())
+	if cfg.GetInterval() < minInterval {
+		return fmt.Errorf("%s.interval must be at least %v, got %v", name, minInterval, cfg.GetInterval())
 	}
 	return nil
 }
@@ -266,13 +228,6 @@ func (c *InventoryConfig) GetInterval() time.Duration {
 	return c.Interval.Duration
 }
 
-func (c *InventoryConfig) GetTimeout() time.Duration {
-	if c == nil {
-		return 0
-	}
-	return c.Timeout.Duration
-}
-
 func (c *AttestationConfig) GetEnabled() bool {
 	return c != nil && c.Enabled
 }
@@ -282,20 +237,6 @@ func (c *AttestationConfig) GetInterval() time.Duration {
 		return 0
 	}
 	return c.Interval.Duration
-}
-
-func (c *AttestationConfig) GetTimeout() time.Duration {
-	if c == nil {
-		return 0
-	}
-	return c.Timeout.Duration
-}
-
-func (c *AttestationConfig) GetInitialInterval() time.Duration {
-	if c == nil {
-		return 0
-	}
-	return c.InitialInterval.Duration
 }
 
 // ShouldEnable returns true if the component should be enabled.

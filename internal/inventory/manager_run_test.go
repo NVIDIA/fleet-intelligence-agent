@@ -112,15 +112,7 @@ func TestSleepWithContext(t *testing.T) {
 	require.ErrorIs(t, sleepWithContext(ctx, time.Hour), context.Canceled)
 }
 
-func TestInventoryJitterHelpers(t *testing.T) {
-	require.Equal(t, time.Duration(0), initialJitterCap(0))
-	require.Equal(t, 15*time.Second, initialJitterCap(time.Minute))
-	require.Equal(t, 30*time.Minute, initialJitterCap(4*time.Hour))
-
-	require.Equal(t, time.Duration(0), retryJitterCap(0))
-	require.Equal(t, 30*time.Second, retryJitterCap(time.Minute))
-	require.Equal(t, 5*time.Minute, retryJitterCap(20*time.Minute))
-
+func TestInventoryStartupJitterHelper(t *testing.T) {
 	require.Equal(t, time.Duration(0), calculateJitter(0))
 	jitter := calculateJitter(50 * time.Millisecond)
 	require.GreaterOrEqual(t, jitter, time.Duration(0))
@@ -152,7 +144,7 @@ func TestManagerRunCollectionTimeoutDoesNotOverlapStuckCollection(t *testing.T) 
 	mgr := NewManager(src, nil, InventoryConfig{Timeout: 10 * time.Millisecond}).(*manager)
 
 	start := time.Now()
-	_, err := mgr.collectOnceForRun(context.Background())
+	_, err := mgr.runAttempt(context.Background())
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Less(t, time.Since(start), time.Second)
 
@@ -162,7 +154,7 @@ func TestManagerRunCollectionTimeoutDoesNotOverlapStuckCollection(t *testing.T) 
 		t.Fatal("timed out waiting for inventory collection to start")
 	}
 
-	_, err = mgr.collectOnceForRun(context.Background())
+	_, err = mgr.runAttempt(context.Background())
 	require.ErrorContains(t, err, "previous inventory collection is still running")
 
 	close(src.release)

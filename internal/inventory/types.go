@@ -133,5 +133,5 @@ type InventoryConfig struct {
 	Interval      time.Duration
 	RetryInterval time.Duration
 	Timeout       time.Duration
-	JitterEnabled bool
+	StartupJitter time.Duration
 }

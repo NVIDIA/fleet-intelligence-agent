@@ -68,9 +68,8 @@ type Submitter interface {
 
 // AttestationConfig controls periodic attestation workflow scheduling.
 type AttestationConfig struct {
-	InitialInterval time.Duration
-	Interval        time.Duration
-	RetryInterval   time.Duration
-	Timeout         time.Duration
-	JitterEnabled   bool
+	Interval      time.Duration
+	RetryInterval time.Duration
+	Timeout       time.Duration
+	StartupJitter time.Duration
 }

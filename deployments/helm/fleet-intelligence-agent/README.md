@@ -35,10 +35,9 @@ Common values (defaults from `values.yaml`):
 | `env.FLEETINT_CHECK_INTERVAL` | `"1m"` | Health check frequency (1s to 24h). |
 | `env.FLEETINT_RETRY_MAX_ATTEMPTS` | `"3"` | Max retry attempts for failed exports. |
 | `env.FLEETINT_INVENTORY_ENABLED` | `"true"` | Enable or disable the inventory loop. |
-| `env.FLEETINT_INVENTORY_INTERVAL` | `"1h"` | Inventory loop interval override. |
+| `env.FLEETINT_INVENTORY_INTERVAL` | `"1h"` | Inventory loop interval override. Minimum: `5m`. |
 | `env.FLEETINT_ATTESTATION_ENABLED` | `"true"` | Enable or disable the attestation loop. |
-| `env.FLEETINT_ATTESTATION_INITIAL_INTERVAL` | `"5m"` | Initial attestation bootstrap interval before the first successful attestation. |
-| `env.FLEETINT_ATTESTATION_INTERVAL` | `"24h"` | Attestation interval override. |
+| `env.FLEETINT_ATTESTATION_INTERVAL` | `"24h"` | Attestation interval override. Minimum: `1h`. |
 | `env.HTTP_PROXY` | `""` | Optional HTTP proxy for outbound requests. |
 | `env.HTTPS_PROXY` | `""` | Optional HTTPS proxy for outbound requests. |
 | `logLevel` | `warn` | Log level. |

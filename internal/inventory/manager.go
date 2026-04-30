@@ -55,28 +55,37 @@ func NewManager(source Source, sink Sink, cfg InventoryConfig) Manager {
 }
 
 func (m *manager) Run(ctx context.Context) error {
-	_, err := m.collectOnceForRun(ctx)
-	if err != nil {
+	if m.config.StartupJitter > 0 {
+		jitter := calculateJitter(m.config.StartupJitter)
+		log.Logger.Infow("adding inventory startup jitter", "jitter_duration", jitter)
+		if err := sleepWithContext(ctx, jitter); err != nil {
+			return err
+		}
+	}
+
+	_, err := m.runAttempt(ctx)
+	if errors.Is(err, ErrNotReady) {
+		log.Logger.Infow("initial inventory collection not ready", "error", err)
+	} else if err != nil {
 		log.Logger.Warnw("initial inventory collection failed", "error", err)
 	}
 	if m.config.Interval <= 0 {
 		return nil
 	}
 	nextInterval := m.nextInterval(err)
-	if m.config.JitterEnabled {
-		nextInterval += calculateJitter(initialJitterCap(nextInterval))
-	}
+	m.logNextRun(err, nextInterval)
 
 	for {
 		if err := sleepWithContext(ctx, nextInterval); err != nil {
 			return err
 		}
-		_, err = m.collectOnceForRun(ctx)
+		_, err = m.runAttempt(ctx)
 		nextInterval = m.nextInterval(err)
+		m.logNextRun(err, nextInterval)
 	}
 }
 
-func (m *manager) collectOnceForRun(ctx context.Context) (*Snapshot, error) {
+func (m *manager) runAttempt(ctx context.Context) (*Snapshot, error) {
 	if m.config.Timeout <= 0 {
 		return m.CollectOnce(ctx)
 	}
@@ -109,14 +118,22 @@ func (m *manager) collectOnceForRun(ctx context.Context) (*Snapshot, error) {
 }
 
 func (m *manager) nextInterval(err error) time.Duration {
-	nextInterval := m.config.Interval
-	if err != nil && m.config.RetryInterval > 0 && m.config.RetryInterval < nextInterval {
-		nextInterval = m.config.RetryInterval
-		if m.config.JitterEnabled {
-			nextInterval += calculateJitter(retryJitterCap(m.config.RetryInterval))
-		}
+	if err != nil && m.config.RetryInterval > 0 {
+		return m.config.RetryInterval
 	}
-	return nextInterval
+	return m.config.Interval
+}
+
+func (m *manager) logNextRun(err error, nextInterval time.Duration) {
+	if err == nil {
+		log.Logger.Infow("inventory attempt succeeded", "next_run_in", nextInterval)
+		return
+	}
+	if errors.Is(err, ErrNotReady) {
+		log.Logger.Infow("inventory attempt not ready", "next_run_in", nextInterval, "error", err)
+		return
+	}
+	log.Logger.Warnw("inventory attempt failed", "next_run_in", nextInterval, "error", err)
 }
 
 func (m *manager) CollectOnce(ctx context.Context) (*Snapshot, error) {
@@ -154,7 +171,7 @@ func (m *manager) CollectOnce(ctx context.Context) (*Snapshot, error) {
 		} else {
 			if err := m.sink.Export(ctx, snap); err != nil {
 				if errors.Is(err, ErrNotReady) {
-					return snap, nil
+					return snap, err
 				}
 				return nil, err
 			}
@@ -201,28 +218,4 @@ func calculateJitter(maxJitter time.Duration) time.Duration {
 		return time.Duration(time.Now().UnixNano()%maxMs) * time.Millisecond
 	}
 	return time.Duration(randomMs.Int64()) * time.Millisecond
-}
-
-func initialJitterCap(interval time.Duration) time.Duration {
-	if interval <= 0 {
-		return 0
-	}
-	jitter := interval / 4
-	const maxInitialJitter = 30 * time.Minute
-	if jitter > maxInitialJitter {
-		return maxInitialJitter
-	}
-	return jitter
-}
-
-func retryJitterCap(retryInterval time.Duration) time.Duration {
-	if retryInterval <= 0 {
-		return 0
-	}
-	jitter := retryInterval / 2
-	const maxRetryJitter = 5 * time.Minute
-	if jitter > maxRetryJitter {
-		return maxRetryJitter
-	}
-	return jitter
 }

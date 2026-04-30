@@ -84,43 +84,44 @@ func (m *manager) Run(ctx context.Context) error {
 	if m.config.Interval <= 0 {
 		return nil
 	}
-	startupInterval := m.config.Interval
-	if m.config.InitialInterval > 0 {
-		startupInterval = m.config.InitialInterval
-	}
-	if m.config.JitterEnabled {
-		jitter := calculateJitter(initialJitterCap(startupInterval))
+	if m.config.StartupJitter > 0 {
+		jitter := calculateJitter(m.config.StartupJitter)
 		log.Logger.Infow("adding initial attestation startup jitter", "jitter_duration", jitter)
 		if err := sleepWithContext(ctx, jitter); err != nil {
 			return err
 		}
 	}
 
-	firstSuccess := false
 	for {
-		_, err := m.collectOnceForRun(ctx)
-		nextInterval := m.config.Interval
-		if err == nil {
-			firstSuccess = true
-		} else {
-			log.Logger.Warnw("attestation workflow failed", "error", err)
-			switch {
-			case !firstSuccess && errors.Is(err, ErrNotEnrolled) && m.config.InitialInterval > 0:
-				nextInterval = m.config.InitialInterval
-			case m.config.RetryInterval > 0 && (nextInterval <= 0 || m.config.RetryInterval < nextInterval):
-				nextInterval = m.config.RetryInterval
-				if m.config.JitterEnabled {
-					nextInterval += calculateJitter(retryJitterCap(m.config.RetryInterval))
-				}
-			}
-		}
+		_, err := m.runAttempt(ctx)
+		nextInterval := m.nextInterval(err)
+		m.logNextRun(err, nextInterval)
 		if err := sleepWithContext(ctx, nextInterval); err != nil {
 			return err
 		}
 	}
 }
 
-func (m *manager) collectOnceForRun(ctx context.Context) (*Result, error) {
+func (m *manager) nextInterval(err error) time.Duration {
+	if err != nil && m.config.RetryInterval > 0 {
+		return m.config.RetryInterval
+	}
+	return m.config.Interval
+}
+
+func (m *manager) logNextRun(err error, nextInterval time.Duration) {
+	if err == nil {
+		log.Logger.Infow("attestation attempt succeeded", "next_run_in", nextInterval)
+		return
+	}
+	if errors.Is(err, ErrNotEnrolled) {
+		log.Logger.Infow("attestation attempt not ready", "next_run_in", nextInterval, "error", err)
+		return
+	}
+	log.Logger.Warnw("attestation attempt failed", "next_run_in", nextInterval, "error", err)
+}
+
+func (m *manager) runAttempt(ctx context.Context) (*Result, error) {
 	if m.config.Timeout <= 0 {
 		return m.CollectOnce(ctx)
 	}
@@ -255,30 +256,6 @@ func calculateJitter(maxJitter time.Duration) time.Duration {
 		return time.Duration(time.Now().UnixNano()%maxMs) * time.Millisecond
 	}
 	return time.Duration(randomMs.Int64()) * time.Millisecond
-}
-
-func initialJitterCap(interval time.Duration) time.Duration {
-	if interval <= 0 {
-		return 0
-	}
-	jitter := interval / 4
-	const maxInitialJitter = 30 * time.Minute
-	if jitter > maxInitialJitter {
-		return maxInitialJitter
-	}
-	return jitter
-}
-
-func retryJitterCap(retryInterval time.Duration) time.Duration {
-	if retryInterval <= 0 {
-		return 0
-	}
-	jitter := retryInterval / 2
-	const maxRetryJitter = 5 * time.Minute
-	if jitter > maxRetryJitter {
-		return maxRetryJitter
-	}
-	return jitter
 }
 
 type backendSubmitter struct {

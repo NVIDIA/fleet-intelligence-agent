@@ -193,9 +193,6 @@ func getInventorySyncTimeout(cfg *config.Config) time.Duration {
 	if cfg == nil || cfg.Inventory == nil || !cfg.Inventory.Enabled {
 		return 0
 	}
-	if cfg.Inventory.Timeout.Duration > 0 {
-		return cfg.Inventory.Timeout.Duration
-	}
 	return config.DefaultInventoryTimeout
 }
 
@@ -209,9 +206,6 @@ func getAttestationInterval(config *config.Config) time.Duration {
 func getAttestationTimeout(cfg *config.Config) time.Duration {
 	if cfg == nil || cfg.Attestation == nil || !cfg.Attestation.Enabled {
 		return 0
-	}
-	if cfg.Attestation.Timeout.Duration > 0 {
-		return cfg.Attestation.Timeout.Duration
 	}
 	return config.DefaultAttestationTimeout
 }
@@ -432,7 +426,12 @@ func (s *Server) startInventoryLoop(
 		log.Logger.Infow("inventory loop disabled, skipping")
 		return
 	}
-	log.Logger.Infow("inventory loop starting", "interval", interval)
+	timeout := getInventorySyncTimeout(cfg)
+	log.Logger.Infow("inventory loop starting",
+		"interval", interval,
+		"retry_interval", inventoryRetryInterval,
+		"timeout", timeout,
+		"startup_jitter", loopStartupJitter)
 
 	allComponents := registry.AllComponentNames()
 	retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
@@ -452,8 +451,8 @@ func (s *Server) startInventoryLoop(
 	manager := inventory.NewManager(source, sink, inventory.InventoryConfig{
 		Interval:      interval,
 		RetryInterval: inventoryRetryInterval,
-		Timeout:       getInventorySyncTimeout(cfg),
-		JitterEnabled: true,
+		Timeout:       timeout,
+		StartupJitter: loopStartupJitter,
 	})
 
 	go func() {
@@ -464,7 +463,8 @@ func (s *Server) startInventoryLoop(
 }
 
 const attestationRetryInterval = 5 * time.Minute
-const inventoryRetryInterval = 1 * time.Minute
+const inventoryRetryInterval = 5 * time.Minute
+const loopStartupJitter = time.Minute
 
 func (s *Server) startAttestationLoop(ctx context.Context, cfg *config.Config) {
 	interval := getAttestationInterval(cfg)
@@ -472,23 +472,25 @@ func (s *Server) startAttestationLoop(ctx context.Context, cfg *config.Config) {
 		log.Logger.Infow("attestation loop disabled, skipping")
 		return
 	}
+	timeout := getAttestationTimeout(cfg)
 	log.Logger.Infow("attestation loop starting",
 		"interval", interval,
-		"initial_interval", cfg.Attestation.InitialInterval.Duration)
+		"retry_interval", attestationRetryInterval,
+		"timeout", timeout,
+		"startup_jitter", loopStartupJitter)
 
 	state := agentstate.NewSQLite()
 	manager := attestation.NewManager(
 		attestation.NewStateNodeUUIDProvider(state),
 		attestation.NewStateJWTProvider(state),
 		attestation.NewStateNonceProvider(state),
-		attestation.NewCLIEvidenceCollector(getAttestationTimeout(cfg)),
+		attestation.NewCLIEvidenceCollector(timeout),
 		attestation.NewStateBackendSubmitter(state),
 		attestation.AttestationConfig{
-			InitialInterval: cfg.Attestation.InitialInterval.Duration,
-			Interval:        interval,
-			RetryInterval:   attestationRetryInterval,
-			Timeout:         getAttestationTimeout(cfg),
-			JitterEnabled:   true,
+			Interval:      interval,
+			RetryInterval: attestationRetryInterval,
+			Timeout:       timeout,
+			StartupJitter: loopStartupJitter,
 		},
 	)
 

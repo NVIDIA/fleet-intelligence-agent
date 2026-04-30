@@ -227,7 +227,7 @@ func configureLoopConfigFromEnv(cfg *config.Config) error {
 		if err := setBoolFromEnv("FLEETINT_INVENTORY_ENABLED", &cfg.Inventory.Enabled, "set inventory enabled from env", "inventory_enabled"); err != nil {
 			return err
 		}
-		if err := setDurationFromEnv("FLEETINT_INVENTORY_INTERVAL", &cfg.Inventory.Interval, "set inventory interval from env", "inventory_interval", time.Minute, 0); err != nil {
+		if err := setDurationFromEnv("FLEETINT_INVENTORY_INTERVAL", &cfg.Inventory.Interval, "set inventory interval from env", "inventory_interval", config.MinInventoryInterval, 0); err != nil {
 			return err
 		}
 	}
@@ -235,10 +235,7 @@ func configureLoopConfigFromEnv(cfg *config.Config) error {
 		if err := setBoolFromEnv("FLEETINT_ATTESTATION_ENABLED", &cfg.Attestation.Enabled, "set attestation enabled from env", "attestation_enabled"); err != nil {
 			return err
 		}
-		if err := setDurationFromEnv("FLEETINT_ATTESTATION_INITIAL_INTERVAL", &cfg.Attestation.InitialInterval, "set attestation initial interval from env", "attestation_initial_interval", time.Minute, 0); err != nil {
-			return err
-		}
-		if err := setDurationFromEnv("FLEETINT_ATTESTATION_INTERVAL", &cfg.Attestation.Interval, "set attestation interval from env", "attestation_interval", time.Minute, 0); err != nil {
+		if err := setDurationFromEnv("FLEETINT_ATTESTATION_INTERVAL", &cfg.Attestation.Interval, "set attestation interval from env", "attestation_interval", config.MinAttestationInterval, 0); err != nil {
 			return err
 		}
 	}

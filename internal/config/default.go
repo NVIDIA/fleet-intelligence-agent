@@ -48,6 +48,12 @@ const (
 
 	// DefaultAttestationTimeout is the maximum duration for one attestation loop attempt.
 	DefaultAttestationTimeout = time.Minute
+
+	// MinInventoryInterval is the shortest supported steady-state inventory interval.
+	MinInventoryInterval = 5 * time.Minute
+
+	// MinAttestationInterval is the shortest supported steady-state attestation interval.
+	MinAttestationInterval = time.Hour
 )
 
 var (
@@ -84,13 +90,10 @@ func Default(ctx context.Context, opts ...OpOption) (*Config, error) {
 		Inventory: &InventoryConfig{
 			Enabled:  true,
 			Interval: metav1.Duration{Duration: 1 * time.Hour},
-			Timeout:  metav1.Duration{Duration: DefaultInventoryTimeout},
 		},
 		Attestation: &AttestationConfig{
-			Enabled:         true,
-			InitialInterval: metav1.Duration{Duration: 5 * time.Minute},
-			Interval:        metav1.Duration{Duration: 24 * time.Hour},
-			Timeout:         metav1.Duration{Duration: DefaultAttestationTimeout},
+			Enabled:  true,
+			Interval: metav1.Duration{Duration: 24 * time.Hour},
 		},
 		NvidiaToolOverwrites: nvidiacommon.ToolOverwrites{
 			InfinibandClassRootDir: options.InfinibandClassRootDir,
