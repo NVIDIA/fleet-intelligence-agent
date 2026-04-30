@@ -77,8 +77,8 @@ func ToNodeUpsertRequest(s *inventory.Snapshot) *backendclient.NodeUpsertRequest
 		AgentConfig: backendclient.AgentConfig{
 			TotalComponents:            s.AgentConfig.TotalComponents,
 			RetentionPeriodSeconds:     s.AgentConfig.RetentionPeriodSeconds,
-			EnabledComponents:          append([]string(nil), s.AgentConfig.EnabledComponents...),
-			DisabledComponents:         append([]string(nil), s.AgentConfig.DisabledComponents...),
+			EnabledComponents:          cloneStringSlice(s.AgentConfig.EnabledComponents),
+			DisabledComponents:         cloneStringSlice(s.AgentConfig.DisabledComponents),
 			InventoryEnabled:           s.AgentConfig.InventoryEnabled,
 			InventoryIntervalSeconds:   s.AgentConfig.InventoryIntervalSeconds,
 			AttestationEnabled:         s.AgentConfig.AttestationEnabled,
@@ -123,4 +123,11 @@ func ToNodeUpsertRequest(s *inventory.Snapshot) *backendclient.NodeUpsertRequest
 			},
 		},
 	}
+}
+
+func cloneStringSlice(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return append([]string{}, values...)
 }

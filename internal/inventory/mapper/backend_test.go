@@ -16,6 +16,7 @@
 package mapper
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -26,6 +27,24 @@ import (
 
 func TestToNodeUpsertRequestNil(t *testing.T) {
 	require.Nil(t, ToNodeUpsertRequest(nil))
+}
+
+func TestToNodeUpsertRequestAgentConfigJSONIncludesZeroValues(t *testing.T) {
+	req := ToNodeUpsertRequest(&inventory.Snapshot{})
+	require.NotNil(t, req)
+
+	data, err := json.Marshal(req.AgentConfig)
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"totalComponents": 0,
+		"retentionPeriodSeconds": 0,
+		"enabledComponents": [],
+		"disabledComponents": [],
+		"inventoryEnabled": false,
+		"inventoryIntervalSeconds": 0,
+		"attestationEnabled": false,
+		"attestationIntervalSeconds": 0
+	}`, string(data))
 }
 
 func TestToNodeUpsertRequest(t *testing.T) {
