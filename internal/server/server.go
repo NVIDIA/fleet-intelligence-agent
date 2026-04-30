@@ -429,9 +429,9 @@ func (s *Server) startInventoryLoop(
 	timeout := getInventorySyncTimeout(cfg)
 	log.Logger.Infow("inventory loop starting",
 		"interval", interval,
-		"retry_interval", inventoryRetryInterval,
+		"retry_interval", inventory.DefaultRetryInterval,
 		"timeout", timeout,
-		"startup_jitter", loopStartupJitter)
+		"startup_jitter", inventory.DefaultStartupJitter)
 
 	allComponents := registry.AllComponentNames()
 	retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
@@ -456,9 +456,9 @@ func (s *Server) startInventoryLoop(
 	sink := inventorysink.NewBackendSink(agentstate.NewSQLite())
 	manager := inventory.NewManager(source, sink, inventory.InventoryConfig{
 		Interval:      interval,
-		RetryInterval: inventoryRetryInterval,
+		RetryInterval: inventory.DefaultRetryInterval,
 		Timeout:       timeout,
-		StartupJitter: loopStartupJitter,
+		StartupJitter: inventory.DefaultStartupJitter,
 	})
 
 	go func() {
@@ -467,10 +467,6 @@ func (s *Server) startInventoryLoop(
 		}
 	}()
 }
-
-const attestationRetryInterval = 5 * time.Minute
-const inventoryRetryInterval = 5 * time.Minute
-const loopStartupJitter = time.Minute
 
 func (s *Server) startAttestationLoop(ctx context.Context, cfg *config.Config) {
 	interval := getAttestationInterval(cfg)
@@ -481,9 +477,9 @@ func (s *Server) startAttestationLoop(ctx context.Context, cfg *config.Config) {
 	timeout := getAttestationTimeout(cfg)
 	log.Logger.Infow("attestation loop starting",
 		"interval", interval,
-		"retry_interval", attestationRetryInterval,
+		"retry_interval", attestation.DefaultRetryInterval,
 		"timeout", timeout,
-		"startup_jitter", loopStartupJitter)
+		"startup_jitter", attestation.DefaultStartupJitter)
 
 	state := agentstate.NewSQLite()
 	manager := attestation.NewManager(
@@ -494,9 +490,9 @@ func (s *Server) startAttestationLoop(ctx context.Context, cfg *config.Config) {
 		attestation.NewStateBackendSubmitter(state),
 		attestation.AttestationConfig{
 			Interval:      interval,
-			RetryInterval: attestationRetryInterval,
+			RetryInterval: attestation.DefaultRetryInterval,
 			Timeout:       timeout,
-			StartupJitter: loopStartupJitter,
+			StartupJitter: attestation.DefaultStartupJitter,
 		},
 	)
 
