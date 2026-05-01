@@ -49,6 +49,7 @@ type fakeSink struct {
 	mu       sync.Mutex
 	exported []*Snapshot
 	ready    chan struct{}
+	err      error
 }
 
 func (f *fakeSink) Export(_ context.Context, snap *Snapshot) error {
@@ -61,6 +62,9 @@ func (f *fakeSink) Export(_ context.Context, snap *Snapshot) error {
 		case f.ready <- struct{}{}:
 		default:
 		}
+	}
+	if f.err != nil {
+		return f.err
 	}
 	return nil
 }
@@ -145,5 +149,18 @@ func TestManagerCollectOnceConcurrentExportSingleHash(t *testing.T) {
 	for err := range errs {
 		require.NoError(t, err)
 	}
+	require.Len(t, sink.exported, 1)
+}
+
+func TestManagerCollectOnceReturnsNotReadyForRetryScheduling(t *testing.T) {
+	src := &fakeSource{
+		snapshots: []*Snapshot{{MachineID: "machine-1", Hostname: "host-a"}},
+	}
+	sink := &fakeSink{err: ErrNotReady}
+	mgr := NewManager(src, sink, InventoryConfig{})
+
+	snap, err := mgr.CollectOnce(context.Background())
+	require.ErrorIs(t, err, ErrNotReady)
+	require.NotNil(t, snap)
 	require.Len(t, sink.exported, 1)
 }

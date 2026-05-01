@@ -136,16 +136,6 @@ func TestGetInventorySyncTimeout(t *testing.T) {
 			expected: 0,
 		},
 		{
-			name: "uses inventory timeout",
-			config: &config.Config{
-				Inventory: &config.InventoryConfig{
-					Enabled: true,
-					Timeout: metav1.Duration{Duration: 45 * time.Second},
-				},
-			},
-			expected: 45 * time.Second,
-		},
-		{
 			name: "falls back to default when enabled and unset",
 			config: &config.Config{
 				Inventory: &config.InventoryConfig{Enabled: true},
@@ -193,11 +183,10 @@ func TestGetAttestationSettings(t *testing.T) {
 				Attestation: &config.AttestationConfig{
 					Enabled:  true,
 					Interval: metav1.Duration{Duration: 6 * time.Hour},
-					Timeout:  metav1.Duration{Duration: 45 * time.Second},
 				},
 			},
 			wantInterval: 6 * time.Hour,
-			wantTimeout:  45 * time.Second,
+			wantTimeout:  config.DefaultAttestationTimeout,
 		},
 		{
 			name: "uses default attestation timeout when enabled and unset",

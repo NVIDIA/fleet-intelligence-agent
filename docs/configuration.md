@@ -52,10 +52,9 @@ These environment variables are read by `fleetint run` at startup.
 | `FLEETINT_CHECK_INTERVAL` | Health check interval for monitored components. Valid range: `1s` to `24h`. | `1m` | `/etc/default/fleetint` | `env.FLEETINT_CHECK_INTERVAL` |
 | `FLEETINT_RETRY_MAX_ATTEMPTS` | Maximum retry attempts for failed exports. Minimum: `0`. | `3` | `/etc/default/fleetint` | `env.FLEETINT_RETRY_MAX_ATTEMPTS` |
 | `FLEETINT_INVENTORY_ENABLED` | Enable or disable the inventory loop. | `true` | `/etc/default/fleetint` | `env.FLEETINT_INVENTORY_ENABLED` |
-| `FLEETINT_INVENTORY_INTERVAL` | Inventory loop interval override. Minimum: `1m`. | `1h` | `/etc/default/fleetint` | `env.FLEETINT_INVENTORY_INTERVAL` |
+| `FLEETINT_INVENTORY_INTERVAL` | Inventory loop interval override. Minimum: `5m`. | `1h` | `/etc/default/fleetint` | `env.FLEETINT_INVENTORY_INTERVAL` |
 | `FLEETINT_ATTESTATION_ENABLED` | Enable or disable the attestation loop. | `true` | `/etc/default/fleetint` | `env.FLEETINT_ATTESTATION_ENABLED` |
-| `FLEETINT_ATTESTATION_INITIAL_INTERVAL` | Initial attestation bootstrap interval before the first successful attestation. Minimum: `1m`. | `5m` | `/etc/default/fleetint` | `env.FLEETINT_ATTESTATION_INITIAL_INTERVAL` |
-| `FLEETINT_ATTESTATION_INTERVAL` | Attestation interval override. | `24h` | `/etc/default/fleetint` | `env.FLEETINT_ATTESTATION_INTERVAL` |
+| `FLEETINT_ATTESTATION_INTERVAL` | Attestation interval override. Minimum: `5m`. | `24h` | `/etc/default/fleetint` | `env.FLEETINT_ATTESTATION_INTERVAL` |
 | `HTTP_PROXY` | Proxy URL for outbound HTTP requests. | empty | `/etc/default/fleetint` | `env.HTTP_PROXY` |
 | `HTTPS_PROXY` | Proxy URL for outbound HTTPS requests. | empty | `/etc/default/fleetint` | `env.HTTPS_PROXY` |
 
@@ -101,7 +100,7 @@ env:
   FLEETINT_COLLECT_INTERVAL: "2m"
   FLEETINT_INCLUDE_EVENTS: "false"
   FLEETINT_CHECK_INTERVAL: "30s"
-  FLEETINT_INVENTORY_INTERVAL: "2m"
+  FLEETINT_INVENTORY_INTERVAL: "5m"
   HTTPS_PROXY: "http://proxy.example.com:3128"
 ```
 

@@ -18,6 +18,7 @@ package attestation
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -142,7 +143,7 @@ func TestManagerRunAndCachedResult(t *testing.T) {
 		&testNonceProvider{nonce: "abc123"},
 		&testEvidenceCollector{resp: &SDKResponse{ResultCode: 200}},
 		submitter,
-		AttestationConfig{InitialInterval: 5 * time.Millisecond, Interval: 5 * time.Millisecond},
+		AttestationConfig{Interval: 5 * time.Millisecond},
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
@@ -164,7 +165,7 @@ func TestManagerRunUsesRetryIntervalOnFailure(t *testing.T) {
 		&testNonceProvider{nonce: "abc123"},
 		collector,
 		submitter,
-		AttestationConfig{InitialInterval: 5 * time.Millisecond, Interval: time.Hour, RetryInterval: 5 * time.Millisecond},
+		AttestationConfig{Interval: time.Hour, RetryInterval: 5 * time.Millisecond},
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
@@ -194,7 +195,7 @@ func TestManagerRunTimeoutDoesNotOverlapStuckWorkflow(t *testing.T) {
 	).(*manager)
 
 	start := time.Now()
-	_, err := mgr.collectOnceForRun(context.Background())
+	_, err := mgr.runAttempt(context.Background())
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Less(t, time.Since(start), time.Second)
 
@@ -204,7 +205,7 @@ func TestManagerRunTimeoutDoesNotOverlapStuckWorkflow(t *testing.T) {
 		t.Fatal("timed out waiting for attestation workflow to start")
 	}
 
-	_, err = mgr.collectOnceForRun(context.Background())
+	_, err = mgr.runAttempt(context.Background())
 	require.ErrorContains(t, err, "previous attestation workflow is still running")
 
 	close(collector.release)
@@ -257,32 +258,27 @@ func TestSleepWithContext(t *testing.T) {
 	require.ErrorIs(t, sleepWithContext(ctx, time.Hour), context.Canceled)
 }
 
-func TestAttestationJitterHelpers(t *testing.T) {
-	require.Equal(t, time.Duration(0), initialJitterCap(0))
-	require.Equal(t, 75*time.Second, initialJitterCap(5*time.Minute))
-	require.Equal(t, 30*time.Minute, initialJitterCap(4*time.Hour))
-
-	require.Equal(t, time.Duration(0), retryJitterCap(0))
-	require.Equal(t, 150*time.Second, retryJitterCap(5*time.Minute))
-	require.Equal(t, 5*time.Minute, retryJitterCap(20*time.Minute))
-
+func TestAttestationStartupJitterHelper(t *testing.T) {
 	require.Equal(t, time.Duration(0), calculateJitter(0))
 	jitter := calculateJitter(50 * time.Millisecond)
 	require.GreaterOrEqual(t, jitter, time.Duration(0))
 	require.Less(t, jitter, 50*time.Millisecond)
 }
 
-func TestManagerRunUsesInitialIntervalWithoutJitterWhenNotEnrolled(t *testing.T) {
+func TestManagerRunUsesRetryIntervalWhenNotEnrolled(t *testing.T) {
+	var attempts atomic.Int32
 	mgr := NewManager(
-		func(context.Context) (string, error) { return "", ErrNotEnrolled },
+		func(context.Context) (string, error) {
+			attempts.Add(1)
+			return "", ErrNotEnrolled
+		},
 		&testJWTProvider{jwt: "jwt-token"},
 		&testNonceProvider{nonce: "abc123"},
 		&testEvidenceCollector{resp: &SDKResponse{ResultCode: 200}},
 		&testSubmitter{},
 		AttestationConfig{
-			InitialInterval: 5 * time.Millisecond,
-			Interval:        time.Hour,
-			RetryInterval:   time.Minute,
+			Interval:      time.Hour,
+			RetryInterval: 5 * time.Millisecond,
 		},
 	)
 
@@ -293,6 +289,7 @@ func TestManagerRunUsesInitialIntervalWithoutJitterWhenNotEnrolled(t *testing.T)
 	elapsed := time.Since(start)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.GreaterOrEqual(t, attempts.Load(), int32(2))
 	require.GreaterOrEqual(t, elapsed, 15*time.Millisecond)
 	require.Less(t, elapsed, 100*time.Millisecond)
 }

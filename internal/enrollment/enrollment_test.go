@@ -67,7 +67,7 @@ func TestEnrollWorkflow(t *testing.T) {
 	}
 
 	syncCalled := false
-	syncInventoryAfterEnroll = func(ctx context.Context) error {
+	syncInventoryAfterEnroll = func(ctx context.Context, cfg *config.Config) error {
 		syncCalled = true
 		return nil
 	}
@@ -79,6 +79,59 @@ func TestEnrollWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "sak-token", client.enrollSAK)
 	require.True(t, syncCalled)
+}
+
+func TestEnrollWorkflowPassesConfigToInventorySync(t *testing.T) {
+	originalFactory := newBackendClient
+	originalSync := syncInventoryAfterEnroll
+	t.Cleanup(func() {
+		newBackendClient = originalFactory
+		syncInventoryAfterEnroll = originalSync
+	})
+
+	newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+		return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
+	}
+
+	wantCfg := &config.Config{
+		Inventory: &config.InventoryConfig{
+			Enabled: true,
+		},
+	}
+	syncInventoryAfterEnroll = func(ctx context.Context, gotCfg *config.Config) error {
+		require.Same(t, wantCfg, gotCfg)
+		return nil
+	}
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	err := EnrollWithConfig(context.Background(), "https://example.com", "sak-token", wantCfg)
+	require.NoError(t, err)
+}
+
+func TestEnrollWorkflowDefaultWrapperUsesNilConfig(t *testing.T) {
+	originalFactory := newBackendClient
+	originalSync := syncInventoryAfterEnroll
+	t.Cleanup(func() {
+		newBackendClient = originalFactory
+		syncInventoryAfterEnroll = originalSync
+	})
+
+	newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+		return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
+	}
+
+	syncInventoryAfterEnroll = func(ctx context.Context, gotCfg *config.Config) error {
+		require.Nil(t, gotCfg)
+		return nil
+	}
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	err := Enroll(context.Background(), "https://example.com", "sak-token")
+	require.NoError(t, err)
 }
 
 func TestEnrollWorkflowNormalizesLegacyEndpointToBaseURL(t *testing.T) {
@@ -94,7 +147,7 @@ func TestEnrollWorkflowNormalizesLegacyEndpointToBaseURL(t *testing.T) {
 		require.Equal(t, "https://example.com", rawBaseURL)
 		return client, nil
 	}
-	syncInventoryAfterEnroll = func(context.Context) error { return nil }
+	syncInventoryAfterEnroll = func(context.Context, *config.Config) error { return nil }
 
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
@@ -165,7 +218,7 @@ func TestEnrollWorkflowErrors(t *testing.T) {
 			require.Equal(t, "http://localhost:8080", rawBaseURL)
 			return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
 		}
-		syncInventoryAfterEnroll = func(context.Context) error { return nil }
+		syncInventoryAfterEnroll = func(context.Context, *config.Config) error { return nil }
 
 		tmpHome := t.TempDir()
 		t.Setenv("HOME", tmpHome)
@@ -187,7 +240,7 @@ func TestEnrollWorkflowInventorySyncFailureIsNonFatal(t *testing.T) {
 	newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
 		return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
 	}
-	syncInventoryAfterEnroll = func(ctx context.Context) error {
+	syncInventoryAfterEnroll = func(ctx context.Context, cfg *config.Config) error {
 		return errors.New("inventory failed")
 	}
 
@@ -215,7 +268,7 @@ func TestEnrollWorkflowInventorySyncTimeoutIsNonFatal(t *testing.T) {
 
 	syncStarted := make(chan struct{})
 	releaseSync := make(chan struct{})
-	syncInventoryAfterEnroll = func(context.Context) error {
+	syncInventoryAfterEnroll = func(context.Context, *config.Config) error {
 		close(syncStarted)
 		<-releaseSync
 		return nil
@@ -252,7 +305,7 @@ func TestEnrollWorkflowInventorySyncUsesRemainingEnrollTimeout(t *testing.T) {
 	}
 	postEnrollInventorySyncTimeout = time.Minute
 
-	syncInventoryAfterEnroll = func(ctx context.Context) error {
+	syncInventoryAfterEnroll = func(ctx context.Context, cfg *config.Config) error {
 		deadline, ok := ctx.Deadline()
 		require.True(t, ok)
 		require.Less(t, time.Until(deadline), 5*time.Second)

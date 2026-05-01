@@ -129,10 +129,14 @@ func TestMachineInfoSourceCollectWithAgentConfig(t *testing.T) {
 			},
 		},
 		&inventory.AgentConfig{
-			TotalComponents:        42,
-			RetentionPeriodSeconds: 86400,
-			EnabledComponents:      []string{"cpu", "gpu"},
-			DisabledComponents:     []string{"disk"},
+			TotalComponents:            42,
+			RetentionPeriodSeconds:     86400,
+			EnabledComponents:          []string{"cpu", "gpu"},
+			DisabledComponents:         []string{"disk"},
+			InventoryEnabled:           true,
+			InventoryIntervalSeconds:   3600,
+			AttestationEnabled:         true,
+			AttestationIntervalSeconds: 86400,
 		},
 	)
 
@@ -144,6 +148,10 @@ func TestMachineInfoSourceCollectWithAgentConfig(t *testing.T) {
 	require.Equal(t, int64(86400), snap.AgentConfig.RetentionPeriodSeconds)
 	require.Equal(t, []string{"cpu", "gpu"}, snap.AgentConfig.EnabledComponents)
 	require.Equal(t, []string{"disk"}, snap.AgentConfig.DisabledComponents)
+	require.True(t, snap.AgentConfig.InventoryEnabled)
+	require.Equal(t, int64(3600), snap.AgentConfig.InventoryIntervalSeconds)
+	require.True(t, snap.AgentConfig.AttestationEnabled)
+	require.Equal(t, int64(86400), snap.AgentConfig.AttestationIntervalSeconds)
 }
 
 func TestMachineInfoSourceCollectIgnoresSystemUUIDForMachineID(t *testing.T) {

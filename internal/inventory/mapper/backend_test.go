@@ -16,6 +16,7 @@
 package mapper
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -26,6 +27,24 @@ import (
 
 func TestToNodeUpsertRequestNil(t *testing.T) {
 	require.Nil(t, ToNodeUpsertRequest(nil))
+}
+
+func TestToNodeUpsertRequestAgentConfigJSONIncludesZeroValues(t *testing.T) {
+	req := ToNodeUpsertRequest(&inventory.Snapshot{})
+	require.NotNil(t, req)
+
+	data, err := json.Marshal(req.AgentConfig)
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"totalComponents": 0,
+		"retentionPeriodSeconds": 0,
+		"enabledComponents": [],
+		"disabledComponents": [],
+		"inventoryEnabled": false,
+		"inventoryIntervalSeconds": 0,
+		"attestationEnabled": false,
+		"attestationIntervalSeconds": 0
+	}`, string(data))
 }
 
 func TestToNodeUpsertRequest(t *testing.T) {
@@ -46,10 +65,14 @@ func TestToNodeUpsertRequest(t *testing.T) {
 		ContainerRuntimeVersion: "containerd://1.7.13",
 		NetPrivateIP:            "10.0.0.10",
 		AgentConfig: inventory.AgentConfig{
-			TotalComponents:        30,
-			RetentionPeriodSeconds: 86400,
-			EnabledComponents:      []string{"cpu", "gpu"},
-			DisabledComponents:     []string{"disk"},
+			TotalComponents:            30,
+			RetentionPeriodSeconds:     86400,
+			EnabledComponents:          []string{"cpu", "gpu"},
+			DisabledComponents:         []string{"disk"},
+			InventoryEnabled:           true,
+			InventoryIntervalSeconds:   3600,
+			AttestationEnabled:         true,
+			AttestationIntervalSeconds: 86400,
 		},
 		Resources: inventory.Resources{
 			CPUInfo: inventory.CPUInfo{
@@ -109,6 +132,10 @@ func TestToNodeUpsertRequest(t *testing.T) {
 	require.Equal(t, int64(86400), req.AgentConfig.RetentionPeriodSeconds)
 	require.Equal(t, []string{"cpu", "gpu"}, req.AgentConfig.EnabledComponents)
 	require.Equal(t, []string{"disk"}, req.AgentConfig.DisabledComponents)
+	require.True(t, req.AgentConfig.InventoryEnabled)
+	require.Equal(t, int64(3600), req.AgentConfig.InventoryIntervalSeconds)
+	require.True(t, req.AgentConfig.AttestationEnabled)
+	require.Equal(t, int64(86400), req.AgentConfig.AttestationIntervalSeconds)
 	require.Equal(t, "64", req.Resources.CPUInfo.LogicalCores)
 	require.Equal(t, "1024", req.Resources.MemoryInfo.TotalBytes)
 	require.Equal(t, "H100", req.Resources.GPUInfo.Product)
