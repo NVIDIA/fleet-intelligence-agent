@@ -22,17 +22,19 @@ import (
 	"net/url"
 	"time"
 
+	pkghost "github.com/NVIDIA/fleet-intelligence-sdk/pkg/host"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
+	"github.com/google/uuid"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory"
-	inventorysink "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/sink"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/mapper"
 	inventorysource "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/source"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/registry"
@@ -41,6 +43,7 @@ import (
 var (
 	newBackendClient               = backendclient.New
 	syncInventoryAfterEnroll       = syncInventoryOnce
+	storeEnrollmentConfig          = storeConfigInMetadata
 	postEnrollInventorySyncTimeout = time.Minute
 )
 
@@ -64,15 +67,22 @@ func EnrollWithConfig(ctx context.Context, baseEndpoint, sakToken string, cfg *c
 	if err != nil {
 		return err
 	}
-	if err := storeConfigInMetadata(ctx, baseURL.String(), jwtToken, sakToken); err != nil {
-		return fmt.Errorf("failed to store configuration: %w", err)
+
+	nodeUUID := resolveNodeUUID(ctx)
+	if nodeUUID == "" {
+		return fmt.Errorf("failed to resolve node UUID")
 	}
+
 	syncCtx, cancel := context.WithTimeout(ctx, postEnrollInventorySyncTimeout)
 	defer cancel()
 	if err := runWithContext(syncCtx, func() error {
-		return syncInventoryAfterEnroll(syncCtx, cfg)
+		return syncInventoryAfterEnroll(syncCtx, client, nodeUUID, jwtToken, cfg)
 	}); err != nil {
-		log.Logger.Warnw("post-enroll inventory sync failed", "error", err)
+		return fmt.Errorf("initial node upsert failed: %w", err)
+	}
+
+	if err := storeEnrollmentConfig(ctx, baseURL.String(), jwtToken, sakToken, nodeUUID); err != nil {
+		return fmt.Errorf("failed to store configuration: %w", err)
 	}
 	return nil
 }
@@ -111,7 +121,7 @@ func normalizeBackendBaseURL(raw string) (*url.URL, error) {
 	return endpoint.ValidateBackendEndpoint(normalized)
 }
 
-func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken string) error {
+func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken, nodeUUID string) error {
 	stateFile, err := config.DefaultStateFile()
 	if err != nil {
 		return fmt.Errorf("failed to get state file path: %w", err)
@@ -139,7 +149,34 @@ func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken stri
 	if err := pkgmetadata.SetMetadata(ctx, dbRW, agentstate.MetadataKeyBackendBaseURL, baseURL); err != nil {
 		return fmt.Errorf("failed to set backend base URL: %w", err)
 	}
+	if err := pkgmetadata.SetMetadata(ctx, dbRW, pkgmetadata.MetadataKeyMachineID, nodeUUID); err != nil {
+		return fmt.Errorf("failed to set node UUID: %w", err)
+	}
 	return nil
+}
+
+func resolveNodeUUID(ctx context.Context) string {
+	state := agentstate.NewSQLite()
+	if existing, ok, err := state.GetNodeUUID(ctx); err == nil && ok && existing != "" {
+		if _, parseErr := uuid.Parse(existing); parseErr == nil {
+			return existing
+		}
+		log.Logger.Warnw("ignoring invalid persisted node UUID", "node_uuid", existing)
+	} else if err != nil {
+		log.Logger.Warnw("failed to read persisted node UUID; generating a new one", "error", err)
+	}
+
+	nodeUUID, err := pkghost.GetDmidecodeUUID(ctx)
+	if err == nil && nodeUUID != "" {
+		if _, parseErr := uuid.Parse(nodeUUID); parseErr == nil {
+			return nodeUUID
+		}
+		log.Logger.Warnw("ignoring invalid hardware node UUID", "node_uuid", nodeUUID)
+	} else if err != nil {
+		log.Logger.Warnw("failed to get hardware node UUID; generating a new one", "error", err)
+	}
+
+	return uuid.NewString()
 }
 
 type machineInfoCollectorFunc func(context.Context) (*machineinfo.MachineInfo, error)
@@ -148,16 +185,33 @@ func (f machineInfoCollectorFunc) Collect(ctx context.Context) (*machineinfo.Mac
 	return f(ctx)
 }
 
-func syncInventoryOnce(ctx context.Context, cfg *config.Config) error {
-	state := agentstate.NewSQLite()
-	sink := inventorysink.NewBackendSink(state)
+type initialNodeUpsertSink struct {
+	client   backendclient.Client
+	nodeUUID string
+	jwt      string
+}
+
+func (s *initialNodeUpsertSink) Export(ctx context.Context, snap *inventory.Snapshot) error {
+	if s.client == nil {
+		return fmt.Errorf("initial node upsert requires backend client")
+	}
+	if s.nodeUUID == "" {
+		return fmt.Errorf("initial node upsert requires node UUID")
+	}
+	if s.jwt == "" {
+		return fmt.Errorf("initial node upsert requires JWT")
+	}
+	return s.client.UpsertNode(ctx, s.nodeUUID, mapper.ToNodeUpsertRequest(snap), s.jwt)
+}
+
+func buildInventorySource(ctx context.Context, cfg *config.Config) (inventory.Source, func(), error) {
 	allComponents := registry.AllComponentNames()
 
 	if cfg == nil {
 		var err error
 		cfg, err = config.Default(ctx)
 		if err != nil {
-			return fmt.Errorf("load default config for inventory sync: %w", err)
+			return nil, nil, fmt.Errorf("load default config for inventory sync: %w", err)
 		}
 	}
 	retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
@@ -166,11 +220,10 @@ func syncInventoryOnce(ctx context.Context, cfg *config.Config) error {
 
 	nvmlInstance, err := nvidianvml.New()
 	if err != nil {
-		return fmt.Errorf("initialize nvml for inventory sync: %w", err)
+		return nil, nil, fmt.Errorf("initialize nvml for inventory sync: %w", err)
 	}
-	defer func() { _ = nvmlInstance.Shutdown() }()
 
-	src := inventorysource.NewMachineInfoSourceWithAgentConfig(
+	return inventorysource.NewMachineInfoSourceWithAgentConfig(
 		machineInfoCollectorFunc(func(context.Context) (*machineinfo.MachineInfo, error) {
 			return machineinfo.GetMachineInfo(nvmlInstance)
 		}),
@@ -184,7 +237,20 @@ func syncInventoryOnce(ctx context.Context, cfg *config.Config) error {
 			AttestationEnabled:         attestationEnabled,
 			AttestationIntervalSeconds: attestationIntervalSeconds,
 		},
-	)
+	), func() { _ = nvmlInstance.Shutdown() }, nil
+}
+
+func syncInventoryOnce(ctx context.Context, client backendclient.Client, nodeUUID, jwt string, cfg *config.Config) error {
+	src, cleanup, err := buildInventorySource(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	sink := &initialNodeUpsertSink{
+		client:   client,
+		nodeUUID: nodeUUID,
+		jwt:      jwt,
+	}
 	manager := inventory.NewManager(src, sink, inventory.InventoryConfig{})
 	_, err = manager.CollectOnce(ctx)
 	return err
