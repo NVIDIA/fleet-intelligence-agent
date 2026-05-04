@@ -562,7 +562,7 @@ func convertStructToOTLPAttributesWithPrefix(v interface{}, prefix string) []*co
 	}
 
 	val := reflect.ValueOf(v)
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			return attributes
 		}
@@ -623,7 +623,7 @@ func convertStructToOTLPAttributesWithPrefix(v interface{}, prefix string) []*co
 				attributes = append(attributes, nestedAttributes...)
 				continue
 			}
-		case reflect.Ptr:
+		case reflect.Pointer:
 			// Handle pointer fields by dereferencing and processing recursively
 			if !field.IsNil() {
 				nestedAttributes := convertStructToOTLPAttributesWithPrefix(field.Interface(), fullFieldName)
