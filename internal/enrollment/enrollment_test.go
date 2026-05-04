@@ -25,14 +25,21 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
+	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
+
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
 
 type fakeBackendClient struct {
-	enrollSAK string
-	enrollJWT string
-	enrollErr error
+	enrollSAK      string
+	enrollJWT      string
+	enrollErr      error
+	upsertNodeUUID string
+	upsertJWT      string
+	upsertReq      *backendclient.NodeUpsertRequest
+	upsertErr      error
 }
 
 func (f *fakeBackendClient) Enroll(_ context.Context, sakToken string) (string, error) {
@@ -40,8 +47,11 @@ func (f *fakeBackendClient) Enroll(_ context.Context, sakToken string) (string, 
 	return f.enrollJWT, f.enrollErr
 }
 
-func (f *fakeBackendClient) UpsertNode(context.Context, string, *backendclient.NodeUpsertRequest, string) error {
-	return nil
+func (f *fakeBackendClient) UpsertNode(_ context.Context, nodeUUID string, req *backendclient.NodeUpsertRequest, jwt string) error {
+	f.upsertNodeUUID = nodeUUID
+	f.upsertReq = req
+	f.upsertJWT = jwt
+	return f.upsertErr
 }
 
 func (f *fakeBackendClient) GetNonce(context.Context, string, string) (*backendclient.NonceResponse, error) {
@@ -67,8 +77,11 @@ func TestEnrollWorkflow(t *testing.T) {
 	}
 
 	syncCalled := false
-	syncInventoryAfterEnroll = func(ctx context.Context, cfg *config.Config) error {
+	syncInventoryAfterEnroll = func(ctx context.Context, gotClient backendclient.Client, nodeUUID, jwt string, cfg *config.Config) error {
 		syncCalled = true
+		require.Same(t, client, gotClient)
+		require.NotEmpty(t, nodeUUID)
+		require.Equal(t, "jwt-token", jwt)
 		return nil
 	}
 
@@ -98,7 +111,10 @@ func TestEnrollWorkflowPassesConfigToInventorySync(t *testing.T) {
 			Enabled: true,
 		},
 	}
-	syncInventoryAfterEnroll = func(ctx context.Context, gotCfg *config.Config) error {
+	syncInventoryAfterEnroll = func(ctx context.Context, gotClient backendclient.Client, nodeUUID, jwt string, gotCfg *config.Config) error {
+		require.NotNil(t, gotClient)
+		require.NotEmpty(t, nodeUUID)
+		require.Equal(t, "jwt-token", jwt)
 		require.Same(t, wantCfg, gotCfg)
 		return nil
 	}
@@ -122,7 +138,10 @@ func TestEnrollWorkflowDefaultWrapperUsesNilConfig(t *testing.T) {
 		return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
 	}
 
-	syncInventoryAfterEnroll = func(ctx context.Context, gotCfg *config.Config) error {
+	syncInventoryAfterEnroll = func(ctx context.Context, gotClient backendclient.Client, nodeUUID, jwt string, gotCfg *config.Config) error {
+		require.NotNil(t, gotClient)
+		require.NotEmpty(t, nodeUUID)
+		require.Equal(t, "jwt-token", jwt)
 		require.Nil(t, gotCfg)
 		return nil
 	}
@@ -147,7 +166,7 @@ func TestEnrollWorkflowNormalizesLegacyEndpointToBaseURL(t *testing.T) {
 		require.Equal(t, "https://example.com", rawBaseURL)
 		return client, nil
 	}
-	syncInventoryAfterEnroll = func(context.Context, *config.Config) error { return nil }
+	syncInventoryAfterEnroll = func(context.Context, backendclient.Client, string, string, *config.Config) error { return nil }
 
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
@@ -165,7 +184,11 @@ func TestEnrollWorkflowErrors(t *testing.T) {
 
 	t.Run("localhost http endpoint allowed", func(t *testing.T) {
 		originalFactory := newBackendClient
-		t.Cleanup(func() { newBackendClient = originalFactory })
+		originalSync := syncInventoryAfterEnroll
+		t.Cleanup(func() {
+			newBackendClient = originalFactory
+			syncInventoryAfterEnroll = originalSync
+		})
 
 		called := false
 		newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
@@ -173,6 +196,7 @@ func TestEnrollWorkflowErrors(t *testing.T) {
 			require.Equal(t, "http://localhost:8080", rawBaseURL)
 			return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
 		}
+		syncInventoryAfterEnroll = func(context.Context, backendclient.Client, string, string, *config.Config) error { return nil }
 
 		tmpHome := t.TempDir()
 		t.Setenv("HOME", tmpHome)
@@ -218,7 +242,7 @@ func TestEnrollWorkflowErrors(t *testing.T) {
 			require.Equal(t, "http://localhost:8080", rawBaseURL)
 			return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
 		}
-		syncInventoryAfterEnroll = func(context.Context, *config.Config) error { return nil }
+		syncInventoryAfterEnroll = func(context.Context, backendclient.Client, string, string, *config.Config) error { return nil }
 
 		tmpHome := t.TempDir()
 		t.Setenv("HOME", tmpHome)
@@ -229,29 +253,40 @@ func TestEnrollWorkflowErrors(t *testing.T) {
 	})
 }
 
-func TestEnrollWorkflowInventorySyncFailureIsNonFatal(t *testing.T) {
+func TestEnrollWorkflowInventorySyncFailureIsFatal(t *testing.T) {
 	originalFactory := newBackendClient
 	originalSync := syncInventoryAfterEnroll
+	originalStore := storeEnrollmentConfig
 	t.Cleanup(func() {
 		newBackendClient = originalFactory
 		syncInventoryAfterEnroll = originalSync
+		storeEnrollmentConfig = originalStore
 	})
 
 	newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
 		return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
 	}
-	syncInventoryAfterEnroll = func(ctx context.Context, cfg *config.Config) error {
+	syncInventoryAfterEnroll = func(ctx context.Context, gotClient backendclient.Client, nodeUUID, jwt string, cfg *config.Config) error {
+		require.NotNil(t, gotClient)
+		require.NotEmpty(t, nodeUUID)
+		require.Equal(t, "jwt-token", jwt)
 		return errors.New("inventory failed")
+	}
+	storeCalled := false
+	storeEnrollmentConfig = func(context.Context, string, string, string, string) error {
+		storeCalled = true
+		return nil
 	}
 
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 
 	err := Enroll(context.Background(), "https://example.com", "sak-token")
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "initial node upsert failed")
+	require.False(t, storeCalled, "enroll should not persist active metadata when initial node upsert fails")
 }
 
-func TestEnrollWorkflowInventorySyncTimeoutIsNonFatal(t *testing.T) {
+func TestEnrollWorkflowInventorySyncTimeoutIsFatal(t *testing.T) {
 	originalFactory := newBackendClient
 	originalSync := syncInventoryAfterEnroll
 	originalTimeout := postEnrollInventorySyncTimeout
@@ -268,7 +303,7 @@ func TestEnrollWorkflowInventorySyncTimeoutIsNonFatal(t *testing.T) {
 
 	syncStarted := make(chan struct{})
 	releaseSync := make(chan struct{})
-	syncInventoryAfterEnroll = func(context.Context, *config.Config) error {
+	syncInventoryAfterEnroll = func(context.Context, backendclient.Client, string, string, *config.Config) error {
 		close(syncStarted)
 		<-releaseSync
 		return nil
@@ -279,7 +314,7 @@ func TestEnrollWorkflowInventorySyncTimeoutIsNonFatal(t *testing.T) {
 
 	start := time.Now()
 	err := Enroll(context.Background(), "https://example.com", "sak-token")
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "initial node upsert failed")
 	require.Less(t, time.Since(start), time.Second)
 
 	select {
@@ -305,7 +340,10 @@ func TestEnrollWorkflowInventorySyncUsesRemainingEnrollTimeout(t *testing.T) {
 	}
 	postEnrollInventorySyncTimeout = time.Minute
 
-	syncInventoryAfterEnroll = func(ctx context.Context, cfg *config.Config) error {
+	syncInventoryAfterEnroll = func(ctx context.Context, gotClient backendclient.Client, nodeUUID, jwt string, cfg *config.Config) error {
+		require.NotNil(t, gotClient)
+		require.NotEmpty(t, nodeUUID)
+		require.Equal(t, "jwt-token", jwt)
 		deadline, ok := ctx.Deadline()
 		require.True(t, ok)
 		require.Less(t, time.Until(deadline), 5*time.Second)
@@ -335,11 +373,19 @@ func TestStoreConfigInMetadataSecuresFreshStateFile(t *testing.T) {
 		"https://example.com",
 		"jwt-token",
 		"sak-token",
+		"550e8400-e29b-41d4-a716-446655440000",
 	)
 	require.NoError(t, err)
 
 	stateFile, err := config.DefaultStateFile()
 	require.NoError(t, err)
+	db, err := sqlite.Open(stateFile, sqlite.WithReadOnly(true))
+	require.NoError(t, err)
+	defer db.Close()
+	machineID, err := pkgmetadata.ReadMachineID(context.Background(), db)
+	require.NoError(t, err)
+	assert.Equal(t, "550e8400-e29b-41d4-a716-446655440000", machineID)
+
 	for _, candidate := range []string{stateFile, stateFile + "-wal", stateFile + "-shm"} {
 		info, err := os.Stat(candidate)
 		if os.IsNotExist(err) {
