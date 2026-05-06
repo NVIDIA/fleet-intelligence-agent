@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -30,32 +31,40 @@ type fakeState struct {
 	baseURL  string
 	jwt      string
 	nodeUUID string
+	enrolled time.Time
 	err      error
 }
 
-func (f fakeState) GetBackendBaseURL(context.Context) (string, bool, error) {
+func (f *fakeState) GetBackendBaseURL(context.Context) (string, bool, error) {
 	if f.err != nil {
 		return "", false, f.err
 	}
 	return f.baseURL, f.baseURL != "", nil
 }
-func (f fakeState) SetBackendBaseURL(context.Context, string) error { return nil }
-func (f fakeState) GetJWT(context.Context) (string, bool, error) {
+func (f *fakeState) SetBackendBaseURL(context.Context, string) error { return nil }
+func (f *fakeState) GetJWT(context.Context) (string, bool, error) {
 	if f.err != nil {
 		return "", false, f.err
 	}
 	return f.jwt, f.jwt != "", nil
 }
-func (f fakeState) SetJWT(context.Context, string) error         { return nil }
-func (f fakeState) GetSAK(context.Context) (string, bool, error) { return "", false, nil }
-func (f fakeState) SetSAK(context.Context, string) error         { return nil }
-func (f fakeState) GetNodeUUID(context.Context) (string, bool, error) {
+func (f *fakeState) SetJWT(context.Context, string) error         { return nil }
+func (f *fakeState) GetSAK(context.Context) (string, bool, error) { return "", false, nil }
+func (f *fakeState) SetSAK(context.Context, string) error         { return nil }
+func (f *fakeState) GetNodeUUID(context.Context) (string, bool, error) {
 	if f.err != nil {
 		return "", false, f.err
 	}
 	return f.nodeUUID, f.nodeUUID != "", nil
 }
-func (f fakeState) SetNodeUUID(context.Context, string) error { return nil }
+func (f *fakeState) SetNodeUUID(context.Context, string) error { return nil }
+func (f *fakeState) GetEnrollmentTime(context.Context) (time.Time, bool, error) {
+	if f.err != nil {
+		return time.Time{}, false, f.err
+	}
+	return f.enrolled, !f.enrolled.IsZero(), nil
+}
+func (f *fakeState) SetEnrollmentTime(context.Context, time.Time) error { return nil }
 
 type fakeClient struct {
 	nodeUUID string
@@ -79,7 +88,7 @@ func (f *fakeClient) UpsertNode(_ context.Context, nodeUUID string, req *backend
 
 func TestBackendSinkExportNotReady(t *testing.T) {
 	s := &backendSink{
-		state:         fakeState{},
+		state:         &fakeState{},
 		clientFactory: backendclient.New,
 	}
 
@@ -91,23 +100,23 @@ func TestBackendSinkExportErrors(t *testing.T) {
 	err := (&backendSink{}).Export(context.Background(), &inventory.Snapshot{})
 	require.ErrorContains(t, err, "agent state")
 
-	err = (&backendSink{state: fakeState{baseURL: "https://example.com", jwt: "jwt"}}).Export(context.Background(), &inventory.Snapshot{})
+	err = (&backendSink{state: &fakeState{baseURL: "https://example.com", jwt: "jwt"}}).Export(context.Background(), &inventory.Snapshot{})
 	require.ErrorContains(t, err, "client factory")
 
 	err = (&backendSink{
-		state:         fakeState{err: errors.New("state error")},
+		state:         &fakeState{err: errors.New("state error")},
 		clientFactory: backendclient.New,
 	}).Export(context.Background(), &inventory.Snapshot{})
 	require.ErrorContains(t, err, "state error")
 
 	err = (&backendSink{
-		state:         fakeState{baseURL: "https://example.com", jwt: "jwt"},
+		state:         &fakeState{baseURL: "https://example.com", jwt: "jwt"},
 		clientFactory: backendclient.New,
 	}).Export(context.Background(), nil)
 	require.ErrorContains(t, err, "inventory snapshot")
 
 	err = (&backendSink{
-		state: fakeState{baseURL: "https://example.com", jwt: "jwt", nodeUUID: "node-1"},
+		state: &fakeState{baseURL: "https://example.com", jwt: "jwt", nodeUUID: "node-1"},
 		clientFactory: func(string) (backendclient.Client, error) {
 			return nil, errors.New("client factory error")
 		},
@@ -116,12 +125,14 @@ func TestBackendSinkExportErrors(t *testing.T) {
 }
 
 func TestBackendSinkExportUsesState(t *testing.T) {
+	enrollmentTime := time.Date(2026, 5, 6, 15, 0, 0, 0, time.UTC)
 	client := &fakeClient{}
 	s := &backendSink{
-		state: fakeState{
+		state: &fakeState{
 			baseURL:  "https://example.com",
 			jwt:      "jwt-token",
 			nodeUUID: "node-1",
+			enrolled: enrollmentTime,
 		},
 		clientFactory: func(string) (backendclient.Client, error) {
 			return client, nil
@@ -137,4 +148,6 @@ func TestBackendSinkExportUsesState(t *testing.T) {
 	require.Equal(t, "jwt-token", client.jwt)
 	require.NotNil(t, client.req)
 	require.Equal(t, "host-a", client.req.Hostname)
+	require.NotNil(t, client.req.EnrolledAt)
+	require.Equal(t, enrollmentTime, *client.req.EnrolledAt)
 }

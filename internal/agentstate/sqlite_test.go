@@ -21,6 +21,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 	"github.com/stretchr/testify/require"
@@ -50,6 +51,9 @@ func TestSQLiteStateRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	err = state.SetNodeUUID(ctx, "node-1")
 	require.NoError(t, err)
+	enrollmentTime := time.Date(2026, 5, 6, 15, 0, 0, 123456789, time.UTC)
+	err = state.SetEnrollmentTime(ctx, enrollmentTime)
+	require.NoError(t, err)
 
 	value, ok, err := state.GetBackendBaseURL(ctx)
 	require.NoError(t, err)
@@ -70,6 +74,11 @@ func TestSQLiteStateRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, "node-1", value)
+
+	gotEnrollmentTime, ok, err := state.GetEnrollmentTime(ctx)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, enrollmentTime, gotEnrollmentTime)
 }
 
 func TestSQLiteStateMissingValue(t *testing.T) {
@@ -112,6 +121,11 @@ func TestSQLiteStateMissingMetadataTableIsTreatedAsAbsent(t *testing.T) {
 		require.False(t, ok)
 		require.Empty(t, value)
 	}
+
+	enrollmentTime, ok, err := state.GetEnrollmentTime(ctx)
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.True(t, enrollmentTime.IsZero())
 }
 
 func TestSQLiteStateSetBackendBaseURLValidatesInput(t *testing.T) {
@@ -123,6 +137,9 @@ func TestSQLiteStateSetBackendBaseURLValidatesInput(t *testing.T) {
 	require.Error(t, err)
 
 	err = state.SetBackendBaseURL(context.Background(), "not-a-url")
+	require.Error(t, err)
+
+	err = state.SetEnrollmentTime(context.Background(), time.Time{})
 	require.Error(t, err)
 }
 

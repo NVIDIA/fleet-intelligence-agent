@@ -64,7 +64,8 @@ func EnrollWithConfig(ctx context.Context, baseEndpoint, sakToken string, cfg *c
 	if err != nil {
 		return err
 	}
-	if err := storeConfigInMetadata(ctx, baseURL.String(), jwtToken, sakToken); err != nil {
+	enrolledAt := time.Now().UTC()
+	if err := storeConfigInMetadata(ctx, baseURL.String(), jwtToken, sakToken, enrolledAt); err != nil {
 		return fmt.Errorf("failed to store configuration: %w", err)
 	}
 	syncCtx, cancel := context.WithTimeout(ctx, postEnrollInventorySyncTimeout)
@@ -111,7 +112,7 @@ func normalizeBackendBaseURL(raw string) (*url.URL, error) {
 	return endpoint.ValidateBackendEndpoint(normalized)
 }
 
-func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken string) error {
+func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken string, enrolledAt time.Time) error {
 	stateFile, err := config.DefaultStateFile()
 	if err != nil {
 		return fmt.Errorf("failed to get state file path: %w", err)
@@ -138,6 +139,9 @@ func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken stri
 	}
 	if err := pkgmetadata.SetMetadata(ctx, dbRW, agentstate.MetadataKeyBackendBaseURL, baseURL); err != nil {
 		return fmt.Errorf("failed to set backend base URL: %w", err)
+	}
+	if err := pkgmetadata.SetMetadata(ctx, dbRW, agentstate.MetadataKeyEnrolledAt, enrolledAt.Format(time.RFC3339Nano)); err != nil {
+		return fmt.Errorf("failed to set enrollment time: %w", err)
 	}
 	return nil
 }

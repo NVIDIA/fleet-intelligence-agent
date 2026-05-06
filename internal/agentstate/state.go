@@ -16,11 +16,15 @@
 // Package agentstate centralizes access to local persisted agent state.
 package agentstate
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 const (
 	MetadataKeyBackendBaseURL = "backend_base_url"
 	MetadataKeySAKToken       = "sak_token"
+	MetadataKeyEnrolledAt     = "enrolled_at"
 )
 
 // State provides local persisted metadata/state access for backend workflows.
@@ -36,4 +40,7 @@ type State interface {
 
 	GetNodeUUID(ctx context.Context) (value string, ok bool, err error)
 	SetNodeUUID(ctx context.Context, value string) error
+
+	GetEnrollmentTime(ctx context.Context) (value time.Time, ok bool, err error)
+	SetEnrollmentTime(ctx context.Context, value time.Time) error
 }
