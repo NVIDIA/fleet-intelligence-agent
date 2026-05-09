@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
@@ -109,6 +110,25 @@ func (s *sqliteState) GetNodeUUID(ctx context.Context) (string, bool, error) {
 
 func (s *sqliteState) SetNodeUUID(ctx context.Context, value string) error {
 	return s.setMetadata(ctx, pkgmetadata.MetadataKeyMachineID, value)
+}
+
+func (s *sqliteState) GetEnrollmentTime(ctx context.Context) (time.Time, bool, error) {
+	value, ok, err := s.getMetadata(ctx, MetadataKeyEnrolledAt)
+	if err != nil || !ok {
+		return time.Time{}, ok, err
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("parse metadata %q: %w", MetadataKeyEnrolledAt, err)
+	}
+	return parsed.UTC(), true, nil
+}
+
+func (s *sqliteState) SetEnrollmentTime(ctx context.Context, value time.Time) error {
+	if value.IsZero() {
+		return fmt.Errorf("enrollment time cannot be zero")
+	}
+	return s.setMetadata(ctx, MetadataKeyEnrolledAt, value.UTC().Format(time.RFC3339Nano))
 }
 
 func (s *sqliteState) getMetadata(ctx context.Context, key string) (string, bool, error) {

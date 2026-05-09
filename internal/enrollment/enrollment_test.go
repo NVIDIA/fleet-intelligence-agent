@@ -335,6 +335,7 @@ func TestStoreConfigInMetadataSecuresFreshStateFile(t *testing.T) {
 		"https://example.com",
 		"jwt-token",
 		"sak-token",
+		time.Now().UTC(),
 	)
 	require.NoError(t, err)
 

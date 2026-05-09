@@ -79,7 +79,15 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 	if err != nil {
 		return fmt.Errorf("create backend client: %w", err)
 	}
-	if err := client.UpsertNode(ctx, nodeUUID, mapper.ToNodeUpsertRequest(snap), jwt); err != nil {
+	req := mapper.ToNodeUpsertRequest(snap)
+	enrollmentTime, ok, err := s.state.GetEnrollmentTime(ctx)
+	if err != nil {
+		log.Logger.Warnw("inventory export continuing without enrollment time", "error", err)
+	} else if ok && !enrollmentTime.IsZero() {
+		normalized := enrollmentTime.UTC()
+		req.EnrolledAt = &normalized
+	}
+	if err := client.UpsertNode(ctx, nodeUUID, req, jwt); err != nil {
 		return err
 	}
 	log.Logger.Infow("inventory exported to backend", "node_uuid", nodeUUID)
