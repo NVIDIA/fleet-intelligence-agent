@@ -42,8 +42,16 @@ jobs:
       - name: Download dependencies
         run: |
           GO_BIN="${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin/go"
-          if [ ! -x "$GO_BIN" ]; then
+          if [ -f "$GO_BIN" ]; then
+            chmod +x "$GO_BIN"
+          else
             GO_BIN="${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin/go"
+            if [ -f "$GO_BIN" ]; then
+              chmod +x "$GO_BIN"
+            else
+              echo "go binary not found in setup-go cache path"
+              exit 1
+            fi
           fi
           "$GO_BIN" mod download
 
