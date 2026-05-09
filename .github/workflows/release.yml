@@ -6,7 +6,8 @@ on:
       - 'v*'  # Triggers on version tags like v1.0.0, v2.1.3, etc.
 
 env:
-  GO_VERSION: '1.26.2'
+  GO_VERSION: '1.26.3'
+  GOTOOLCHAIN: 'local'
 
 permissions:
   contents: write  # Needed for creating GitHub releases

@@ -7,8 +7,9 @@ on:
     branches: [ main, 'release/**' ]
 
 env:
-  GO_VERSION: '1.26.2'
+  GO_VERSION: '1.26.3'
   GOFLAGS: '-trimpath'
+  GOTOOLCHAIN: 'local'
 
 jobs:
   secret-detection:
@@ -57,16 +58,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Debug runner Go env (pre-setup)
-        run: |
-          echo "whoami: $(whoami)"
-          echo "HOME=$HOME"
-          echo "PATH=$PATH"
-          command -v go || true
-          go version || true
-          go env GOPATH GOMODCACHE GOCACHE GOENV GOROOT GOTOOLCHAIN GOVERSION || true
-          ls -la /root/go/pkg/mod/golang.org/toolchain@* || true
 
       - name: Set up Go
         uses: actions/setup-go@v4
