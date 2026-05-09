@@ -28,6 +28,9 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: Force setup-go binary on PATH
+        run: echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin" >> "$GITHUB_PATH"
+
       - name: Set up Helm
         uses: azure/setup-helm@v4
         with:
