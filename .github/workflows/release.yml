@@ -23,16 +23,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Purge broken Go toolcache entry
+        run: rm -rf "${{ runner.tool_cache }}/go/${{ env.GO_VERSION }}"
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
-
-      - name: Force setup-go binary on PATH
-        run: |
-          echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin" >> "$GITHUB_PATH"
-          echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin" >> "$GITHUB_PATH"
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
@@ -40,20 +38,7 @@ jobs:
           version: v3.14.4
 
       - name: Download dependencies
-        run: |
-          GO_BIN="${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin/go"
-          if [ -f "$GO_BIN" ]; then
-            chmod +x "$GO_BIN"
-          else
-            GO_BIN="${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin/go"
-            if [ -f "$GO_BIN" ]; then
-              chmod +x "$GO_BIN"
-            else
-              echo "go binary not found in setup-go cache path"
-              exit 1
-            fi
-          fi
-          "$GO_BIN" mod download
+        run: go mod download
 
       - name: Clean previous dist directory
         run: |
