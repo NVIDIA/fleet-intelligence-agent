@@ -70,7 +70,12 @@ jobs:
           echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin" >> "$GITHUB_PATH"
 
       - name: Download dependencies
-        run: go mod download
+        run: |
+          GO_BIN="${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin/go"
+          if [ ! -x "$GO_BIN" ]; then
+            GO_BIN="${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin/go"
+          fi
+          "$GO_BIN" mod download
 
       - name: Clean previous lint cache
         run: |
@@ -113,7 +118,12 @@ jobs:
           echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin" >> "$GITHUB_PATH"
 
       - name: Download dependencies
-        run: go mod download
+        run: |
+          GO_BIN="${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin/go"
+          if [ ! -x "$GO_BIN" ]; then
+            GO_BIN="${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin/go"
+          fi
+          "$GO_BIN" mod download
 
       - name: Clean previous test artifacts
         run: |
@@ -153,7 +163,12 @@ jobs:
           echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin" >> "$GITHUB_PATH"
 
       - name: Download dependencies
-        run: go mod download
+        run: |
+          GO_BIN="${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin/go"
+          if [ ! -x "$GO_BIN" ]; then
+            GO_BIN="${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin/go"
+          fi
+          "$GO_BIN" mod download
 
       - name: Clean previous build artifacts
         run: |
@@ -205,7 +220,12 @@ jobs:
           echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin" >> "$GITHUB_PATH"
 
       - name: Download dependencies
-        run: go mod download
+        run: |
+          GO_BIN="${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin/go"
+          if [ ! -x "$GO_BIN" ]; then
+            GO_BIN="${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin/go"
+          fi
+          "$GO_BIN" mod download
 
       - name: Run unit tests with coverage
         run: make test
@@ -245,7 +265,12 @@ jobs:
           echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin" >> "$GITHUB_PATH"
 
       - name: Download dependencies
-        run: go mod download
+        run: |
+          GO_BIN="${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin/go"
+          if [ ! -x "$GO_BIN" ]; then
+            GO_BIN="${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin/go"
+          fi
+          "$GO_BIN" mod download
 
       - name: Clean previous dist directory
         run: |
