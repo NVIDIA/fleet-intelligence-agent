@@ -7,10 +7,6 @@ on:
 
 env:
   GO_VERSION: '1.26.3'
-  GOTOOLCHAIN: 'local'
-  GOPATH: ${{ github.workspace }}/.go
-  GOMODCACHE: ${{ github.workspace }}/.go/pkg/mod
-  GOCACHE: ${{ github.workspace }}/.cache/go-build
 
 permissions:
   contents: write  # Needed for creating GitHub releases
