@@ -82,9 +82,8 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 	req := mapper.ToNodeUpsertRequest(snap)
 	enrollmentTime, ok, err := s.state.GetEnrollmentTime(ctx)
 	if err != nil {
-		return err
-	}
-	if ok && !enrollmentTime.IsZero() {
+		log.Logger.Warnw("inventory export continuing without enrollment time", "error", err)
+	} else if ok && !enrollmentTime.IsZero() {
 		normalized := enrollmentTime.UTC()
 		req.EnrolledAt = &normalized
 	}

@@ -28,11 +28,12 @@ import (
 )
 
 type fakeState struct {
-	baseURL  string
-	jwt      string
-	nodeUUID string
-	enrolled time.Time
-	err      error
+	baseURL       string
+	jwt           string
+	nodeUUID      string
+	enrolled      time.Time
+	enrollmentErr error
+	err           error
 }
 
 func (f *fakeState) GetBackendBaseURL(context.Context) (string, bool, error) {
@@ -59,6 +60,9 @@ func (f *fakeState) GetNodeUUID(context.Context) (string, bool, error) {
 }
 func (f *fakeState) SetNodeUUID(context.Context, string) error { return nil }
 func (f *fakeState) GetEnrollmentTime(context.Context) (time.Time, bool, error) {
+	if f.enrollmentErr != nil {
+		return time.Time{}, false, f.enrollmentErr
+	}
 	if f.err != nil {
 		return time.Time{}, false, f.err
 	}
@@ -150,4 +154,27 @@ func TestBackendSinkExportUsesState(t *testing.T) {
 	require.Equal(t, "host-a", client.req.Hostname)
 	require.NotNil(t, client.req.EnrolledAt)
 	require.Equal(t, enrollmentTime, *client.req.EnrolledAt)
+}
+
+func TestBackendSinkExportEnrollmentTimeErrorIsNonFatal(t *testing.T) {
+	client := &fakeClient{}
+	s := &backendSink{
+		state: &fakeState{
+			baseURL:       "https://example.com",
+			jwt:           "jwt-token",
+			nodeUUID:      "node-1",
+			enrollmentErr: errors.New("malformed enrollment timestamp"),
+		},
+		clientFactory: func(string) (backendclient.Client, error) {
+			return client, nil
+		},
+	}
+
+	err := s.Export(context.Background(), &inventory.Snapshot{
+		Hostname:  "host-a",
+		MachineID: "machine-id",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, client.req)
+	require.Nil(t, client.req.EnrolledAt)
 }
