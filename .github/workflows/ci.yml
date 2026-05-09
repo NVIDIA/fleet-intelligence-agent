@@ -65,7 +65,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Force setup-go binary on PATH
-        run: echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin" >> "$GITHUB_PATH"
+        run: |
+          echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin" >> "$GITHUB_PATH"
+          echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin" >> "$GITHUB_PATH"
 
       - name: Download dependencies
         run: go mod download
@@ -106,7 +108,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Force setup-go binary on PATH
-        run: echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin" >> "$GITHUB_PATH"
+        run: |
+          echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin" >> "$GITHUB_PATH"
+          echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin" >> "$GITHUB_PATH"
 
       - name: Download dependencies
         run: go mod download
@@ -144,7 +148,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Force setup-go binary on PATH
-        run: echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin" >> "$GITHUB_PATH"
+        run: |
+          echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin" >> "$GITHUB_PATH"
+          echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin" >> "$GITHUB_PATH"
 
       - name: Download dependencies
         run: go mod download
@@ -194,7 +200,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Force setup-go binary on PATH
-        run: echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin" >> "$GITHUB_PATH"
+        run: |
+          echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin" >> "$GITHUB_PATH"
+          echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin" >> "$GITHUB_PATH"
 
       - name: Download dependencies
         run: go mod download
@@ -232,7 +240,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Force setup-go binary on PATH
-        run: echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin" >> "$GITHUB_PATH"
+        run: |
+          echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/bin" >> "$GITHUB_PATH"
+          echo "${RUNNER_TOOL_CACHE}/go/${GO_VERSION}/x64/go/bin" >> "$GITHUB_PATH"
 
       - name: Download dependencies
         run: go mod download
