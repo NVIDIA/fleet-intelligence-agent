@@ -7,7 +7,6 @@ on:
 
 env:
   GO_VERSION: '1.26.3'
-  GOTOOLCHAIN: 'local'
 
 permissions:
   contents: write  # Needed for creating GitHub releases
@@ -23,14 +22,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Purge broken Go toolcache entry
-        run: rm -rf "${{ runner.tool_cache }}/go/${{ env.GO_VERSION }}"
-
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          check-latest: true
 
       - name: Set up Helm
         uses: azure/setup-helm@v4

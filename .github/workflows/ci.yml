@@ -9,7 +9,6 @@ on:
 env:
   GO_VERSION: '1.26.3'
   GOFLAGS: '-trimpath'
-  GOTOOLCHAIN: 'local'
 
 jobs:
   secret-detection:
@@ -63,10 +62,9 @@ jobs:
         run: rm -rf "${{ runner.tool_cache }}/go/${{ env.GO_VERSION }}"
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          check-latest: true
 
       - name: Download dependencies
         run: go mod download
@@ -105,10 +103,9 @@ jobs:
         run: rm -rf "${{ runner.tool_cache }}/go/${{ env.GO_VERSION }}"
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          check-latest: true
 
       - name: Download dependencies
         run: go mod download
@@ -144,10 +141,9 @@ jobs:
         run: rm -rf "${{ runner.tool_cache }}/go/${{ env.GO_VERSION }}"
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          check-latest: true
 
       - name: Download dependencies
         run: go mod download
@@ -195,10 +191,9 @@ jobs:
         run: rm -rf "${{ runner.tool_cache }}/go/${{ env.GO_VERSION }}"
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          check-latest: true
 
       - name: Download dependencies
         run: go mod download
@@ -234,10 +229,9 @@ jobs:
         run: rm -rf "${{ runner.tool_cache }}/go/${{ env.GO_VERSION }}"
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          check-latest: true
 
       - name: Download dependencies
         run: go mod download
