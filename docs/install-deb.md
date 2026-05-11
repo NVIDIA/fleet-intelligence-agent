@@ -13,7 +13,7 @@ Before installing Fleet Intelligence Agent, ensure the following prerequisites a
 - NVIDIA Datacenter Driver major version `510` or newer is installed
 - Install/upgrade commands are run as `root` or with `sudo`
 - Attestation for the fleetint use case only supports Blackwell and newer GPUs, and applies to non-CC mode systems
-  - Fleetint is supported without attestation for Hopper and newer GPUs.
+  - Fleetint is supported without attestation for Hopper GPUs.
 - For NVSwitch systems (driver branch must match installed datacenter driver):
   - Hopper (pre-4th gen NVSwitch): install `cuda-drivers-fabricmanager-<driver-branch>`
   - Blackwell (4th gen NVSwitch): install `nvidia-open-<driver-branch>` and `nvlink5-<driver-branch>`
