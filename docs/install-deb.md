@@ -4,7 +4,7 @@
 
 Before installing Fleet Intelligence Agent, ensure the following prerequisites are met:
 
-- Configure a NVIDIA package repository for automatic dependency installation.
+- Configure an NVIDIA package repository for automatic dependency installation.
   The following dependencies are required and satisfied by the CUDA (network or local) repository.  
   - `datacenter-gpu-manager-4-proprietary` (DCGM)
   - `nvattest` (NVIDIA Attestation SDK CLI, NVAT)

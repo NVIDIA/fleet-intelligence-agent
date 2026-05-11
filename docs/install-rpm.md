@@ -2,30 +2,24 @@
 
 ## Prerequisites
 
-The Fleet Intelligence Agent RPM package has the following runtime dependencies:
-
-- `datacenter-gpu-manager-4-proprietary` (DCGM)
-- `nvattest` (NVIDIA Attestation SDK CLI, NVAT)
-- `corelib` (NVAT GPU evidence source dependency)
-
 Before installing Fleet Intelligence Agent, ensure the following prerequisites are met:
 
-- NVIDIA package repository is configured (network or local CUDA repository) so `datacenter-gpu-manager-4-proprietary`, `nvattest`, and `corelib` can be installed
+- Configure an NVIDIA package repository for automatic dependency installation.
+  The following dependencies are required and satisfied by the CUDA (network or local) repository.
+  - `datacenter-gpu-manager-4-proprietary` (DCGM)
+  - `nvattest` (NVIDIA Attestation SDK CLI, NVAT)
+  - `corelib` (NVAT GPU evidence source dependency)
 - DCGM HostEngine `4.2.3` or newer
 - NVIDIA Datacenter Driver major version `510` or newer is installed
 - Install/upgrade commands are run as `root` or with `sudo`
 - `dnf-plugins-core` is installed (required for `dnf config-manager`)
 - Attestation for the fleetint use case only supports Blackwell and newer GPUs, and applies to non-CC mode systems
+  - Fleetint is supported without attestation for Hopper and newer GPUs.
 - For NVSwitch systems (driver branch must match installed datacenter driver):
   - Hopper (pre-4th gen NVSwitch): install `nvidia-driver:<driver-branch>/fm`
   - Blackwell (4th gen NVSwitch): install `nvidia-driver-<driver-branch>-open` and `nvlink-<driver-branch>`
 
-References:
-- DCGM: <https://docs.nvidia.com/datacenter/dcgm/latest/user-guide/getting-started.html#installation>
-- Fabric Manager: <https://docs.nvidia.com/datacenter/tesla/fabric-manager-user-guide/index.html#installing-fabric-manager>
-- NVAT (`nvattest`/`corelib`): <https://docs.nvidia.com/attestation/nv-attestation-sdk-cpp/latest/overview.html>
-
-Fleet Intelligence Agent package dependencies (`datacenter-gpu-manager-4-proprietary`, `nvattest`, and `corelib`) are available through NVIDIA's CUDA repository. Before installing Fleet Intelligence Agent, add the appropriate NVIDIA CUDA repository for your system.
+Fleet Intelligence Agent package dependencies are available through NVIDIA's CUDA repository. Before installing Fleet Intelligence Agent, add the appropriate NVIDIA CUDA repository for your system:
 
 Install `dnf-plugins-core` first if `dnf config-manager` is not available:
 
@@ -113,3 +107,8 @@ The service will automatically restart with the new version.
 ```bash
 sudo dnf remove fleetint
 ```
+
+References:
+- DCGM: <https://docs.nvidia.com/datacenter/dcgm/latest/user-guide/getting-started.html#installation>
+- Fabric Manager: <https://docs.nvidia.com/datacenter/tesla/fabric-manager-user-guide/index.html#installing-fabric-manager>
+- NVAT (`nvattest`/`corelib`): <https://docs.nvidia.com/attestation/nv-attestation-sdk-cpp/latest/overview.html>
