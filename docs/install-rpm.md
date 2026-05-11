@@ -14,7 +14,7 @@ Before installing Fleet Intelligence Agent, ensure the following prerequisites a
 - Install/upgrade commands are run as `root` or with `sudo`
 - `dnf-plugins-core` is installed (required for `dnf config-manager`)
 - Attestation for the fleetint use case only supports Blackwell and newer GPUs, and applies to non-CC mode systems
-  - Fleetint is supported without attestation for Hopper and newer GPUs.
+  - Fleetint is supported without attestation for Hopper GPUs.
 - For NVSwitch systems (driver branch must match installed datacenter driver):
   - Hopper (pre-4th gen NVSwitch): install `nvidia-driver:<driver-branch>/fm`
   - Blackwell (4th gen NVSwitch): install `nvidia-driver-<driver-branch>-open` and `nvlink-<driver-branch>`
