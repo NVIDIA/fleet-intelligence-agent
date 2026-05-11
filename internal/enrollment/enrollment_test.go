@@ -106,7 +106,7 @@ func TestEnrollWorkflowPassesConfigToInventorySync(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 
-	err := EnrollWithConfig(context.Background(), "https://example.com", "sak-token", wantCfg)
+	_, err := EnrollWithConfig(context.Background(), "https://example.com", "sak-token", wantCfg)
 	require.NoError(t, err)
 }
 

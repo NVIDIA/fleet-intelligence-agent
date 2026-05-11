@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/enrollment"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/precheck"
 )
 
@@ -107,9 +108,9 @@ func TestEnrollCommandBlocksOnFailedPrecheck(t *testing.T) {
 			},
 		}, nil
 	}
-	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) (enrollment.WorkflowOutcome, error) {
 		enrollmentCalled = true
-		return nil
+		return enrollment.WorkflowOutcome{}, nil
 	}
 
 	out := &bytes.Buffer{}
@@ -142,9 +143,9 @@ func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 			},
 		}, nil
 	}
-	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) (enrollment.WorkflowOutcome, error) {
 		enrollmentCalled = true
-		return nil
+		return enrollment.WorkflowOutcome{}, nil
 	}
 
 	app := App()
@@ -174,12 +175,12 @@ func TestEnrollCommandPassesTimeoutContext(t *testing.T) {
 		}, nil
 	}
 
-	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) (enrollment.WorkflowOutcome, error) {
 		deadline, ok := ctx.Deadline()
 		require.True(t, ok)
 		require.LessOrEqual(t, time.Until(deadline), defaultEnrollTimeout)
 		require.Greater(t, time.Until(deadline), 55*time.Second)
-		return nil
+		return enrollment.WorkflowOutcome{}, nil
 	}
 
 	app := App()
@@ -217,7 +218,7 @@ FLEETINT_ATTESTATION_INTERVAL="6h"
 `), 0o600))
 	fleetintEnvFilePath = envFilePath
 
-	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) (enrollment.WorkflowOutcome, error) {
 		require.NotNil(t, cfg)
 		require.NotNil(t, cfg.Inventory)
 		require.False(t, cfg.Inventory.Enabled)
@@ -225,7 +226,7 @@ FLEETINT_ATTESTATION_INTERVAL="6h"
 		require.NotNil(t, cfg.Attestation)
 		require.True(t, cfg.Attestation.Enabled)
 		require.Equal(t, 6*time.Hour, cfg.Attestation.Interval.Duration)
-		return nil
+		return enrollment.WorkflowOutcome{}, nil
 	}
 
 	app := App()
@@ -233,4 +234,69 @@ FLEETINT_ATTESTATION_INTERVAL="6h"
 
 	err := app.Run([]string{"fleetint", "enroll", "--endpoint", "https://example.com", "--token", "token"})
 	require.NoError(t, err)
+}
+
+func TestEnrollCommandPrintsSuccessSummary(t *testing.T) {
+	useMissingFleetintEnvFile(t)
+
+	originalRunPrecheck := runPrecheck
+	originalEnrollWorkflow := performEnrollWorkflow
+	t.Cleanup(func() {
+		runPrecheck = originalRunPrecheck
+		performEnrollWorkflow = originalEnrollWorkflow
+	})
+
+	runPrecheck = func() (precheck.Result, error) {
+		return precheck.Result{
+			Checks: []precheck.Check{
+				{Name: "gpu-present", Message: "NVIDIA GPU detected", Passed: true},
+			},
+		}, nil
+	}
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) (enrollment.WorkflowOutcome, error) {
+		return enrollment.WorkflowOutcome{}, nil
+	}
+
+	out := &bytes.Buffer{}
+	app := App()
+	app.Writer = out
+
+	err := app.Run([]string{"fleetint", "enroll", "--endpoint", "https://example.com", "--token", "token"})
+	require.NoError(t, err)
+	assert.Contains(t, out.String(), "Agent enrollment succeeded")
+	assert.Contains(t, out.String(), "Initial inventory export succeeded")
+}
+
+func TestEnrollCommandPrintsDegradedSummary(t *testing.T) {
+	useMissingFleetintEnvFile(t)
+
+	originalRunPrecheck := runPrecheck
+	originalEnrollWorkflow := performEnrollWorkflow
+	t.Cleanup(func() {
+		runPrecheck = originalRunPrecheck
+		performEnrollWorkflow = originalEnrollWorkflow
+	})
+
+	runPrecheck = func() (precheck.Result, error) {
+		return precheck.Result{
+			Checks: []precheck.Check{
+				{Name: "gpu-present", Message: "NVIDIA GPU detected", Passed: true},
+			},
+		}, nil
+	}
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) (enrollment.WorkflowOutcome, error) {
+		return enrollment.WorkflowOutcome{
+			InitialInventorySyncError: fmt.Errorf("failed to get machine gpu info"),
+		}, nil
+	}
+
+	out := &bytes.Buffer{}
+	app := App()
+	app.Writer = out
+
+	err := app.Run([]string{"fleetint", "enroll", "--endpoint", "https://example.com", "--token", "token"})
+	require.NoError(t, err)
+	assert.Contains(t, out.String(), "Agent enrollment succeeded")
+	assert.Contains(t, out.String(), "Initial inventory export failed (non-fatal)")
+	assert.Contains(t, out.String(), "backend may have incomplete initial machine inventory")
 }

@@ -44,38 +44,49 @@ var (
 	postEnrollInventorySyncTimeout = time.Minute
 )
 
-// Enroll runs the full enrollment workflow and performs a best-effort initial inventory sync.
-func Enroll(ctx context.Context, baseEndpoint, sakToken string) error {
-	return EnrollWithConfig(ctx, baseEndpoint, sakToken, nil)
+// WorkflowOutcome captures non-fatal post-enrollment workflow results.
+type WorkflowOutcome struct {
+	// InitialInventorySyncError is set when the best-effort initial inventory sync fails.
+	// Enrollment itself still succeeds in this case.
+	InitialInventorySyncError error
 }
 
-// EnrollWithConfig runs the full enrollment workflow and uses cfg for best-effort inventory metadata.
-func EnrollWithConfig(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
+// Enroll runs the full enrollment workflow and performs a best-effort initial inventory sync.
+func Enroll(ctx context.Context, baseEndpoint, sakToken string) error {
+	_, err := EnrollWithConfig(ctx, baseEndpoint, sakToken, nil)
+	return err
+}
+
+// EnrollWithConfig runs enrollment and returns non-fatal post-enroll outcomes.
+func EnrollWithConfig(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) (WorkflowOutcome, error) {
+	outcome := WorkflowOutcome{}
+
 	baseURL, err := normalizeBackendBaseURL(baseEndpoint)
 	if err != nil {
-		return fmt.Errorf("invalid enrollment endpoint: %w", err)
+		return outcome, fmt.Errorf("invalid enrollment endpoint: %w", err)
 	}
 
 	client, err := newBackendClient(baseURL.String())
 	if err != nil {
-		return fmt.Errorf("failed to create backend client: %w", err)
+		return outcome, fmt.Errorf("failed to create backend client: %w", err)
 	}
 	jwtToken, err := client.Enroll(ctx, sakToken)
 	if err != nil {
-		return err
+		return outcome, err
 	}
 	enrolledAt := time.Now().UTC()
 	if err := storeConfigInMetadata(ctx, baseURL.String(), jwtToken, sakToken, enrolledAt); err != nil {
-		return fmt.Errorf("failed to store configuration: %w", err)
+		return outcome, fmt.Errorf("failed to store configuration: %w", err)
 	}
 	syncCtx, cancel := context.WithTimeout(ctx, postEnrollInventorySyncTimeout)
 	defer cancel()
 	if err := runWithContext(syncCtx, func() error {
 		return syncInventoryAfterEnroll(syncCtx, cfg)
 	}); err != nil {
+		outcome.InitialInventorySyncError = err
 		log.Logger.Warnw("post-enroll inventory sync failed", "error", err)
 	}
-	return nil
+	return outcome, nil
 }
 
 func runWithContext(ctx context.Context, fn func() error) error {

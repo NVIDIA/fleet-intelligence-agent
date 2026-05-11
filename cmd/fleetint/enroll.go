@@ -25,6 +25,7 @@ import (
 
 	"github.com/urfave/cli"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/cmdutil"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/enrollment"
 )
@@ -117,5 +118,19 @@ func enrollCommand(cliContext *cli.Context) error {
 		return fmt.Errorf("failed to configure loop settings from environment variables: %w", err)
 	}
 
-	return performEnrollWorkflow(ctx, baseEndpoint, sakToken, cfg)
+	outcome, err := performEnrollWorkflow(ctx, baseEndpoint, sakToken, cfg)
+	if err != nil {
+		return err
+	}
+
+	w := writerFromContext(cliContext)
+	fmt.Fprintf(w, "%s Agent enrollment succeeded\n", cmdutil.CheckMark)
+	if outcome.InitialInventorySyncError != nil {
+		fmt.Fprintf(w, "%s Initial inventory export failed (non-fatal): %v\n", cmdutil.WarningSign, outcome.InitialInventorySyncError)
+		fmt.Fprintf(w, "%s Agent is enrolled, but backend may have incomplete initial machine inventory until retry succeeds\n", cmdutil.WarningSign)
+		return nil
+	}
+
+	fmt.Fprintf(w, "%s Initial inventory export succeeded\n", cmdutil.CheckMark)
+	return nil
 }
