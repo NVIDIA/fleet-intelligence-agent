@@ -85,10 +85,13 @@ func TestToNodeUpsertRequest(t *testing.T) {
 				TotalBytes: 1024,
 			},
 			GPUInfo: inventory.GPUInfo{
-				Product:      "H100",
-				Manufacturer: "NVIDIA",
-				Architecture: "Hopper",
-				Memory:       "80GB",
+				Product:         "H100",
+				Manufacturer:    "NVIDIA",
+				Architecture:    "Hopper",
+				Memory:          "80GB",
+				VisibleGPUCount: 1,
+				NVMLDegraded:    true,
+				NVMLErrors:      []string{"gpu GPU-2: get_serial failed: GPU is lost"},
 				GPUs: []inventory.GPUDevice{{
 					UUID:         "GPU-1",
 					BusID:        "0000:01:00.0",
@@ -140,6 +143,10 @@ func TestToNodeUpsertRequest(t *testing.T) {
 	require.Equal(t, "1024", req.Resources.MemoryInfo.TotalBytes)
 	require.Equal(t, "H100", req.Resources.GPUInfo.Product)
 	require.Equal(t, "NVIDIA", req.Resources.GPUInfo.Manufacturer)
+	require.Equal(t, 1, req.Resources.GPUInfo.VisibleGPUCount)
+	require.True(t, req.Resources.GPUInfo.NVMLDegraded)
+	require.Len(t, req.Resources.GPUInfo.NVMLErrors, 1)
+	require.Contains(t, req.Resources.GPUInfo.NVMLErrors[0], "GPU-2")
 	require.Len(t, req.Resources.GPUInfo.GPUs, 1)
 	require.Equal(t, 7, req.Resources.GPUInfo.GPUs[0].BoardID)
 	require.Equal(t, "/dev/nvme0n1", req.Resources.DiskInfo.ContainerRootDisk)

@@ -64,10 +64,13 @@ func TestMachineInfoSourceCollect(t *testing.T) {
 				TotalBytes: 1024,
 			},
 			GPUInfo: &apiv1.MachineGPUInfo{
-				Product:      "H100",
-				Manufacturer: "NVIDIA",
-				Architecture: "Hopper",
-				Memory:       "80GB",
+				Product:         "H100",
+				Manufacturer:    "NVIDIA",
+				Architecture:    "Hopper",
+				Memory:          "80GB",
+				VisibleGPUCount: 1,
+				NVMLDegraded:    true,
+				NVMLErrors:      []string{"gpu GPU-2: get_serial failed: GPU is lost"},
 				GPUs: []apiv1.MachineGPUInstance{{
 					UUID:         "GPU-1",
 					GPUIndex:     "0",
@@ -112,6 +115,10 @@ func TestMachineInfoSourceCollect(t *testing.T) {
 	require.Equal(t, "Xeon", snap.Resources.CPUInfo.Type)
 	require.Equal(t, uint64(1024), snap.Resources.MemoryInfo.TotalBytes)
 	require.Equal(t, "H100", snap.Resources.GPUInfo.Product)
+	require.Equal(t, 1, snap.Resources.GPUInfo.VisibleGPUCount)
+	require.True(t, snap.Resources.GPUInfo.NVMLDegraded)
+	require.Len(t, snap.Resources.GPUInfo.NVMLErrors, 1)
+	require.Contains(t, snap.Resources.GPUInfo.NVMLErrors[0], "GPU-2")
 	require.Len(t, snap.Resources.GPUInfo.GPUs, 1)
 	require.Equal(t, 7, snap.Resources.GPUInfo.GPUs[0].BoardID)
 	require.Equal(t, "/dev/nvme0n1", snap.Resources.DiskInfo.ContainerRootDisk)

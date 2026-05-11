@@ -69,11 +69,14 @@ type MemoryInfo struct {
 }
 
 type GPUInfo struct {
-	Product      string      `json:"product"`
-	Manufacturer string      `json:"manufacturer"`
-	Architecture string      `json:"architecture"`
-	Memory       string      `json:"memory"`
-	GPUs         []GPUDevice `json:"gpus"`
+	Product         string      `json:"product"`
+	Manufacturer    string      `json:"manufacturer"`
+	Architecture    string      `json:"architecture"`
+	Memory          string      `json:"memory"`
+	VisibleGPUCount int         `json:"visibleGPUCount,omitempty"`
+	NVMLDegraded    bool        `json:"nvmlDegraded,omitempty"`
+	NVMLErrors      []string    `json:"nvmlErrors,omitempty"`
+	GPUs            []GPUDevice `json:"gpus"`
 }
 
 type GPUDevice struct {

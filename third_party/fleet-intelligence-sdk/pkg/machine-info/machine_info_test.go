@@ -13,12 +13,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
+	nvmldevice "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml/device"
 	nvidiadev "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia/dev"
 )
 
@@ -417,6 +419,9 @@ func TestGetMachineGPUInfo_NoDevices(t *testing.T) {
 	// When no devices are present, these fields should be empty
 	assert.Empty(t, info.GPUs)
 	assert.Empty(t, info.Memory)
+	assert.Equal(t, 0, info.VisibleGPUCount)
+	assert.False(t, info.NVMLDegraded)
+	assert.Empty(t, info.NVMLErrors)
 }
 
 func Test_nvmlByteArrayToString(t *testing.T) {
@@ -448,9 +453,111 @@ func TestGetMachineGPUInfo_ChassisSNPerGPU_MockNVML(t *testing.T) {
 	require.NotNil(t, info)
 	require.NotEmpty(t, info.GPUs)
 
-	for _, gpu := range info.GPUs {
-		assert.Equal(t, "1583425610002", gpu.ChassisSN)
+	if nvidianvml.PlatformInfoSupported() {
+		for _, gpu := range info.GPUs {
+			assert.Equal(t, "1583425610002", gpu.ChassisSN)
+		}
+	} else {
+		for _, gpu := range info.GPUs {
+			assert.Empty(t, gpu.ChassisSN)
+		}
 	}
+}
+
+func TestGetMachineGPUInfo_PartialNVMLFailureIsNonFatal(t *testing.T) {
+	t.Parallel()
+
+	const targetUUID = "GPU-failing-device"
+	info, err := GetMachineGPUInfo(&partialFailureMockNVMLInstance{})
+	require.NoError(t, err)
+	require.NotNil(t, info)
+	require.NotEmpty(t, info.GPUs)
+	assert.Equal(t, len(info.GPUs), info.VisibleGPUCount)
+	assert.True(t, info.NVMLDegraded)
+	require.NotEmpty(t, info.NVMLErrors)
+
+	foundInjectedError := false
+	for _, gpuErr := range info.NVMLErrors {
+		if strings.Contains(gpuErr, targetUUID) {
+			foundInjectedError = true
+			assert.NotEmpty(t, gpuErr)
+		}
+	}
+	assert.True(t, foundInjectedError, "expected at least one NVML error for injected GPU UUID")
+}
+
+type partialFailureMockNVMLInstance struct {
+	mockNvmlInstance
+}
+
+func (m *partialFailureMockNVMLInstance) ProductName() string {
+	return "H100"
+}
+
+func (m *partialFailureMockNVMLInstance) Brand() string {
+	return "NVIDIA"
+}
+
+func (m *partialFailureMockNVMLInstance) Architecture() string {
+	return "hopper"
+}
+
+func (m *partialFailureMockNVMLInstance) Devices() map[string]nvmldevice.Device {
+	return map[string]nvmldevice.Device{
+		"GPU-failing-device": &partialFailureMockGPUDevice{},
+	}
+}
+
+type partialFailureMockGPUDevice struct {
+	nvmldevice.Device
+}
+
+func (d *partialFailureMockGPUDevice) PCIBusID() string {
+	return "0000:01:00.0"
+}
+
+func (d *partialFailureMockGPUDevice) GetPCIBusID() (string, error) {
+	return "0000:01:00.0", nil
+}
+
+func (d *partialFailureMockGPUDevice) UUID() string {
+	return "GPU-failing-device"
+}
+
+func (d *partialFailureMockGPUDevice) GetFabricState() (nvmldevice.FabricState, error) {
+	return nvmldevice.FabricState{}, nil
+}
+
+func (d *partialFailureMockGPUDevice) GetPlatformInfo() (nvml.PlatformInfo, nvml.Return) {
+	return nvml.PlatformInfo{}, nvml.SUCCESS
+}
+
+func (d *partialFailureMockGPUDevice) GetMemoryInfo_v2() (nvml.Memory_v2, nvml.Return) {
+	return nvml.Memory_v2{}, nvml.ERROR_UNKNOWN
+}
+
+func (d *partialFailureMockGPUDevice) GetMemoryInfo() (nvml.Memory, nvml.Return) {
+	return nvml.Memory{}, nvml.ERROR_GPU_IS_LOST
+}
+
+func (d *partialFailureMockGPUDevice) GetSerial() (string, nvml.Return) {
+	return "", nvml.ERROR_GPU_IS_LOST
+}
+
+func (d *partialFailureMockGPUDevice) GetMinorNumber() (int, nvml.Return) {
+	return 0, nvml.ERROR_GPU_IS_LOST
+}
+
+func (d *partialFailureMockGPUDevice) GetBoardId() (uint32, nvml.Return) {
+	return 0, nvml.ERROR_GPU_IS_LOST
+}
+
+func (d *partialFailureMockGPUDevice) GetVbiosVersion() (string, nvml.Return) {
+	return "", nvml.ERROR_GPU_IS_LOST
+}
+
+func (d *partialFailureMockGPUDevice) GetIndex() (int, nvml.Return) {
+	return 0, nvml.ERROR_GPU_IS_LOST
 }
 
 // TestGetSystemResourceRootVolumeTotal_Validation tests root volume total validation

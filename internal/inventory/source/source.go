@@ -97,10 +97,15 @@ func (s *machineInfoSource) Collect(ctx context.Context) (*inventory.Snapshot, e
 	}
 	if info.GPUInfo != nil {
 		snap.Resources.GPUInfo = inventory.GPUInfo{
-			Product:      info.GPUInfo.Product,
-			Manufacturer: info.GPUInfo.Manufacturer,
-			Architecture: info.GPUInfo.Architecture,
-			Memory:       info.GPUInfo.Memory,
+			Product:         info.GPUInfo.Product,
+			Manufacturer:    info.GPUInfo.Manufacturer,
+			Architecture:    info.GPUInfo.Architecture,
+			Memory:          info.GPUInfo.Memory,
+			VisibleGPUCount: info.GPUInfo.VisibleGPUCount,
+			NVMLDegraded:    info.GPUInfo.NVMLDegraded,
+		}
+		if len(info.GPUInfo.NVMLErrors) > 0 {
+			snap.Resources.GPUInfo.NVMLErrors = append([]string(nil), info.GPUInfo.NVMLErrors...)
 		}
 		if len(info.GPUInfo.GPUs) > 0 {
 			snap.Resources.GPUInfo.GPUs = make([]inventory.GPUDevice, 0, len(info.GPUInfo.GPUs))

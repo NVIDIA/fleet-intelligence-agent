@@ -78,11 +78,14 @@ type MemoryInfo struct {
 }
 
 type GPUInfo struct {
-	Product      string
-	Manufacturer string
-	Architecture string
-	Memory       string
-	GPUs         []GPUDevice
+	Product         string
+	Manufacturer    string
+	Architecture    string
+	Memory          string
+	VisibleGPUCount int
+	NVMLDegraded    bool
+	NVMLErrors      []string
+	GPUs            []GPUDevice
 }
 
 type GPUDevice struct {

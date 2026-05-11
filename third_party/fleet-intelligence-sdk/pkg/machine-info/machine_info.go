@@ -329,6 +329,18 @@ func GetMachineGPUInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineGPUInfo,
 		Manufacturer: nvmlInstance.Brand(),
 		Architecture: nvmlInstance.Architecture(),
 	}
+	recordNVMLReturnError := func(uuid, stage string, ret nvml.Return) {
+		if ret == nvml.SUCCESS || ret == nvml.ERROR_NOT_SUPPORTED {
+			return
+		}
+		appendGPUCollectionError(info, formatGPUCollectionError(uuid, stage, nvml.ErrorString(ret)))
+	}
+	recordError := func(uuid, stage string, err error) {
+		if err == nil {
+			return
+		}
+		appendGPUCollectionError(info, formatGPUCollectionError(uuid, stage, err.Error()))
+	}
 
 	platformInfoSupported := nvidianvml.PlatformInfoSupported()
 
@@ -342,6 +354,7 @@ func GetMachineGPUInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineGPUInfo,
 			if ret == nvml.SUCCESS {
 				chassisSN = nvmlByteArrayToString(pi.ChassisSerialNumber[:])
 			} else if ret != nvml.ERROR_NOT_SUPPORTED {
+				recordNVMLReturnError(uuid, "get_platform_info", ret)
 				log.Logger.Debugw("failed to get NVML platform info", "uuid", uuid, "error", nvml.ErrorString(ret))
 			}
 		}
@@ -349,17 +362,17 @@ func GetMachineGPUInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineGPUInfo,
 		if info.Memory == "" {
 			gpuMemory, err := nvidiamemory.GetMemory(uuid, dev, productName, mem.VirtualMemoryWithContext)
 			if err != nil {
-				return nil, err
+				recordError(uuid, "get_memory", err)
+			} else {
+				qty := resource.NewQuantity(int64(gpuMemory.TotalBytes), resource.DecimalSI)
+				info.Memory = qty.String()
 			}
-
-			qty := resource.NewQuantity(int64(gpuMemory.TotalBytes), resource.DecimalSI)
-			info.Memory = qty.String()
 		}
 
 		serialID, ret := dev.GetSerial()
 		if ret != nvml.SUCCESS {
 			if ret != nvml.ERROR_NOT_SUPPORTED {
-				return nil, fmt.Errorf("failed to get serial id: %v", nvml.ErrorString(ret))
+				recordNVMLReturnError(uuid, "get_serial", ret)
 			}
 		}
 
@@ -367,7 +380,7 @@ func GetMachineGPUInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineGPUInfo,
 		minorID, ret = dev.GetMinorNumber()
 		if ret != nvml.SUCCESS {
 			if ret != nvml.ERROR_NOT_SUPPORTED {
-				return nil, fmt.Errorf("failed to get minor id: %v", nvml.ErrorString(ret))
+				recordNVMLReturnError(uuid, "get_minor_id", ret)
 			}
 			minorID = -1 // set to -1 when not supported
 		}
@@ -376,19 +389,20 @@ func GetMachineGPUInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineGPUInfo,
 		boardID, ret = dev.GetBoardId()
 		if ret != nvml.SUCCESS {
 			if ret != nvml.ERROR_NOT_SUPPORTED {
-				return nil, fmt.Errorf("failed to get board id: %v", nvml.ErrorString(ret))
+				recordNVMLReturnError(uuid, "get_board_id", ret)
 			}
 			boardID = 0 // set to 0 when not supported
 		}
 
 		busID, err := dev.GetPCIBusID()
 		if err != nil {
-			return nil, err
+			recordError(uuid, "get_pci_bus_id", err)
 		}
 
 		vbios, ret := dev.GetVbiosVersion()
 		vbiosVersion := ""
 		if ret != nvml.SUCCESS {
+			recordNVMLReturnError(uuid, "get_vbios_version", ret)
 			log.Logger.Debugw("failed to get VBIOS version", "uuid", uuid, "error", nvml.ErrorString(ret))
 		} else {
 			vbiosVersion = vbios
@@ -397,6 +411,7 @@ func GetMachineGPUInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineGPUInfo,
 		gpuIndex := ""
 		idx, ret := dev.GetIndex()
 		if ret != nvml.SUCCESS {
+			recordNVMLReturnError(uuid, "get_index", ret)
 			log.Logger.Debugw("failed to get GPU index", "uuid", uuid, "error", nvml.ErrorString(ret))
 		} else {
 			gpuIndex = strconv.Itoa(idx)
@@ -413,8 +428,34 @@ func GetMachineGPUInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineGPUInfo,
 			ChassisSN:    chassisSN,
 		})
 	}
+	info.VisibleGPUCount = len(info.GPUs)
 
 	return info, nil
+}
+
+func appendGPUCollectionError(info *apiv1.MachineGPUInfo, message string) {
+	if info == nil {
+		return
+	}
+	info.NVMLDegraded = true
+	info.NVMLErrors = append(info.NVMLErrors, strings.TrimSpace(message))
+}
+
+func formatGPUCollectionError(uuid, stage, message string) string {
+	msg := strings.TrimSpace(message)
+	if msg == "" {
+		msg = "unknown error"
+	}
+	switch {
+	case uuid != "" && stage != "":
+		return fmt.Sprintf("gpu %s: %s failed: %s", uuid, stage, msg)
+	case uuid != "":
+		return fmt.Sprintf("gpu %s: %s", uuid, msg)
+	case stage != "":
+		return fmt.Sprintf("%s failed: %s", stage, msg)
+	default:
+		return msg
+	}
 }
 
 func nvmlByteArrayToString(b []uint8) string {

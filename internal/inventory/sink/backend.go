@@ -80,6 +80,13 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 		return fmt.Errorf("create backend client: %w", err)
 	}
 	req := mapper.ToNodeUpsertRequest(snap)
+	if snap.Resources.GPUInfo.NVMLDegraded {
+		log.Logger.Warnw("inventory export includes degraded NVML GPU visibility",
+			"node_uuid", nodeUUID,
+			"visible_gpu_count", snap.Resources.GPUInfo.VisibleGPUCount,
+			"nvml_error_count", len(snap.Resources.GPUInfo.NVMLErrors),
+		)
+	}
 	enrollmentTime, ok, err := s.state.GetEnrollmentTime(ctx)
 	if err != nil {
 		log.Logger.Warnw("inventory export continuing without enrollment time", "error", err)

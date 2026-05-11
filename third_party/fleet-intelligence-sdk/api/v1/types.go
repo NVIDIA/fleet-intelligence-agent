@@ -397,6 +397,15 @@ type MachineGPUInfo struct {
 
 	// GPUs is the GPU info of the machine.
 	GPUs []MachineGPUInstance `json:"gpus,omitempty"`
+
+	// VisibleGPUCount is the number of GPUs with inventory details successfully exported.
+	VisibleGPUCount int `json:"visibleGPUCount,omitempty"`
+
+	// NVMLDegraded indicates one or more NVML calls failed during GPU inventory collection.
+	NVMLDegraded bool `json:"nvmlDegraded,omitempty"`
+
+	// NVMLErrors captures human-readable NVML collection failures.
+	NVMLErrors []string `json:"nvmlErrors,omitempty"`
 }
 
 type MachineGPUInstance struct {
