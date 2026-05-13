@@ -13,12 +13,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
+	nvmldevice "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml/device"
 	nvidiadev "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia/dev"
 )
 
@@ -448,9 +450,91 @@ func TestGetMachineGPUInfo_ChassisSNPerGPU_MockNVML(t *testing.T) {
 	require.NotNil(t, info)
 	require.NotEmpty(t, info.GPUs)
 
-	for _, gpu := range info.GPUs {
-		assert.Equal(t, "1583425610002", gpu.ChassisSN)
+	if nvidianvml.PlatformInfoSupported() {
+		for _, gpu := range info.GPUs {
+			assert.Equal(t, "1583425610002", gpu.ChassisSN)
+		}
+	} else {
+		for _, gpu := range info.GPUs {
+			assert.Empty(t, gpu.ChassisSN)
+		}
 	}
+}
+
+func TestGetMachineGPUInfo_PartialNVMLFailureIsNonFatal(t *testing.T) {
+	t.Parallel()
+
+	info, err := GetMachineGPUInfo(&partialFailureMockNVMLInstance{})
+	require.NoError(t, err)
+	require.NotNil(t, info)
+	require.Len(t, info.GPUs, 1)
+	require.Equal(t, "GPU-failing-device", info.GPUs[0].UUID)
+}
+
+type partialFailureMockNVMLInstance struct {
+	nvidianvml.Instance
+}
+
+func (m *partialFailureMockNVMLInstance) ProductName() string {
+	return "H100"
+}
+
+func (m *partialFailureMockNVMLInstance) Brand() string {
+	return "NVIDIA"
+}
+
+func (m *partialFailureMockNVMLInstance) Architecture() string {
+	return "hopper"
+}
+
+func (m *partialFailureMockNVMLInstance) Devices() map[string]nvmldevice.Device {
+	return map[string]nvmldevice.Device{
+		"GPU-failing-device": &partialFailureMockGPUDevice{},
+	}
+}
+
+type partialFailureMockGPUDevice struct {
+	nvmldevice.Device
+}
+
+func (d *partialFailureMockGPUDevice) PCIBusID() string {
+	return "0000:01:00.0"
+}
+
+func (d *partialFailureMockGPUDevice) GetPlatformInfo() (nvml.PlatformInfo, nvml.Return) {
+	return nvml.PlatformInfo{}, nvml.ERROR_GPU_IS_LOST
+}
+
+func (d *partialFailureMockGPUDevice) GetMemoryInfo_v2() (nvml.Memory_v2, nvml.Return) {
+	return nvml.Memory_v2{}, nvml.ERROR_UNKNOWN
+}
+
+func (d *partialFailureMockGPUDevice) GetMemoryInfo() (nvml.Memory, nvml.Return) {
+	return nvml.Memory{}, nvml.ERROR_GPU_IS_LOST
+}
+
+func (d *partialFailureMockGPUDevice) GetSerial() (string, nvml.Return) {
+	return "", nvml.ERROR_GPU_IS_LOST
+}
+
+func (d *partialFailureMockGPUDevice) GetMinorNumber() (int, nvml.Return) {
+	return 0, nvml.ERROR_GPU_IS_LOST
+}
+
+func (d *partialFailureMockGPUDevice) GetBoardId() (uint32, nvml.Return) {
+	return 0, nvml.ERROR_GPU_IS_LOST
+}
+
+func (d *partialFailureMockGPUDevice) GetPCIBusID() (string, error) {
+	return "0000:01:00.0", fmt.Errorf("gpu lost")
+}
+
+func (d *partialFailureMockGPUDevice) GetVbiosVersion() (string, nvml.Return) {
+	return "", nvml.ERROR_GPU_IS_LOST
+}
+
+func (d *partialFailureMockGPUDevice) GetIndex() (int, nvml.Return) {
+	return 0, nvml.ERROR_GPU_IS_LOST
 }
 
 // TestGetSystemResourceRootVolumeTotal_Validation tests root volume total validation

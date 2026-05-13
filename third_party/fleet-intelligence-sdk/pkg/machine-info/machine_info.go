@@ -22,6 +22,7 @@ import (
 
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
 	nvidiamemory "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/memory"
+	componentnvml "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/nvml"
 	componentcontainerd "github.com/NVIDIA/fleet-intelligence-sdk/components/containerd"
 	componenttailscale "github.com/NVIDIA/fleet-intelligence-sdk/components/tailscale"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/asn"
@@ -329,6 +330,14 @@ func GetMachineGPUInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineGPUInfo,
 		Manufacturer: nvmlInstance.Brand(),
 		Architecture: nvmlInstance.Architecture(),
 	}
+	collectionErrors := make([]string, 0)
+	appendCollectionError := func(uuid, stage, message string) {
+		msg := strings.TrimSpace(message)
+		if msg == "" {
+			msg = "unknown error"
+		}
+		collectionErrors = append(collectionErrors, fmt.Sprintf("gpu %s: %s failed: %s", uuid, stage, msg))
+	}
 
 	platformInfoSupported := nvidianvml.PlatformInfoSupported()
 
@@ -349,17 +358,17 @@ func GetMachineGPUInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineGPUInfo,
 		if info.Memory == "" {
 			gpuMemory, err := nvidiamemory.GetMemory(uuid, dev, productName, mem.VirtualMemoryWithContext)
 			if err != nil {
-				return nil, err
+				appendCollectionError(uuid, "get_memory", err.Error())
+			} else {
+				qty := resource.NewQuantity(int64(gpuMemory.TotalBytes), resource.DecimalSI)
+				info.Memory = qty.String()
 			}
-
-			qty := resource.NewQuantity(int64(gpuMemory.TotalBytes), resource.DecimalSI)
-			info.Memory = qty.String()
 		}
 
 		serialID, ret := dev.GetSerial()
 		if ret != nvml.SUCCESS {
 			if ret != nvml.ERROR_NOT_SUPPORTED {
-				return nil, fmt.Errorf("failed to get serial id: %v", nvml.ErrorString(ret))
+				appendCollectionError(uuid, "get_serial", nvml.ErrorString(ret))
 			}
 		}
 
@@ -367,7 +376,7 @@ func GetMachineGPUInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineGPUInfo,
 		minorID, ret = dev.GetMinorNumber()
 		if ret != nvml.SUCCESS {
 			if ret != nvml.ERROR_NOT_SUPPORTED {
-				return nil, fmt.Errorf("failed to get minor id: %v", nvml.ErrorString(ret))
+				appendCollectionError(uuid, "get_minor_id", nvml.ErrorString(ret))
 			}
 			minorID = -1 // set to -1 when not supported
 		}
@@ -376,19 +385,20 @@ func GetMachineGPUInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineGPUInfo,
 		boardID, ret = dev.GetBoardId()
 		if ret != nvml.SUCCESS {
 			if ret != nvml.ERROR_NOT_SUPPORTED {
-				return nil, fmt.Errorf("failed to get board id: %v", nvml.ErrorString(ret))
+				appendCollectionError(uuid, "get_board_id", nvml.ErrorString(ret))
 			}
 			boardID = 0 // set to 0 when not supported
 		}
 
 		busID, err := dev.GetPCIBusID()
 		if err != nil {
-			return nil, err
+			appendCollectionError(uuid, "get_pci_bus_id", err.Error())
 		}
 
 		vbios, ret := dev.GetVbiosVersion()
 		vbiosVersion := ""
 		if ret != nvml.SUCCESS {
+			appendCollectionError(uuid, "get_vbios_version", nvml.ErrorString(ret))
 			log.Logger.Debugw("failed to get VBIOS version", "uuid", uuid, "error", nvml.ErrorString(ret))
 		} else {
 			vbiosVersion = vbios
@@ -397,6 +407,7 @@ func GetMachineGPUInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineGPUInfo,
 		gpuIndex := ""
 		idx, ret := dev.GetIndex()
 		if ret != nvml.SUCCESS {
+			appendCollectionError(uuid, "get_index", nvml.ErrorString(ret))
 			log.Logger.Debugw("failed to get GPU index", "uuid", uuid, "error", nvml.ErrorString(ret))
 		} else {
 			gpuIndex = strconv.Itoa(idx)
@@ -413,6 +424,7 @@ func GetMachineGPUInfo(nvmlInstance nvidianvml.Instance) (*apiv1.MachineGPUInfo,
 			ChassisSN:    chassisSN,
 		})
 	}
+	componentnvml.RunCheckWithErrors(collectionErrors)
 
 	return info, nil
 }
