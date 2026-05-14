@@ -36,6 +36,7 @@ import (
 	inventorysource "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/source"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/registry"
+	agenttag "github.com/NVIDIA/fleet-intelligence-agent/internal/tag"
 )
 
 var (
@@ -51,6 +52,11 @@ func Enroll(ctx context.Context, baseEndpoint, sakToken string) error {
 
 // EnrollWithConfig runs the full enrollment workflow and uses cfg for best-effort inventory metadata.
 func EnrollWithConfig(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
+	configuredTags, err := agenttag.ParseFromEnv()
+	if err != nil {
+		return fmt.Errorf("invalid agent tag configuration: %w", err)
+	}
+
 	baseURL, err := normalizeBackendBaseURL(baseEndpoint)
 	if err != nil {
 		return fmt.Errorf("invalid enrollment endpoint: %w", err)
@@ -65,7 +71,7 @@ func EnrollWithConfig(ctx context.Context, baseEndpoint, sakToken string, cfg *c
 		return err
 	}
 	enrolledAt := time.Now().UTC()
-	if err := storeConfigInMetadata(ctx, baseURL.String(), jwtToken, sakToken, enrolledAt); err != nil {
+	if err := storeConfigInMetadata(ctx, baseURL.String(), jwtToken, sakToken, enrolledAt, configuredTags); err != nil {
 		return fmt.Errorf("failed to store configuration: %w", err)
 	}
 	syncCtx, cancel := context.WithTimeout(ctx, postEnrollInventorySyncTimeout)
@@ -112,7 +118,14 @@ func normalizeBackendBaseURL(raw string) (*url.URL, error) {
 	return endpoint.ValidateBackendEndpoint(normalized)
 }
 
-func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken string, enrolledAt time.Time) error {
+func storeConfigInMetadata(
+	ctx context.Context,
+	baseURL,
+	jwtToken,
+	sakToken string,
+	enrolledAt time.Time,
+	configuredTags map[string]string,
+) error {
 	stateFile, err := config.DefaultStateFile()
 	if err != nil {
 		return fmt.Errorf("failed to get state file path: %w", err)
@@ -143,7 +156,30 @@ func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken stri
 	if err := pkgmetadata.SetMetadata(ctx, dbRW, agentstate.MetadataKeyEnrolledAt, enrolledAt.Format(time.RFC3339Nano)); err != nil {
 		return fmt.Errorf("failed to set enrollment time: %w", err)
 	}
+	if err := seedTagsInMetadata(ctx, agentstate.NewSQLite(), configuredTags); err != nil {
+		return fmt.Errorf("failed to seed tags metadata: %w", err)
+	}
 	return nil
+}
+
+func seedTagsInMetadata(ctx context.Context, state agentstate.State, configuredTags map[string]string) error {
+	if state == nil {
+		return fmt.Errorf("agent state is required for tag seeding")
+	}
+
+	existingTags, ok, err := state.GetTags(ctx)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		existingTags = map[string]string{}
+	}
+	seeded := agenttag.MergeMissing(existingTags, configuredTags)
+	seeded = agenttag.EnsureReservedDefaults(seeded)
+	if ok && stringMapEqual(existingTags, seeded) {
+		return nil
+	}
+	return state.SetTags(ctx, seeded)
 }
 
 type machineInfoCollectorFunc func(context.Context) (*machineinfo.MachineInfo, error)
@@ -152,13 +188,24 @@ func (f machineInfoCollectorFunc) Collect(ctx context.Context) (*machineinfo.Mac
 	return f(ctx)
 }
 
+// SyncInventoryNow performs an immediate inventory collect/export.
+func SyncInventoryNow(ctx context.Context, cfg *config.Config) error {
+	return syncInventoryOnce(ctx, cfg)
+}
+
 func syncInventoryOnce(ctx context.Context, cfg *config.Config) error {
 	state := agentstate.NewSQLite()
 	sink := inventorysink.NewBackendSink(state)
+	tags, ok, err := state.GetTags(ctx)
+	if err != nil {
+		return fmt.Errorf("load agent tags for inventory sync: %w", err)
+	}
+	if !ok {
+		tags = nil
+	}
 	allComponents := registry.AllComponentNames()
 
 	if cfg == nil {
-		var err error
 		cfg, err = config.Default(ctx)
 		if err != nil {
 			return fmt.Errorf("load default config for inventory sync: %w", err)
@@ -174,7 +221,7 @@ func syncInventoryOnce(ctx context.Context, cfg *config.Config) error {
 	}
 	defer func() { _ = nvmlInstance.Shutdown() }()
 
-	src := inventorysource.NewMachineInfoSourceWithAgentConfig(
+	src := inventorysource.NewMachineInfoSourceWithAgentConfigAndTags(
 		machineInfoCollectorFunc(func(context.Context) (*machineinfo.MachineInfo, error) {
 			return machineinfo.GetMachineInfo(nvmlInstance)
 		}),
@@ -188,8 +235,21 @@ func syncInventoryOnce(ctx context.Context, cfg *config.Config) error {
 			AttestationEnabled:         attestationEnabled,
 			AttestationIntervalSeconds: attestationIntervalSeconds,
 		},
+		tags,
 	)
 	manager := inventory.NewManager(src, sink, inventory.InventoryConfig{})
 	_, err = manager.CollectOnce(ctx)
 	return err
+}
+
+func stringMapEqual(left, right map[string]string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for key, leftValue := range left {
+		if rightValue, ok := right[key]; !ok || rightValue != leftValue {
+			return false
+		}
+	}
+	return true
 }

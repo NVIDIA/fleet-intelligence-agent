@@ -19,23 +19,24 @@ import "time"
 
 // NodeUpsertRequest is the backend DTO for node inventory upserts.
 type NodeUpsertRequest struct {
-	Hostname                string        `json:"hostname"`
-	AgentConfig             AgentConfig   `json:"agentConfig,omitempty"`
-	Resources               NodeResources `json:"resources"`
-	AgentVersion            string        `json:"agentVersion"`
-	GPUDriverVersion        string        `json:"gpuDriverVersion"`
-	CUDAVersion             string        `json:"cudaVersion"`
-	DCGMVersion             string        `json:"dcgmVersion"`
-	ContainerRuntimeVersion string        `json:"containerRuntimeVersion"`
-	KernelVersion           string        `json:"kernelVersion"`
-	OSImage                 string        `json:"osImage"`
-	OperatingSystem         string        `json:"operatingSystem"`
-	SystemUUID              string        `json:"systemUUID"`
-	MachineID               string        `json:"machineId"`
-	BootID                  string        `json:"bootID"`
-	Uptime                  *time.Time    `json:"uptime,omitempty"`
-	EnrolledAt              *time.Time    `json:"enrolledAt,omitempty"`
-	NetPrivateIP            string        `json:"netPrivateIP,omitempty"`
+	Hostname                string            `json:"hostname"`
+	AgentConfig             AgentConfig       `json:"agentConfig,omitempty"`
+	Resources               NodeResources     `json:"resources"`
+	AgentVersion            string            `json:"agentVersion"`
+	GPUDriverVersion        string            `json:"gpuDriverVersion"`
+	CUDAVersion             string            `json:"cudaVersion"`
+	DCGMVersion             string            `json:"dcgmVersion"`
+	ContainerRuntimeVersion string            `json:"containerRuntimeVersion"`
+	KernelVersion           string            `json:"kernelVersion"`
+	OSImage                 string            `json:"osImage"`
+	OperatingSystem         string            `json:"operatingSystem"`
+	SystemUUID              string            `json:"systemUUID"`
+	MachineID               string            `json:"machineId"`
+	BootID                  string            `json:"bootID"`
+	Uptime                  *time.Time        `json:"uptime,omitempty"`
+	EnrolledAt              *time.Time        `json:"enrolledAt,omitempty"`
+	NetPrivateIP            string            `json:"netPrivateIP,omitempty"`
+	Tags                    map[string]string `json:"tags,omitempty"`
 }
 
 type NodeResources struct {

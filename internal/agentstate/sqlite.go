@@ -18,6 +18,7 @@ package agentstate
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -129,6 +130,30 @@ func (s *sqliteState) SetEnrollmentTime(ctx context.Context, value time.Time) er
 		return fmt.Errorf("enrollment time cannot be zero")
 	}
 	return s.setMetadata(ctx, MetadataKeyEnrolledAt, value.UTC().Format(time.RFC3339Nano))
+}
+
+func (s *sqliteState) GetTags(ctx context.Context) (map[string]string, bool, error) {
+	value, ok, err := s.getMetadata(ctx, MetadataKeyAgentTags)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	tags := map[string]string{}
+	if err := json.Unmarshal([]byte(value), &tags); err != nil {
+		return nil, false, fmt.Errorf("parse metadata %q: %w", MetadataKeyAgentTags, err)
+	}
+	return tags, true, nil
+}
+
+func (s *sqliteState) SetTags(ctx context.Context, value map[string]string) error {
+	tags := value
+	if tags == nil {
+		tags = map[string]string{}
+	}
+	payload, err := json.Marshal(tags)
+	if err != nil {
+		return fmt.Errorf("marshal tags metadata: %w", err)
+	}
+	return s.setMetadata(ctx, MetadataKeyAgentTags, string(payload))
 }
 
 func (s *sqliteState) getMetadata(ctx context.Context, key string) (string, bool, error) {

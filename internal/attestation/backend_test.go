@@ -55,6 +55,10 @@ func (s *stubState) GetEnrollmentTime(context.Context) (time.Time, bool, error) 
 	return time.Time{}, false, nil
 }
 func (s *stubState) SetEnrollmentTime(context.Context, time.Time) error { return nil }
+func (s *stubState) GetTags(context.Context) (map[string]string, bool, error) {
+	return nil, false, nil
+}
+func (s *stubState) SetTags(context.Context, map[string]string) error { return nil }
 
 type recordingClient struct {
 	lastNodeUUID string

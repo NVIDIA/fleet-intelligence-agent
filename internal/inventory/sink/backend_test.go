@@ -32,6 +32,7 @@ type fakeState struct {
 	jwt           string
 	nodeUUID      string
 	enrolled      time.Time
+	tags          map[string]string
 	enrollmentErr error
 	err           error
 }
@@ -69,6 +70,20 @@ func (f *fakeState) GetEnrollmentTime(context.Context) (time.Time, bool, error) 
 	return f.enrolled, !f.enrolled.IsZero(), nil
 }
 func (f *fakeState) SetEnrollmentTime(context.Context, time.Time) error { return nil }
+func (f *fakeState) GetTags(context.Context) (map[string]string, bool, error) {
+	if f.err != nil {
+		return nil, false, f.err
+	}
+	if f.tags == nil {
+		return nil, false, nil
+	}
+	out := make(map[string]string, len(f.tags))
+	for key, value := range f.tags {
+		out[key] = value
+	}
+	return out, true, nil
+}
+func (f *fakeState) SetTags(context.Context, map[string]string) error { return nil }
 
 type fakeClient struct {
 	nodeUUID string

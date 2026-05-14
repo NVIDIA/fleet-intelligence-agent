@@ -217,6 +217,13 @@ func App() *cli.App {
 			},
 		},
 		{
+			Name:            "tag",
+			Usage:           "set/update agent tags and trigger immediate inventory sync",
+			UsageText:       "fleetint tag --key=value [--key2=value2 ...]",
+			SkipFlagParsing: true,
+			Action:          tagCommand,
+		},
+		{
 			Name:   "unenroll",
 			Usage:  "un-enroll the agent from Fleet Intelligence backend (removes credentials and endpoints)",
 			Action: unenrollCommand,

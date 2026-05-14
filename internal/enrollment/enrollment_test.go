@@ -25,8 +25,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	agenttag "github.com/NVIDIA/fleet-intelligence-agent/internal/tag"
 )
 
 type fakeBackendClient struct {
@@ -50,6 +52,13 @@ func (f *fakeBackendClient) GetNonce(context.Context, string, string) (*backendc
 
 func (f *fakeBackendClient) SubmitAttestation(context.Context, string, *backendclient.AttestationRequest, string) error {
 	return nil
+}
+
+func setTagEnvForTest(t *testing.T, nodeGroup, computeZone, customTags string) {
+	t.Helper()
+	t.Setenv(agenttag.EnvNodeGroup, nodeGroup)
+	t.Setenv(agenttag.EnvComputeZone, computeZone)
+	t.Setenv(agenttag.EnvCustomTags, customTags)
 }
 
 func TestEnrollWorkflow(t *testing.T) {
@@ -322,6 +331,74 @@ func TestEnrollWorkflowInventorySyncUsesRemainingEnrollTimeout(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestEnrollWorkflowSeedsTagsFromEnv(t *testing.T) {
+	originalFactory := newBackendClient
+	originalSync := syncInventoryAfterEnroll
+	t.Cleanup(func() {
+		newBackendClient = originalFactory
+		syncInventoryAfterEnroll = originalSync
+	})
+
+	setTagEnvForTest(t, "group-a", "zone-a", "owner=ml-platform")
+	newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+		return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
+	}
+	syncInventoryAfterEnroll = func(context.Context, *config.Config) error { return nil }
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	err := Enroll(context.Background(), "https://example.com", "sak-token")
+	require.NoError(t, err)
+
+	tags, ok, err := agentstate.NewSQLite().GetTags(context.Background())
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, map[string]string{
+		agenttag.ReservedKeyNodeGroup:   "group-a",
+		agenttag.ReservedKeyComputeZone: "zone-a",
+		"owner":                         "ml-platform",
+	}, tags)
+}
+
+func TestEnrollWorkflowPreservesExistingTagsOnReenroll(t *testing.T) {
+	originalFactory := newBackendClient
+	originalSync := syncInventoryAfterEnroll
+	t.Cleanup(func() {
+		newBackendClient = originalFactory
+		syncInventoryAfterEnroll = originalSync
+	})
+
+	newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+		return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
+	}
+	syncInventoryAfterEnroll = func(context.Context, *config.Config) error { return nil }
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	err := agentstate.NewSQLite().SetTags(context.Background(), map[string]string{
+		agenttag.ReservedKeyNodeGroup:   "group-from-db",
+		agenttag.ReservedKeyComputeZone: "zone-from-db",
+		"owner":                         "team-a",
+	})
+	require.NoError(t, err)
+
+	setTagEnvForTest(t, "group-from-env", "zone-from-env", "owner=team-b,stack=prod")
+	err = Enroll(context.Background(), "https://example.com", "sak-token")
+	require.NoError(t, err)
+
+	tags, ok, err := agentstate.NewSQLite().GetTags(context.Background())
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, map[string]string{
+		agenttag.ReservedKeyNodeGroup:   "group-from-db",
+		agenttag.ReservedKeyComputeZone: "zone-from-db",
+		"owner":                         "team-a",
+		"stack":                         "prod",
+	}, tags)
+}
+
 func TestStoreConfigInMetadataSecuresFreshStateFile(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("test expects non-root default state path resolution")
@@ -336,6 +413,7 @@ func TestStoreConfigInMetadataSecuresFreshStateFile(t *testing.T) {
 		"jwt-token",
 		"sak-token",
 		time.Now().UTC(),
+		nil,
 	)
 	require.NoError(t, err)
 

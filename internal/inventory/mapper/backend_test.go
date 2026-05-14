@@ -64,6 +64,11 @@ func TestToNodeUpsertRequest(t *testing.T) {
 		DCGMVersion:             "4.2.3",
 		ContainerRuntimeVersion: "containerd://1.7.13",
 		NetPrivateIP:            "10.0.0.10",
+		Tags: map[string]string{
+			"nodegroup":    "group-a",
+			"compute_zone": "zone-a",
+			"owner":        "ml-platform",
+		},
 		AgentConfig: inventory.AgentConfig{
 			TotalComponents:            30,
 			RetentionPeriodSeconds:     86400,
@@ -148,4 +153,9 @@ func TestToNodeUpsertRequest(t *testing.T) {
 	require.Len(t, req.Resources.NICInfo.PrivateIPInterfaces, 1)
 	require.Equal(t, "eth0", req.Resources.NICInfo.PrivateIPInterfaces[0].Interface)
 	require.Equal(t, "10.0.0.10", req.Resources.NICInfo.PrivateIPInterfaces[0].IP)
+	require.Equal(t, map[string]string{
+		"nodegroup":    "group-a",
+		"compute_zone": "zone-a",
+		"owner":        "ml-platform",
+	}, req.Tags)
 }

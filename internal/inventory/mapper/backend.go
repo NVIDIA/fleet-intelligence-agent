@@ -97,6 +97,7 @@ func ToNodeUpsertRequest(s *inventory.Snapshot) *backendclient.NodeUpsertRequest
 		DCGMVersion:             s.DCGMVersion,
 		ContainerRuntimeVersion: s.ContainerRuntimeVersion,
 		NetPrivateIP:            s.NetPrivateIP,
+		Tags:                    cloneStringMap(s.Tags),
 		Resources: backendclient.NodeResources{
 			CPUInfo: backendclient.CPUInfo{
 				Type:         s.Resources.CPUInfo.Type,
@@ -130,4 +131,15 @@ func cloneStringSlice(values []string) []string {
 		return []string{}
 	}
 	return append([]string{}, values...)
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
 }

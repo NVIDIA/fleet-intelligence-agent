@@ -87,6 +87,11 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 		normalized := enrollmentTime.UTC()
 		req.EnrolledAt = &normalized
 	}
+	log.Logger.Infow("sending inventory upsert request",
+		"node_uuid", nodeUUID,
+		"hostname", req.Hostname,
+		"tags", req.Tags,
+	)
 	if err := client.UpsertNode(ctx, nodeUUID, req, jwt); err != nil {
 		return err
 	}

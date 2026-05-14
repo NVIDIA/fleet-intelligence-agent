@@ -25,6 +25,7 @@ const (
 	MetadataKeyBackendBaseURL = "backend_base_url"
 	MetadataKeySAKToken       = "sak_token"
 	MetadataKeyEnrolledAt     = "enrolled_at"
+	MetadataKeyAgentTags      = "agent_tags"
 )
 
 // State provides local persisted metadata/state access for backend workflows.
@@ -43,4 +44,7 @@ type State interface {
 
 	GetEnrollmentTime(ctx context.Context) (value time.Time, ok bool, err error)
 	SetEnrollmentTime(ctx context.Context, value time.Time) error
+
+	GetTags(ctx context.Context) (value map[string]string, ok bool, err error)
+	SetTags(ctx context.Context, value map[string]string) error
 }

@@ -437,8 +437,16 @@ func (s *Server) startInventoryLoop(
 	retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
 	inventoryEnabled, inventoryIntervalSeconds := cfg.InventoryLoopAgentConfig()
 	attestationEnabled, attestationIntervalSeconds := cfg.AttestationLoopAgentConfig()
+	state := agentstate.NewSQLite()
+	tags, ok, err := state.GetTags(ctx)
+	if err != nil {
+		log.Logger.Warnw("inventory loop could not load tags from state", "error", err)
+		tags = nil
+	} else if !ok {
+		tags = nil
+	}
 
-	source := inventorysource.NewMachineInfoSourceWithAgentConfig(
+	source := inventorysource.NewMachineInfoSourceWithAgentConfigAndTags(
 		inventoryMachineInfoCollectorFunc(func(context.Context) (*machineinfo.MachineInfo, error) {
 			return machineinfo.GetMachineInfo(nvmlInstance, machineinfo.WithDCGMGPUIndexes(dcgmGPUIndexes))
 		}),
@@ -452,8 +460,9 @@ func (s *Server) startInventoryLoop(
 			AttestationEnabled:         attestationEnabled,
 			AttestationIntervalSeconds: attestationIntervalSeconds,
 		},
+		tags,
 	)
-	sink := inventorysink.NewBackendSink(agentstate.NewSQLite())
+	sink := inventorysink.NewBackendSink(state)
 	manager := inventory.NewManager(source, sink, inventory.InventoryConfig{
 		Interval:      interval,
 		RetryInterval: inventory.DefaultRetryInterval,
