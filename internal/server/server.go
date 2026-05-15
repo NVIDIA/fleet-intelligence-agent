@@ -437,6 +437,7 @@ func (s *Server) startInventoryLoop(
 	retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
 	inventoryEnabled, inventoryIntervalSeconds := cfg.InventoryLoopAgentConfig()
 	attestationEnabled, attestationIntervalSeconds := cfg.AttestationLoopAgentConfig()
+	state := agentstate.NewSQLite()
 
 	source := inventorysource.NewMachineInfoSourceWithAgentConfig(
 		inventoryMachineInfoCollectorFunc(func(context.Context) (*machineinfo.MachineInfo, error) {
@@ -453,7 +454,7 @@ func (s *Server) startInventoryLoop(
 			AttestationIntervalSeconds: attestationIntervalSeconds,
 		},
 	)
-	sink := inventorysink.NewBackendSink(agentstate.NewSQLite())
+	sink := inventorysink.NewBackendSink(state)
 	manager := inventory.NewManager(source, sink, inventory.InventoryConfig{
 		Interval:      interval,
 		RetryInterval: inventory.DefaultRetryInterval,

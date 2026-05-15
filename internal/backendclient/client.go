@@ -42,6 +42,7 @@ var errNilBaseURL = errors.New("backend base URL is required")
 type Client interface {
 	Enroll(ctx context.Context, sakToken string) (jwt string, err error)
 	UpsertNode(ctx context.Context, nodeUUID string, req *NodeUpsertRequest, jwt string) error
+	UpsertNodeTags(ctx context.Context, nodeUUID string, req *NodeTagsUpsertRequest, jwt string) error
 	GetNonce(ctx context.Context, nodeUUID string, jwt string) (*NonceResponse, error)
 	SubmitAttestation(ctx context.Context, nodeUUID string, req *AttestationRequest, jwt string) error
 }
@@ -105,6 +106,19 @@ func (c *client) UpsertNode(ctx context.Context, nodeUUID string, req *NodeUpser
 		return fmt.Errorf("node upsert request cannot be nil")
 	}
 	return c.doJSON(ctx, http.MethodPut, []string{"v1", "agent", "nodes", nodeUUID}, jwt, req, nil)
+}
+
+func (c *client) UpsertNodeTags(ctx context.Context, nodeUUID string, req *NodeTagsUpsertRequest, jwt string) error {
+	if nodeUUID == "" {
+		return fmt.Errorf("nodeUUID cannot be empty")
+	}
+	if jwt == "" {
+		return fmt.Errorf("jwt cannot be empty")
+	}
+	if req == nil {
+		return fmt.Errorf("node tags upsert request cannot be nil")
+	}
+	return c.doJSON(ctx, http.MethodPut, []string{"v1", "agent", "nodes", nodeUUID, "tags"}, jwt, req, nil)
 }
 
 func (c *client) GetNonce(ctx context.Context, nodeUUID string, jwt string) (*NonceResponse, error) {

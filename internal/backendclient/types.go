@@ -38,6 +38,18 @@ type NodeUpsertRequest struct {
 	NetPrivateIP            string        `json:"netPrivateIP,omitempty"`
 }
 
+// NodeTagsUpsertRequest is the backend DTO for node tag upserts.
+type NodeTagsUpsertRequest struct {
+	// Nil means "no change", empty string means "clear/unassign", non-empty sets/updates.
+	NodeGroup *string `json:"nodeGroup,omitempty"`
+	// Nil means "no change", empty string means "clear/unassign", non-empty sets/updates.
+	ComputeZone *string `json:"computeZone,omitempty"`
+	// CustomSet contains custom key/value tags to upsert.
+	CustomSet map[string]string `json:"customSet,omitempty"`
+	// CustomRemove contains custom tag names to clear/remove.
+	CustomRemove []string `json:"customRemove,omitempty"`
+}
+
 type NodeResources struct {
 	CPUInfo    CPUInfo    `json:"cpuInfo"`
 	MemoryInfo MemoryInfo `json:"memoryInfo"`

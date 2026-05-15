@@ -217,6 +217,33 @@ func App() *cli.App {
 			},
 		},
 		{
+			Name:            "tag",
+			Usage:           "set/update agent tags and upsert them to backend",
+			UsageText:       "fleetint tag --key=value [--key2=value2 ...] (set nodegroup and compute_zone together)",
+			SkipFlagParsing: true,
+			Action:          tagCommand,
+		},
+		{
+			Name:      "unset",
+			Usage:     "clear agent tags and upsert clears to backend",
+			UsageText: "fleetint unset [--nodegroup] [--compute-zone] [--tag key ...]",
+			Action:    unsetTagCommand,
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:  "nodegroup",
+					Usage: "clear nodegroup tag",
+				},
+				&cli.BoolFlag{
+					Name:  "compute-zone",
+					Usage: "clear compute_zone tag",
+				},
+				&cli.StringSliceFlag{
+					Name:  "tag",
+					Usage: "clear a custom tag key (repeatable)",
+				},
+			},
+		},
+		{
 			Name:   "unenroll",
 			Usage:  "un-enroll the agent from Fleet Intelligence backend (removes credentials and endpoints)",
 			Action: unenrollCommand,

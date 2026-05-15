@@ -54,6 +54,11 @@ func TestSQLiteStateRoundTrip(t *testing.T) {
 	enrollmentTime := time.Date(2026, 5, 6, 15, 0, 0, 123456789, time.UTC)
 	err = state.SetEnrollmentTime(ctx, enrollmentTime)
 	require.NoError(t, err)
+	err = state.SetTags(ctx, map[string]string{
+		"nodegroup": "group-a",
+		"owner":     "team-a",
+	})
+	require.NoError(t, err)
 
 	value, ok, err := state.GetBackendBaseURL(ctx)
 	require.NoError(t, err)
@@ -79,6 +84,14 @@ func TestSQLiteStateRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, enrollmentTime, gotEnrollmentTime)
+
+	gotTags, ok, err := state.GetTags(ctx)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, map[string]string{
+		"nodegroup": "group-a",
+		"owner":     "team-a",
+	}, gotTags)
 }
 
 func TestSQLiteStateMissingValue(t *testing.T) {
@@ -126,6 +139,11 @@ func TestSQLiteStateMissingMetadataTableIsTreatedAsAbsent(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, ok)
 	require.True(t, enrollmentTime.IsZero())
+
+	tags, ok, err := state.GetTags(ctx)
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.Nil(t, tags)
 }
 
 func TestSQLiteStateSetBackendBaseURLValidatesInput(t *testing.T) {
