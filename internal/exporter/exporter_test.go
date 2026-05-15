@@ -1161,6 +1161,10 @@ func (f *fakeJWTRefreshClient) UpsertNode(context.Context, string, *backendclien
 	return nil
 }
 
+func (f *fakeJWTRefreshClient) UpsertNodeTags(context.Context, string, *backendclient.NodeTagsUpsertRequest, string) error {
+	return nil
+}
+
 func (f *fakeJWTRefreshClient) GetNonce(context.Context, string, string) (*backendclient.NonceResponse, error) {
 	return nil, nil
 }

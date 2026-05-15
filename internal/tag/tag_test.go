@@ -36,6 +36,24 @@ func TestParseFromEnv(t *testing.T) {
 	}, tags)
 }
 
+func TestParseFromEnvRejectsComputeZoneWithoutNodeGroup(t *testing.T) {
+	t.Setenv(EnvNodeGroup, "")
+	t.Setenv(EnvComputeZone, "zone-a")
+	t.Setenv(EnvCustomTags, "")
+
+	_, err := ParseFromEnv()
+	require.ErrorContains(t, err, ReservedKeyNodeGroup)
+}
+
+func TestParseFromEnvRejectsNodeGroupWithoutComputeZone(t *testing.T) {
+	t.Setenv(EnvNodeGroup, "group-a")
+	t.Setenv(EnvComputeZone, "")
+	t.Setenv(EnvCustomTags, "")
+
+	_, err := ParseFromEnv()
+	require.ErrorContains(t, err, ReservedKeyComputeZone)
+}
+
 func TestParseFromEnvRejectsReservedInCustomTags(t *testing.T) {
 	t.Setenv(EnvCustomTags, "nodegroup=bad")
 	_, err := ParseFromEnv()
@@ -43,17 +61,38 @@ func TestParseFromEnvRejectsReservedInCustomTags(t *testing.T) {
 }
 
 func TestParseCLIArgs(t *testing.T) {
-	tags, err := ParseCLIArgs([]string{"--Owner=team-a", "--compute_zone=zone-b"})
+	tags, err := ParseCLIArgs([]string{"--Owner=team-a", "--nodegroup=group-a", "--compute_zone=zone-b"})
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{
+		"nodegroup":    "group-a",
 		"owner":        "team-a",
 		"compute_zone": "zone-b",
 	}, tags)
 }
 
-func TestEnsureReservedDefaults(t *testing.T) {
-	tags := EnsureReservedDefaults(map[string]string{"owner": "team-a"})
-	require.Equal(t, "team-a", tags["owner"])
-	require.Equal(t, DefaultReservedValueUnassigned, tags[ReservedKeyNodeGroup])
-	require.Equal(t, DefaultReservedValueUnassigned, tags[ReservedKeyComputeZone])
+func TestParseCLIArgsRejectsComputeZoneWithoutNodeGroup(t *testing.T) {
+	_, err := ParseCLIArgs([]string{"--compute_zone=zone-b"})
+	require.ErrorContains(t, err, ReservedKeyNodeGroup)
+}
+
+func TestParseCLIArgsRejectsNodeGroupWithoutComputeZone(t *testing.T) {
+	_, err := ParseCLIArgs([]string{"--nodegroup=group-a"})
+	require.ErrorContains(t, err, ReservedKeyComputeZone)
+}
+
+func TestParseCLIArgsRequiresKeyValuePairs(t *testing.T) {
+	_, err := ParseCLIArgs([]string{"--owner"})
+	require.ErrorContains(t, err, "key=value")
+}
+
+func TestNormalizeAndValidateKey(t *testing.T) {
+	key, err := NormalizeAndValidateKey(" Owner ")
+	require.NoError(t, err)
+	require.Equal(t, "owner", key)
+
+	_, err = NormalizeAndValidateKey("")
+	require.ErrorContains(t, err, "empty")
+
+	_, err = NormalizeAndValidateKey("bad key")
+	require.ErrorContains(t, err, "invalid")
 }

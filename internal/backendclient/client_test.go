@@ -95,6 +95,43 @@ func TestClient_UpsertNode(t *testing.T) {
 	require.Equal(t, "node-1", gotReq.Hostname)
 }
 
+func TestClient_UpsertNodeTags(t *testing.T) {
+	t.Parallel()
+
+	var (
+		gotMethod string
+		gotPath   string
+		gotAuth   string
+		gotReq    NodeTagsUpsertRequest
+	)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		_ = json.NewDecoder(r.Body).Decode(&gotReq)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	c := NewWithHTTPClient(mustParseURL(t, server.URL), server.Client())
+	err := c.UpsertNodeTags(context.Background(), "node-1", &NodeTagsUpsertRequest{
+		NodeGroup:    stringPtr("group-a"),
+		ComputeZone:  stringPtr("zone-a"),
+		CustomSet:    map[string]string{"owner": "ml-platform"},
+		CustomRemove: []string{"legacy"},
+	}, "jwt-token")
+	require.NoError(t, err)
+	require.Equal(t, http.MethodPut, gotMethod)
+	require.Equal(t, "/v1/agent/nodes/node-1/tags", gotPath)
+	require.Equal(t, "Bearer jwt-token", gotAuth)
+	require.NotNil(t, gotReq.NodeGroup)
+	require.Equal(t, "group-a", *gotReq.NodeGroup)
+	require.NotNil(t, gotReq.ComputeZone)
+	require.Equal(t, "zone-a", *gotReq.ComputeZone)
+	require.Equal(t, map[string]string{"owner": "ml-platform"}, gotReq.CustomSet)
+	require.Equal(t, []string{"legacy"}, gotReq.CustomRemove)
+}
+
 func TestClient_GetNonce(t *testing.T) {
 	t.Parallel()
 
@@ -175,6 +212,12 @@ func TestClient_ValidationErrors(t *testing.T) {
 	err = c.UpsertNode(context.Background(), "node-1", nil, "jwt")
 	require.ErrorContains(t, err, "cannot be nil")
 	err = c.UpsertNode(context.Background(), "node-1", &NodeUpsertRequest{}, "")
+	require.ErrorContains(t, err, "jwt cannot be empty")
+	err = c.UpsertNodeTags(context.Background(), "", &NodeTagsUpsertRequest{}, "jwt")
+	require.ErrorContains(t, err, "nodeUUID cannot be empty")
+	err = c.UpsertNodeTags(context.Background(), "node-1", nil, "jwt")
+	require.ErrorContains(t, err, "cannot be nil")
+	err = c.UpsertNodeTags(context.Background(), "node-1", &NodeTagsUpsertRequest{}, "")
 	require.ErrorContains(t, err, "jwt cannot be empty")
 
 	_, err = c.GetNonce(context.Background(), "", "jwt")
@@ -339,4 +382,8 @@ func mustParseURL(t *testing.T, raw string) *url.URL {
 	parsed, err := url.Parse(raw)
 	require.NoError(t, err)
 	return parsed
+}
+
+func stringPtr(value string) *string {
+	return &value
 }

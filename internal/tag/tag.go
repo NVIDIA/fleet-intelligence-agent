@@ -30,8 +30,6 @@ const (
 
 	ReservedKeyNodeGroup   = "nodegroup"
 	ReservedKeyComputeZone = "compute_zone"
-
-	DefaultReservedValueUnassigned = "Unassigned"
 )
 
 var (
@@ -60,6 +58,9 @@ func ParseFromEnv() (map[string]string, error) {
 
 	rawCustom := strings.TrimSpace(os.Getenv(EnvCustomTags))
 	if rawCustom == "" {
+		if err := ValidateReservedPairPatch(tags); err != nil {
+			return nil, err
+		}
 		return tags, nil
 	}
 	custom, err := ParseCommaSeparatedPairs(rawCustom)
@@ -73,6 +74,9 @@ func ParseFromEnv() (map[string]string, error) {
 	}
 	for key, value := range custom {
 		tags[key] = value
+	}
+	if err := ValidateReservedPairPatch(tags); err != nil {
+		return nil, err
 	}
 	return tags, nil
 }
@@ -105,18 +109,31 @@ func ParseCLIArgs(args []string) (map[string]string, error) {
 		}
 		result[key] = value
 	}
+	if err := ValidateReservedPairPatch(result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
-func EnsureReservedDefaults(tags map[string]string) map[string]string {
-	out := Clone(tags)
-	if strings.TrimSpace(out[ReservedKeyNodeGroup]) == "" {
-		out[ReservedKeyNodeGroup] = DefaultReservedValueUnassigned
+// ValidateReservedPairPatch validates reserved key combinations in a patch request.
+// compute_zone may only be changed when nodegroup is included in the same patch.
+func ValidateReservedPairPatch(tags map[string]string) error {
+	nodeGroupValue, hasNodeGroup := tags[ReservedKeyNodeGroup]
+	computeZoneValue, hasComputeZone := tags[ReservedKeyComputeZone]
+	nodeGroupValue = strings.TrimSpace(nodeGroupValue)
+	computeZoneValue = strings.TrimSpace(computeZoneValue)
+
+	if hasComputeZone && !hasNodeGroup {
+		return fmt.Errorf("%q can only be updated when %q is also provided", ReservedKeyComputeZone, ReservedKeyNodeGroup)
 	}
-	if strings.TrimSpace(out[ReservedKeyComputeZone]) == "" {
-		out[ReservedKeyComputeZone] = DefaultReservedValueUnassigned
+	// Non-empty updates for either reserved key require both keys to be present and non-empty.
+	if hasNodeGroup && nodeGroupValue != "" && (!hasComputeZone || computeZoneValue == "") {
+		return fmt.Errorf("%q requires a non-empty %q in the same update", ReservedKeyNodeGroup, ReservedKeyComputeZone)
 	}
-	return out
+	if hasComputeZone && computeZoneValue != "" && (!hasNodeGroup || nodeGroupValue == "") {
+		return fmt.Errorf("%q requires a non-empty %q in the same update", ReservedKeyComputeZone, ReservedKeyNodeGroup)
+	}
+	return nil
 }
 
 func MergeMissing(base, incoming map[string]string) map[string]string {
@@ -141,18 +158,26 @@ func Clone(tags map[string]string) map[string]string {
 	return out
 }
 
+func NormalizeAndValidateKey(raw string) (string, error) {
+	key := normalizeKey(raw)
+	if key == "" {
+		return "", fmt.Errorf("tag key is empty")
+	}
+	if !validTagKey.MatchString(key) {
+		return "", fmt.Errorf("invalid tag key %q", key)
+	}
+	return key, nil
+}
+
 func parseSinglePair(raw string) (key, value string, err error) {
 	parts := strings.SplitN(strings.TrimSpace(raw), "=", 2)
 	if len(parts) != 2 {
 		return "", "", fmt.Errorf("expected key=value")
 	}
 
-	key = normalizeKey(parts[0])
-	if key == "" {
-		return "", "", fmt.Errorf("tag key is empty")
-	}
-	if !validTagKey.MatchString(key) {
-		return "", "", fmt.Errorf("invalid tag key %q", key)
+	key, err = NormalizeAndValidateKey(parts[0])
+	if err != nil {
+		return "", "", err
 	}
 
 	value = strings.TrimSpace(parts[1])

@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	agenttag "github.com/NVIDIA/fleet-intelligence-agent/internal/tag"
 )
 
@@ -67,40 +66,42 @@ func (s *inMemoryTagState) SetTags(_ context.Context, value map[string]string) e
 func TestTagCommandPersistsAndSyncs(t *testing.T) {
 	useMissingFleetintEnvFile(t)
 
-	originalSync := syncInventoryAfterTagUpdate
-	originalConfigLoader := defaultConfigForTagCommand
+	originalUpsert := upsertTagsAfterTagUpdate
 	originalStateFactory := newTagCommandState
 	state := &inMemoryTagState{}
 	t.Cleanup(func() {
-		syncInventoryAfterTagUpdate = originalSync
-		defaultConfigForTagCommand = originalConfigLoader
+		upsertTagsAfterTagUpdate = originalUpsert
 		newTagCommandState = originalStateFactory
 	})
 	newTagCommandState = func() agentstate.State {
 		return state
 	}
 
-	defaultConfigForTagCommand = func(context.Context) (*config.Config, error) {
-		return &config.Config{}, nil
-	}
-	syncCalled := false
-	syncInventoryAfterTagUpdate = func(context.Context, *config.Config) error {
-		syncCalled = true
+	upsertCalled := false
+	var gotUpdates map[string]string
+	upsertTagsAfterTagUpdate = func(_ context.Context, updates map[string]string) error {
+		upsertCalled = true
+		gotUpdates = updates
 		return nil
 	}
 
 	app := App()
 	app.Writer = &bytes.Buffer{}
-	err := app.Run([]string{"fleetint", "tag", "--owner=ml-platform", "--compute_zone=us-west-2a"})
+	err := app.Run([]string{"fleetint", "tag", "--owner=ml-platform", "--nodegroup=group-a", "--compute_zone=us-west-2a"})
 	require.NoError(t, err)
-	require.True(t, syncCalled)
+	require.True(t, upsertCalled)
+	require.Equal(t, map[string]string{
+		"owner":        "ml-platform",
+		"nodegroup":    "group-a",
+		"compute_zone": "us-west-2a",
+	}, gotUpdates)
 
 	tags, ok, err := state.GetTags(context.Background())
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, map[string]string{
+		agenttag.ReservedKeyNodeGroup:   "group-a",
 		"owner":                         "ml-platform",
-		agenttag.ReservedKeyNodeGroup:   agenttag.DefaultReservedValueUnassigned,
 		agenttag.ReservedKeyComputeZone: "us-west-2a",
 	}, tags)
 }
@@ -108,8 +109,7 @@ func TestTagCommandPersistsAndSyncs(t *testing.T) {
 func TestTagCommandOverwritesExistingKeys(t *testing.T) {
 	useMissingFleetintEnvFile(t)
 
-	originalSync := syncInventoryAfterTagUpdate
-	originalConfigLoader := defaultConfigForTagCommand
+	originalUpsert := upsertTagsAfterTagUpdate
 	originalStateFactory := newTagCommandState
 	state := &inMemoryTagState{
 		tags: map[string]string{
@@ -119,18 +119,14 @@ func TestTagCommandOverwritesExistingKeys(t *testing.T) {
 		},
 	}
 	t.Cleanup(func() {
-		syncInventoryAfterTagUpdate = originalSync
-		defaultConfigForTagCommand = originalConfigLoader
+		upsertTagsAfterTagUpdate = originalUpsert
 		newTagCommandState = originalStateFactory
 	})
 	newTagCommandState = func() agentstate.State {
 		return state
 	}
 
-	defaultConfigForTagCommand = func(context.Context) (*config.Config, error) {
-		return &config.Config{}, nil
-	}
-	syncInventoryAfterTagUpdate = func(context.Context, *config.Config) error { return nil }
+	upsertTagsAfterTagUpdate = func(context.Context, map[string]string) error { return nil }
 
 	app := App()
 	app.Writer = &bytes.Buffer{}
@@ -152,4 +148,25 @@ func TestTagCommandRequiresAssignments(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	err := app.Run([]string{"fleetint", "tag"})
 	require.ErrorContains(t, err, "at least one tag assignment is required")
+}
+
+func TestTagCommandRejectsComputeZoneWithoutNodeGroup(t *testing.T) {
+	app := App()
+	app.Writer = &bytes.Buffer{}
+	err := app.Run([]string{"fleetint", "tag", "--compute_zone=us-west-2a"})
+	require.ErrorContains(t, err, agenttag.ReservedKeyNodeGroup)
+}
+
+func TestTagCommandRejectsNodeGroupWithoutComputeZone(t *testing.T) {
+	app := App()
+	app.Writer = &bytes.Buffer{}
+	err := app.Run([]string{"fleetint", "tag", "--nodegroup=group-a"})
+	require.ErrorContains(t, err, agenttag.ReservedKeyComputeZone)
+}
+
+func TestTagCommandRequiresCustomTagValue(t *testing.T) {
+	app := App()
+	app.Writer = &bytes.Buffer{}
+	err := app.Run([]string{"fleetint", "tag", "--owner"})
+	require.ErrorContains(t, err, "key=value")
 }

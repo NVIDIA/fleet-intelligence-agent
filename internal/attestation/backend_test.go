@@ -71,6 +71,9 @@ func (c *recordingClient) Enroll(context.Context, string) (string, error) { retu
 func (c *recordingClient) UpsertNode(context.Context, string, *backendclient.NodeUpsertRequest, string) error {
 	return nil
 }
+func (c *recordingClient) UpsertNodeTags(context.Context, string, *backendclient.NodeTagsUpsertRequest, string) error {
+	return nil
+}
 func (c *recordingClient) GetNonce(context.Context, string, string) (*backendclient.NonceResponse, error) {
 	return c.nonceResp, nil
 }

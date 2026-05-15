@@ -33,7 +33,6 @@ type MachineInfoCollector interface {
 type machineInfoSource struct {
 	collector   MachineInfoCollector
 	agentConfig inventory.AgentConfig
-	tags        map[string]string
 }
 
 // NewMachineInfoSource wraps the machine inventory collector as an inventory source.
@@ -44,16 +43,6 @@ func NewMachineInfoSource(collector MachineInfoCollector) inventory.Source {
 // NewMachineInfoSourceWithAgentConfig wraps the machine inventory collector and attaches useful
 // agent configuration that should travel with inventory rather than OTLP telemetry.
 func NewMachineInfoSourceWithAgentConfig(collector MachineInfoCollector, agentConfig *inventory.AgentConfig) inventory.Source {
-	return NewMachineInfoSourceWithAgentConfigAndTags(collector, agentConfig, nil)
-}
-
-// NewMachineInfoSourceWithAgentConfigAndTags wraps the machine inventory collector and attaches useful
-// agent configuration and user-defined tags that should travel with inventory rather than OTLP telemetry.
-func NewMachineInfoSourceWithAgentConfigAndTags(
-	collector MachineInfoCollector,
-	agentConfig *inventory.AgentConfig,
-	tags map[string]string,
-) inventory.Source {
 	var cfg inventory.AgentConfig
 	if agentConfig != nil {
 		cfg = *agentConfig
@@ -61,7 +50,6 @@ func NewMachineInfoSourceWithAgentConfigAndTags(
 	return &machineInfoSource{
 		collector:   collector,
 		agentConfig: cfg,
-		tags:        cloneStringMap(tags),
 	}
 }
 
@@ -92,7 +80,6 @@ func (s *machineInfoSource) Collect(ctx context.Context) (*inventory.Snapshot, e
 		CUDAVersion:             info.CUDAVersion,
 		DCGMVersion:             info.DCGMVersion,
 		ContainerRuntimeVersion: info.ContainerRuntimeVersion,
-		Tags:                    cloneStringMap(s.tags),
 		AgentConfig:             s.agentConfig,
 	}
 	if info.CPUInfo != nil {
@@ -164,15 +151,4 @@ func (s *machineInfoSource) Collect(ctx context.Context) (*inventory.Snapshot, e
 	}
 
 	return snap, nil
-}
-
-func cloneStringMap(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	cloned := make(map[string]string, len(values))
-	for key, value := range values {
-		cloned[key] = value
-	}
-	return cloned
 }

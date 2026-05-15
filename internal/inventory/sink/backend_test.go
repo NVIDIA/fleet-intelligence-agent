@@ -104,6 +104,9 @@ func (f *fakeClient) UpsertNode(_ context.Context, nodeUUID string, req *backend
 	f.jwt = jwt
 	return nil
 }
+func (f *fakeClient) UpsertNodeTags(context.Context, string, *backendclient.NodeTagsUpsertRequest, string) error {
+	return nil
+}
 
 func TestBackendSinkExportNotReady(t *testing.T) {
 	s := &backendSink{

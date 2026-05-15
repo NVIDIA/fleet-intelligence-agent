@@ -24,7 +24,6 @@ import (
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/cmdutil"
-	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/enrollment"
 	agenttag "github.com/NVIDIA/fleet-intelligence-agent/internal/tag"
 )
@@ -32,9 +31,8 @@ import (
 const tagCommandTimeout = 2 * time.Minute
 
 var (
-	syncInventoryAfterTagUpdate = enrollment.SyncInventoryNow
-	defaultConfigForTagCommand  = func(ctx context.Context) (*config.Config, error) { return config.Default(ctx) }
-	newTagCommandState          = agentstate.NewSQLite
+	upsertTagsAfterTagUpdate = enrollment.UpsertTagsNow
+	newTagCommandState       = agentstate.NewSQLite
 )
 
 func tagCommand(cliContext *cli.Context) error {
@@ -62,26 +60,12 @@ func tagCommand(cliContext *cli.Context) error {
 	for key, value := range updates {
 		merged[key] = value
 	}
-	merged = agenttag.EnsureReservedDefaults(merged)
 	if err := state.SetTags(ctx, merged); err != nil {
 		return fmt.Errorf("persist tags: %w", err)
 	}
 
-	cfg, err := defaultConfigForTagCommand(ctx)
-	if err != nil {
-		return fmt.Errorf("load default config: %w", err)
-	}
-	if err := config.LoadEnvFileDefaults(fleetintEnvFilePath); err != nil {
-		return err
-	}
-	if err := configureLoopConfigFromEnv(cfg); err != nil {
-		return fmt.Errorf("failed to configure loop settings from environment variables: %w", err)
-	}
-
-	syncCtx, syncCancel := context.WithTimeout(ctx, defaultEnrollTimeout)
-	defer syncCancel()
-	if err := syncInventoryAfterTagUpdate(syncCtx, cfg); err != nil {
-		return fmt.Errorf("tags were saved but immediate inventory sync failed: %w", err)
+	if err := upsertTagsAfterTagUpdate(ctx, updates); err != nil {
+		return fmt.Errorf("tags were saved but backend upsert failed: %w", err)
 	}
 	fmt.Printf("%s successfully updated tags\n", cmdutil.CheckMark)
 	return nil

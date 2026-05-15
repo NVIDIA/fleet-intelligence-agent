@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
@@ -42,6 +44,7 @@ import (
 var (
 	newBackendClient               = backendclient.New
 	syncInventoryAfterEnroll       = syncInventoryOnce
+	syncTagsAfterEnroll            = syncTagsOnce
 	postEnrollInventorySyncTimeout = time.Minute
 )
 
@@ -71,15 +74,28 @@ func EnrollWithConfig(ctx context.Context, baseEndpoint, sakToken string, cfg *c
 		return err
 	}
 	enrolledAt := time.Now().UTC()
-	if err := storeConfigInMetadata(ctx, baseURL.String(), jwtToken, sakToken, enrolledAt, configuredTags); err != nil {
+	if err := storeConfigInMetadata(ctx, baseURL.String(), jwtToken, sakToken, enrolledAt); err != nil {
 		return fmt.Errorf("failed to store configuration: %w", err)
 	}
-	syncCtx, cancel := context.WithTimeout(ctx, postEnrollInventorySyncTimeout)
-	defer cancel()
-	if err := runWithContext(syncCtx, func() error {
-		return syncInventoryAfterEnroll(syncCtx, cfg)
+	tagSeedPatch, err := seedTagsInMetadata(ctx, agentstate.NewSQLite(), configuredTags)
+	if err != nil {
+		return fmt.Errorf("failed to seed tags metadata: %w", err)
+	}
+	inventorySyncCtx, inventorySyncCancel := context.WithTimeout(ctx, postEnrollInventorySyncTimeout)
+	defer inventorySyncCancel()
+	if err := runWithContext(inventorySyncCtx, func() error {
+		return syncInventoryAfterEnroll(inventorySyncCtx, cfg)
 	}); err != nil {
 		log.Logger.Warnw("post-enroll inventory sync failed", "error", err)
+	}
+	if len(tagSeedPatch) > 0 {
+		tagSyncCtx, tagSyncCancel := context.WithTimeout(ctx, postEnrollInventorySyncTimeout)
+		defer tagSyncCancel()
+		if err := runWithContext(tagSyncCtx, func() error {
+			return syncTagsAfterEnroll(tagSyncCtx, tagSeedPatch)
+		}); err != nil {
+			log.Logger.Warnw("post-enroll tag sync failed", "error", err)
+		}
 	}
 	return nil
 }
@@ -124,7 +140,6 @@ func storeConfigInMetadata(
 	jwtToken,
 	sakToken string,
 	enrolledAt time.Time,
-	configuredTags map[string]string,
 ) error {
 	stateFile, err := config.DefaultStateFile()
 	if err != nil {
@@ -156,30 +171,37 @@ func storeConfigInMetadata(
 	if err := pkgmetadata.SetMetadata(ctx, dbRW, agentstate.MetadataKeyEnrolledAt, enrolledAt.Format(time.RFC3339Nano)); err != nil {
 		return fmt.Errorf("failed to set enrollment time: %w", err)
 	}
-	if err := seedTagsInMetadata(ctx, agentstate.NewSQLite(), configuredTags); err != nil {
-		return fmt.Errorf("failed to seed tags metadata: %w", err)
-	}
 	return nil
 }
 
-func seedTagsInMetadata(ctx context.Context, state agentstate.State, configuredTags map[string]string) error {
+func seedTagsInMetadata(ctx context.Context, state agentstate.State, configuredTags map[string]string) (map[string]string, error) {
 	if state == nil {
-		return fmt.Errorf("agent state is required for tag seeding")
+		return nil, fmt.Errorf("agent state is required for tag seeding")
 	}
 
 	existingTags, ok, err := state.GetTags(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !ok {
 		existingTags = map[string]string{}
 	}
-	seeded := agenttag.MergeMissing(existingTags, configuredTags)
-	seeded = agenttag.EnsureReservedDefaults(seeded)
-	if ok && stringMapEqual(existingTags, seeded) {
-		return nil
+	seeded := agenttag.Clone(existingTags)
+	seedPatch := map[string]string{}
+	for key, value := range configuredTags {
+		if _, exists := seeded[key]; exists {
+			continue
+		}
+		seeded[key] = value
+		seedPatch[key] = value
 	}
-	return state.SetTags(ctx, seeded)
+	if ok && stringMapEqual(existingTags, seeded) {
+		return seedPatch, nil
+	}
+	if err := state.SetTags(ctx, seeded); err != nil {
+		return nil, err
+	}
+	return seedPatch, nil
 }
 
 type machineInfoCollectorFunc func(context.Context) (*machineinfo.MachineInfo, error)
@@ -188,28 +210,22 @@ func (f machineInfoCollectorFunc) Collect(ctx context.Context) (*machineinfo.Mac
 	return f(ctx)
 }
 
-// SyncInventoryNow performs an immediate inventory collect/export.
-func SyncInventoryNow(ctx context.Context, cfg *config.Config) error {
-	return syncInventoryOnce(ctx, cfg)
+// UpsertTagsNow sends a patch of tag updates to backend.
+func UpsertTagsNow(ctx context.Context, updates map[string]string) error {
+	return syncTagsOnce(ctx, updates)
 }
 
 func syncInventoryOnce(ctx context.Context, cfg *config.Config) error {
 	state := agentstate.NewSQLite()
 	sink := inventorysink.NewBackendSink(state)
-	tags, ok, err := state.GetTags(ctx)
-	if err != nil {
-		return fmt.Errorf("load agent tags for inventory sync: %w", err)
-	}
-	if !ok {
-		tags = nil
-	}
 	allComponents := registry.AllComponentNames()
 
 	if cfg == nil {
-		cfg, err = config.Default(ctx)
+		defaultCfg, err := config.Default(ctx)
 		if err != nil {
 			return fmt.Errorf("load default config for inventory sync: %w", err)
 		}
+		cfg = defaultCfg
 	}
 	retentionPeriodSeconds, enabledComponents, disabledComponents := cfg.InventoryAgentConfig(allComponents)
 	inventoryEnabled, inventoryIntervalSeconds := cfg.InventoryLoopAgentConfig()
@@ -221,7 +237,7 @@ func syncInventoryOnce(ctx context.Context, cfg *config.Config) error {
 	}
 	defer func() { _ = nvmlInstance.Shutdown() }()
 
-	src := inventorysource.NewMachineInfoSourceWithAgentConfigAndTags(
+	src := inventorysource.NewMachineInfoSourceWithAgentConfig(
 		machineInfoCollectorFunc(func(context.Context) (*machineinfo.MachineInfo, error) {
 			return machineinfo.GetMachineInfo(nvmlInstance)
 		}),
@@ -235,11 +251,60 @@ func syncInventoryOnce(ctx context.Context, cfg *config.Config) error {
 			AttestationEnabled:         attestationEnabled,
 			AttestationIntervalSeconds: attestationIntervalSeconds,
 		},
-		tags,
 	)
 	manager := inventory.NewManager(src, sink, inventory.InventoryConfig{})
 	_, err = manager.CollectOnce(ctx)
 	return err
+}
+
+func syncTagsOnce(ctx context.Context, updates map[string]string) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	if err := agenttag.ValidateReservedPairPatch(updates); err != nil {
+		return fmt.Errorf("invalid reserved tag combination: %w", err)
+	}
+	state := agentstate.NewSQLite()
+	baseURL, ok, err := state.GetBackendBaseURL(ctx)
+	if err != nil {
+		return fmt.Errorf("read backend base URL from state: %w", err)
+	}
+	if !ok || baseURL == "" {
+		return fmt.Errorf("agent not enrolled: backend base URL is missing")
+	}
+	jwt, ok, err := state.GetJWT(ctx)
+	if err != nil {
+		return fmt.Errorf("read JWT from state: %w", err)
+	}
+	if !ok || jwt == "" {
+		return fmt.Errorf("agent not enrolled: JWT is missing")
+	}
+	nodeUUID, ok, err := state.GetNodeUUID(ctx)
+	if err != nil {
+		return fmt.Errorf("read node UUID from state: %w", err)
+	}
+	if !ok || nodeUUID == "" {
+		return fmt.Errorf("agent not enrolled: node UUID is missing")
+	}
+
+	client, err := newBackendClient(baseURL)
+	if err != nil {
+		return fmt.Errorf("create backend client: %w", err)
+	}
+	req := toNodeTagsUpsertRequest(updates)
+	keys := tagKeys(updates)
+	log.Logger.Infow("sending node tags upsert request",
+		"request", req,
+	)
+	if err := client.UpsertNodeTags(ctx, nodeUUID, req, jwt); err != nil {
+		return fmt.Errorf("upsert node tags: %w", err)
+	}
+	log.Logger.Infow("tags exported to backend",
+		"node_uuid", nodeUUID,
+		"tag_count", len(keys),
+		"tag_keys", keys,
+	)
+	return nil
 }
 
 func stringMapEqual(left, right map[string]string) bool {
@@ -252,4 +317,45 @@ func stringMapEqual(left, right map[string]string) bool {
 		}
 	}
 	return true
+}
+
+func tagKeys(tags map[string]string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(tags))
+	for key := range tags {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func toNodeTagsUpsertRequest(updates map[string]string) *backendclient.NodeTagsUpsertRequest {
+	req := &backendclient.NodeTagsUpsertRequest{}
+	if value, ok := updates[agenttag.ReservedKeyNodeGroup]; ok {
+		v := value
+		req.NodeGroup = &v
+	}
+	if value, ok := updates[agenttag.ReservedKeyComputeZone]; ok {
+		v := value
+		req.ComputeZone = &v
+	}
+	for key, value := range updates {
+		if key == agenttag.ReservedKeyNodeGroup || key == agenttag.ReservedKeyComputeZone {
+			continue
+		}
+		if strings.TrimSpace(value) == "" {
+			req.CustomRemove = append(req.CustomRemove, key)
+			continue
+		}
+		if req.CustomSet == nil {
+			req.CustomSet = map[string]string{}
+		}
+		req.CustomSet[key] = value
+	}
+	if len(req.CustomRemove) > 0 {
+		sort.Strings(req.CustomRemove)
+	}
+	return req
 }

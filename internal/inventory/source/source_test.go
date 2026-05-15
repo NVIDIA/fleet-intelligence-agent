@@ -120,7 +120,7 @@ func TestMachineInfoSourceCollect(t *testing.T) {
 }
 
 func TestMachineInfoSourceCollectWithAgentConfig(t *testing.T) {
-	src := NewMachineInfoSourceWithAgentConfigAndTags(
+	src := NewMachineInfoSourceWithAgentConfig(
 		fakeMachineInfoCollector{
 			info: &machineinfo.MachineInfo{
 				MachineID:  "machine-id",
@@ -138,10 +138,6 @@ func TestMachineInfoSourceCollectWithAgentConfig(t *testing.T) {
 			AttestationEnabled:         true,
 			AttestationIntervalSeconds: 86400,
 		},
-		map[string]string{
-			"nodegroup":    "group-a",
-			"compute_zone": "zone-a",
-		},
 	)
 
 	snap, err := src.Collect(context.Background())
@@ -156,10 +152,6 @@ func TestMachineInfoSourceCollectWithAgentConfig(t *testing.T) {
 	require.Equal(t, int64(3600), snap.AgentConfig.InventoryIntervalSeconds)
 	require.True(t, snap.AgentConfig.AttestationEnabled)
 	require.Equal(t, int64(86400), snap.AgentConfig.AttestationIntervalSeconds)
-	require.Equal(t, map[string]string{
-		"nodegroup":    "group-a",
-		"compute_zone": "zone-a",
-	}, snap.Tags)
 }
 
 func TestMachineInfoSourceCollectIgnoresSystemUUIDForMachineID(t *testing.T) {

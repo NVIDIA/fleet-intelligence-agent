@@ -37,6 +37,10 @@ type fakeBackendClient struct {
 	enrollErr error
 }
 
+type inMemorySeedState struct {
+	tags map[string]string
+}
+
 func (f *fakeBackendClient) Enroll(_ context.Context, sakToken string) (string, error) {
 	f.enrollSAK = sakToken
 	return f.enrollJWT, f.enrollErr
@@ -46,11 +50,58 @@ func (f *fakeBackendClient) UpsertNode(context.Context, string, *backendclient.N
 	return nil
 }
 
+func (f *fakeBackendClient) UpsertNodeTags(context.Context, string, *backendclient.NodeTagsUpsertRequest, string) error {
+	return nil
+}
+
 func (f *fakeBackendClient) GetNonce(context.Context, string, string) (*backendclient.NonceResponse, error) {
 	return nil, nil
 }
 
 func (f *fakeBackendClient) SubmitAttestation(context.Context, string, *backendclient.AttestationRequest, string) error {
+	return nil
+}
+
+func (s *inMemorySeedState) GetBackendBaseURL(context.Context) (string, bool, error) {
+	return "", false, nil
+}
+
+func (s *inMemorySeedState) SetBackendBaseURL(context.Context, string) error { return nil }
+
+func (s *inMemorySeedState) GetJWT(context.Context) (string, bool, error) { return "", false, nil }
+
+func (s *inMemorySeedState) SetJWT(context.Context, string) error { return nil }
+
+func (s *inMemorySeedState) GetSAK(context.Context) (string, bool, error) { return "", false, nil }
+
+func (s *inMemorySeedState) SetSAK(context.Context, string) error { return nil }
+
+func (s *inMemorySeedState) GetNodeUUID(context.Context) (string, bool, error) { return "", false, nil }
+
+func (s *inMemorySeedState) SetNodeUUID(context.Context, string) error { return nil }
+
+func (s *inMemorySeedState) GetEnrollmentTime(context.Context) (time.Time, bool, error) {
+	return time.Time{}, false, nil
+}
+
+func (s *inMemorySeedState) SetEnrollmentTime(context.Context, time.Time) error { return nil }
+
+func (s *inMemorySeedState) GetTags(context.Context) (map[string]string, bool, error) {
+	if s.tags == nil {
+		return nil, false, nil
+	}
+	cloned := map[string]string{}
+	for key, value := range s.tags {
+		cloned[key] = value
+	}
+	return cloned, true, nil
+}
+
+func (s *inMemorySeedState) SetTags(_ context.Context, value map[string]string) error {
+	s.tags = map[string]string{}
+	for key, v := range value {
+		s.tags[key] = v
+	}
 	return nil
 }
 
@@ -361,6 +412,18 @@ func TestEnrollWorkflowSeedsTagsFromEnv(t *testing.T) {
 	}, tags)
 }
 
+func TestEnrollWorkflowRejectsComputeZoneWithoutNodeGroupFromEnv(t *testing.T) {
+	setTagEnvForTest(t, "", "zone-a", "")
+	err := EnrollWithConfig(context.Background(), "https://example.com", "sak-token", nil)
+	require.ErrorContains(t, err, agenttag.ReservedKeyNodeGroup)
+}
+
+func TestEnrollWorkflowRejectsNodeGroupWithoutComputeZoneFromEnv(t *testing.T) {
+	setTagEnvForTest(t, "group-a", "", "")
+	err := EnrollWithConfig(context.Background(), "https://example.com", "sak-token", nil)
+	require.ErrorContains(t, err, agenttag.ReservedKeyComputeZone)
+}
+
 func TestEnrollWorkflowPreservesExistingTagsOnReenroll(t *testing.T) {
 	originalFactory := newBackendClient
 	originalSync := syncInventoryAfterEnroll
@@ -399,6 +462,52 @@ func TestEnrollWorkflowPreservesExistingTagsOnReenroll(t *testing.T) {
 	}, tags)
 }
 
+func TestSeedTagsInMetadataReturnsPatchOnlyForMissingKeys(t *testing.T) {
+	state := &inMemorySeedState{
+		tags: map[string]string{
+			"owner": "team-a",
+		},
+	}
+
+	patch, err := seedTagsInMetadata(context.Background(), state, map[string]string{
+		"owner": "team-b",
+		"stack": "prod",
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{
+		"stack": "prod",
+	}, patch)
+	require.Equal(t, map[string]string{
+		"owner": "team-a",
+		"stack": "prod",
+	}, state.tags)
+}
+
+func TestToNodeTagsUpsertRequestBuildsStructuredDTO(t *testing.T) {
+	req := toNodeTagsUpsertRequest(map[string]string{
+		agenttag.ReservedKeyNodeGroup:   "group-a",
+		agenttag.ReservedKeyComputeZone: "",
+		"owner":                         "team-a",
+		"stack":                         "",
+	})
+	require.NotNil(t, req.NodeGroup)
+	require.Equal(t, "group-a", *req.NodeGroup)
+	require.NotNil(t, req.ComputeZone)
+	require.Equal(t, "", *req.ComputeZone)
+	require.Equal(t, map[string]string{"owner": "team-a"}, req.CustomSet)
+	require.Equal(t, []string{"stack"}, req.CustomRemove)
+}
+
+func TestToNodeTagsUpsertRequestOmitsUnsetReservedFields(t *testing.T) {
+	req := toNodeTagsUpsertRequest(map[string]string{
+		"owner": "team-a",
+	})
+	require.Nil(t, req.NodeGroup)
+	require.Nil(t, req.ComputeZone)
+	require.Equal(t, map[string]string{"owner": "team-a"}, req.CustomSet)
+	require.Empty(t, req.CustomRemove)
+}
+
 func TestStoreConfigInMetadataSecuresFreshStateFile(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("test expects non-root default state path resolution")
@@ -413,7 +522,6 @@ func TestStoreConfigInMetadataSecuresFreshStateFile(t *testing.T) {
 		"jwt-token",
 		"sak-token",
 		time.Now().UTC(),
-		nil,
 	)
 	require.NoError(t, err)
 
