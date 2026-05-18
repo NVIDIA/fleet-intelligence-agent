@@ -97,6 +97,12 @@ func TestHTTPWriter_Send_Success(t *testing.T) {
 	assert.Equal(t, 1, logsRequests)
 }
 
+func TestHTTPWriter_Send_NilHealthData(t *testing.T) {
+	writer := NewHTTPWriter(&http.Client{}, &mockOTLPConverter{})
+	_, err := writer.Send(context.Background(), nil, "", "", 1, "test-token")
+	require.ErrorContains(t, err, "nil HealthData")
+}
+
 func TestHTTPWriter_Send_EmptyMetrics(t *testing.T) {
 	logsRequests := 0
 
