@@ -33,7 +33,7 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/dcgmversion"
 )
 
-var supportedArchitectures = []string{"Hopper", "Blackwell", "Rubin"}
+var supportedArchitectures = []string{"Hopper", "Blackwell", "Rubin", "Ampere", "Ada Lovelace"}
 
 const minimumDCGMVersion = "4.2.3"
 const minimumDriverMajorVersion = 510
@@ -206,11 +206,15 @@ func evaluateArchitecture(input *Input) Check {
 	}
 
 	if !slices.ContainsFunc(supportedArchitectures, func(s string) bool {
-		return strings.EqualFold(s, input.GPUInfo.Architecture)
+		return architectureMatches(s, input.GPUInfo.Architecture)
 	}) {
 		return Check{
-			Name:    "gpu-architecture",
-			Message: "Unsupported GPU architecture: " + input.GPUInfo.Architecture + "; supported architectures are Hopper, Blackwell, and Rubin",
+			Name: "gpu-architecture",
+			Message: fmt.Sprintf(
+				"Unsupported GPU architecture: %s; supported architectures are %s",
+				input.GPUInfo.Architecture,
+				formatSupportedArchitectures(supportedArchitectures),
+			),
 		}
 	}
 
@@ -218,6 +222,31 @@ func evaluateArchitecture(input *Input) Check {
 		Name:    "gpu-architecture",
 		Passed:  true,
 		Message: "supported GPU architecture detected: " + input.GPUInfo.Architecture,
+	}
+}
+
+func architectureMatches(supported, detected string) bool {
+	return normalizeArchitectureName(supported) == normalizeArchitectureName(detected)
+}
+
+func normalizeArchitectureName(v string) string {
+	normalized := strings.TrimSpace(strings.ToLower(v))
+	normalized = strings.ReplaceAll(normalized, "-", "")
+	normalized = strings.ReplaceAll(normalized, "_", "")
+	normalized = strings.ReplaceAll(normalized, " ", "")
+	return normalized
+}
+
+func formatSupportedArchitectures(architectures []string) string {
+	switch len(architectures) {
+	case 0:
+		return ""
+	case 1:
+		return architectures[0]
+	case 2:
+		return architectures[0] + " and " + architectures[1]
+	default:
+		return strings.Join(architectures[:len(architectures)-1], ", ") + ", and " + architectures[len(architectures)-1]
 	}
 }
 

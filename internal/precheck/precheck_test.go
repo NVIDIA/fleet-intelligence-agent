@@ -59,6 +59,30 @@ func TestEvaluateArchitecture(t *testing.T) {
 			wantPassed: true,
 		},
 		{
+			name: "passes for ampere",
+			input: Input{
+				GPUInfo:          gpuInfo("Ampere"),
+				GPUDriverVersion: "575.57.08",
+			},
+			wantPassed: true,
+		},
+		{
+			name: "passes for ada lovelace",
+			input: Input{
+				GPUInfo:          gpuInfo("Ada Lovelace"),
+				GPUDriverVersion: "575.57.08",
+			},
+			wantPassed: true,
+		},
+		{
+			name: "passes for ada-lovelace",
+			input: Input{
+				GPUInfo:          gpuInfo("Ada-Lovelace"),
+				GPUDriverVersion: "575.57.08",
+			},
+			wantPassed: true,
+		},
+		{
 			name: "fails for missing gpu",
 			input: Input{
 				GPUInfo: &apiv1.MachineGPUInfo{},
@@ -79,12 +103,12 @@ func TestEvaluateArchitecture(t *testing.T) {
 		{
 			name: "fails for unsupported architecture",
 			input: Input{
-				GPUInfo:          gpuInfo("Ampere"),
+				GPUInfo:          gpuInfo("Turing"),
 				GPUDriverVersion: "575.57.08",
 			},
 			wantPassed: false,
 			wantMessages: []string{
-				"Unsupported GPU architecture: Ampere; supported architectures are Hopper, Blackwell, and Rubin",
+				"Unsupported GPU architecture: Turing; supported architectures are Hopper, Blackwell, Rubin, Ampere, and Ada Lovelace",
 			},
 		},
 		{
@@ -118,7 +142,7 @@ func TestEvaluateArchitecture(t *testing.T) {
 func TestSupportedArchitectures(t *testing.T) {
 	t.Parallel()
 
-	require.ElementsMatch(t, []string{"Hopper", "Blackwell", "Rubin"}, SupportedArchitectures())
+	require.ElementsMatch(t, []string{"Hopper", "Blackwell", "Rubin", "Ampere", "Ada Lovelace"}, SupportedArchitectures())
 }
 
 func TestEvaluateDriverAndNVAT(t *testing.T) {
