@@ -30,6 +30,7 @@ import (
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/converter"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/validation/outbound"
 )
 
 const (
@@ -84,6 +85,9 @@ func (w *httpWriter) SetJWTRefreshFunc(refreshFunc JWTRefreshFunc) {
 func (w *httpWriter) Send(ctx context.Context, data *collector.HealthData, metricsEndpoint string, logsEndpoint string, maxRetries int, authToken string) (string, error) {
 	// Convert to OTLP format
 	otlpData := w.otlpConverter.Convert(data)
+	outbound.LogIssues("exporter-http-writer", "OTLPData", outbound.ValidateOTLPPayload(otlpData),
+		"collection_id", data.CollectionID,
+		"machine_id", data.MachineID)
 
 	var newToken string
 

@@ -7,6 +7,7 @@ package machineinfo
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"runtime"
 	"sort"
@@ -460,8 +461,8 @@ func GetMachineDiskInfo(ctx context.Context) (*apiv1.MachineDiskInfo, error) {
 		rs = append(rs, apiv1.MachineDiskDevice{
 			Name:       bd.Name,
 			Type:       bd.Type,
-			Size:       int64(bd.Size),
-			Used:       int64(bd.FSUsed),
+			Size:       safeDiskUint64ToInt64(bd.Size, bd.Name, "size"),
+			Used:       safeDiskUint64ToInt64(bd.FSUsed, bd.Name, "used"),
 			Rota:       bd.Rota,
 			Serial:     bd.Serial,
 			WWN:        bd.WWN,
@@ -496,8 +497,8 @@ func GetMachineDiskInfo(ctx context.Context) (*apiv1.MachineDiskInfo, error) {
 				FSType:     part.Fstype,
 			}
 			if part.Usage != nil {
-				dev.Size = int64(part.Usage.TotalBytes)
-				dev.Used = int64(part.Usage.UsedBytes)
+				dev.Size = safeDiskUint64ToInt64(part.Usage.TotalBytes, part.Device, "size")
+				dev.Used = safeDiskUint64ToInt64(part.Usage.UsedBytes, part.Device, "used")
 			}
 			rs = append(rs, dev)
 		}
@@ -524,4 +525,16 @@ func GetMachineDiskInfo(ctx context.Context) (*apiv1.MachineDiskInfo, error) {
 	}
 
 	return info, nil
+}
+
+func safeDiskUint64ToInt64(value uint64, deviceName, field string) int64 {
+	if value <= math.MaxInt64 {
+		return int64(value)
+	}
+	log.Logger.Errorw("disk value overflow detected during machine info collection",
+		"device", deviceName,
+		"field", field,
+		"value", value,
+		"max_int64", math.MaxInt64)
+	return math.MaxInt64
 }

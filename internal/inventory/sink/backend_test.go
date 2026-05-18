@@ -178,3 +178,33 @@ func TestBackendSinkExportEnrollmentTimeErrorIsNonFatal(t *testing.T) {
 	require.NotNil(t, client.req)
 	require.Nil(t, client.req.EnrolledAt)
 }
+
+func TestBackendSinkValidationDoesNotBlockExport(t *testing.T) {
+	client := &fakeClient{}
+	s := &backendSink{
+		state: &fakeState{
+			baseURL:  "https://example.com",
+			jwt:      "jwt-token",
+			nodeUUID: "node-1",
+		},
+		clientFactory: func(string) (backendclient.Client, error) {
+			return client, nil
+		},
+	}
+
+	err := s.Export(context.Background(), &inventory.Snapshot{
+		Hostname:  "host-a",
+		MachineID: "machine-id",
+		Resources: inventory.Resources{
+			DiskInfo: inventory.DiskInfo{
+				BlockDevices: []inventory.BlockDevice{{
+					Name: "nfs-1",
+					Size: -1,
+				}},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, client.req)
+	require.Equal(t, int64(-1), client.req.Resources.DiskInfo.BlockDevices[0].Size)
+}

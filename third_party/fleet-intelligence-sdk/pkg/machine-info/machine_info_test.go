@@ -6,6 +6,7 @@ package machineinfo
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"runtime"
 	"strconv"
@@ -224,6 +225,12 @@ func TestGetMachineDiskInfo(t *testing.T) {
 	if runtime.GOOS == "linux" {
 		t.Logf("Container root disk: %s", info.ContainerRootDisk)
 	}
+}
+
+func TestSafeDiskUint64ToInt64(t *testing.T) {
+	require.Equal(t, int64(42), safeDiskUint64ToInt64(42, "/dev/sda1", "size"))
+	require.Equal(t, int64(math.MaxInt64), safeDiskUint64ToInt64(uint64(math.MaxInt64), "/dev/sda1", "size"))
+	require.Equal(t, int64(math.MaxInt64), safeDiskUint64ToInt64(uint64(math.MaxInt64)+1, "/dev/sda1", "size"))
 }
 
 // TestGetMachineMemoryInfo tests memory info retrieval
