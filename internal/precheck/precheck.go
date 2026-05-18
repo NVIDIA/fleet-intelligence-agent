@@ -209,7 +209,7 @@ func evaluateArchitecture(input *Input) Check {
 		return architectureMatches(s, input.GPUInfo.Architecture)
 	}) {
 		return Check{
-			Name:    "gpu-architecture",
+			Name: "gpu-architecture",
 			Message: fmt.Sprintf(
 				"Unsupported GPU architecture: %s; supported architectures are %s",
 				input.GPUInfo.Architecture,
