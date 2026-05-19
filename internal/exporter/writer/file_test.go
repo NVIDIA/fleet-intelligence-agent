@@ -16,6 +16,7 @@
 package writer
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,8 +24,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	logsv1 "go.opentelemetry.io/proto/otlp/logs/v1"
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
+	resourcev1 "go.opentelemetry.io/proto/otlp/resource/v1"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/converter"
@@ -108,6 +111,48 @@ func TestFileWriter_WriteJSON_Success(t *testing.T) {
 
 	assert.FileExists(t, metricsFile)
 	assert.FileExists(t, logsFile)
+}
+
+func TestFileWriter_WriteJSON_ValidationDoesNotBlock(t *testing.T) {
+	tmpDir := t.TempDir()
+	testData := &collector.HealthData{
+		Timestamp:    time.Now(),
+		MachineID:    "test-machine-id",
+		CollectionID: "test-collection-id",
+	}
+	otlpConverter := &mockOTLPConverter{
+		convertFunc: func(data *collector.HealthData) *converter.OTLPData {
+			return &converter.OTLPData{
+				Metrics: &metricsv1.MetricsData{
+					ResourceMetrics: []*metricsv1.ResourceMetrics{{
+						Resource: &resourcev1.Resource{
+							Attributes: []*commonv1.KeyValue{},
+						},
+						ScopeMetrics: []*metricsv1.ScopeMetrics{{
+							Metrics: []*metricsv1.Metric{{
+								Name: "bad.metric",
+								Data: &metricsv1.Metric_Gauge{
+									Gauge: &metricsv1.Gauge{
+										DataPoints: []*metricsv1.NumberDataPoint{{
+											Value: &metricsv1.NumberDataPoint_AsDouble{AsDouble: math.NaN()},
+										}},
+									},
+								},
+							}},
+						}},
+					}},
+				},
+			}
+		},
+	}
+
+	writer := NewFileWriter(otlpConverter, &mockCSVConverter{})
+	err := writer.WriteJSON(testData, tmpDir)
+	require.NoError(t, err)
+
+	timestamp := testData.Timestamp.Format("20060102_150405")
+	metricsFile := filepath.Join(tmpDir, "fleetint_metrics_"+timestamp+".json")
+	assert.FileExists(t, metricsFile)
 }
 
 func TestFileWriter_WriteJSON_NilMetrics(t *testing.T) {
@@ -255,6 +300,41 @@ func TestFileWriter_WriteCSV_Success(t *testing.T) {
 	assert.FileExists(t, filepath.Join(tmpDir, "events.csv"))
 	assert.FileExists(t, filepath.Join(tmpDir, "components.csv"))
 	assert.FileExists(t, filepath.Join(tmpDir, "machine_info.csv"))
+}
+
+func TestFileWriter_WriteCSV_ValidationDoesNotBlock(t *testing.T) {
+	tmpDir := t.TempDir()
+	testData := &collector.HealthData{
+		Timestamp:    time.Now(),
+		MachineID:    "test-machine-id",
+		CollectionID: "test-collection-id",
+	}
+
+	otlpConverter := &mockOTLPConverter{
+		convertFunc: func(data *collector.HealthData) *converter.OTLPData {
+			return &converter.OTLPData{
+				Metrics: &metricsv1.MetricsData{
+					ResourceMetrics: []*metricsv1.ResourceMetrics{{
+						Resource: &resourcev1.Resource{},
+					}},
+				},
+			}
+		},
+	}
+	csvConverter := &mockCSVConverter{
+		convertFunc: func(data *collector.HealthData, outputDir, timestamp string) (*converter.CSVFiles, error) {
+			return &converter.CSVFiles{
+				MetricsFile:     "metrics.csv",
+				EventsFile:      "events.csv",
+				ComponentsFile:  "components.csv",
+				MachineInfoFile: "machine_info.csv",
+			}, nil
+		},
+	}
+
+	writer := NewFileWriter(otlpConverter, csvConverter)
+	err := writer.WriteCSV(testData, tmpDir)
+	require.NoError(t, err)
 }
 
 func TestFileWriter_WriteCSV_ConversionError(t *testing.T) {

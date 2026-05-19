@@ -27,6 +27,7 @@ import (
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/converter"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/validation/outbound"
 )
 
 // FileWriter defines the interface for writing health data to files
@@ -53,6 +54,10 @@ func NewFileWriter(otlpConverter converter.OTLPConverter, csvConverter converter
 func (w *fileWriter) WriteJSON(data *collector.HealthData, outputPath string) error {
 	timestamp := data.Timestamp.Format("20060102_150405")
 	otlpData := w.otlpConverter.Convert(data)
+	outbound.LogIssues("exporter-file-writer", "OTLPData", outbound.ValidateOTLPPayload(otlpData),
+		"collection_id", data.CollectionID,
+		"machine_id", data.MachineID,
+		"format", "json")
 
 	// Write OTLP JSON files for direct use with OTEL collectors
 	if otlpData.Metrics != nil {
@@ -76,6 +81,11 @@ func (w *fileWriter) WriteJSON(data *collector.HealthData, outputPath string) er
 // WriteCSV writes health data in CSV format
 func (w *fileWriter) WriteCSV(data *collector.HealthData, outputPath string) error {
 	timestamp := data.Timestamp.Format("20060102_150405")
+	otlpData := w.otlpConverter.Convert(data)
+	outbound.LogIssues("exporter-file-writer", "OTLPData", outbound.ValidateOTLPPayload(otlpData),
+		"collection_id", data.CollectionID,
+		"machine_id", data.MachineID,
+		"format", "csv")
 
 	files, err := w.csvConverter.Convert(data, outputPath, timestamp)
 	if err != nil {

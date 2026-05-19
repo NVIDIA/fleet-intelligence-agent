@@ -26,6 +26,7 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/mapper"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/validation/outbound"
 )
 
 type backendSink struct {
@@ -87,6 +88,7 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 		normalized := enrollmentTime.UTC()
 		req.EnrolledAt = &normalized
 	}
+	outbound.LogIssues("inventory-backend-sink", "NodeUpsertRequest", outbound.ValidateNodeUpsertRequest(req), "node_uuid", nodeUUID)
 	if err := client.UpsertNode(ctx, nodeUUID, req, jwt); err != nil {
 		return err
 	}

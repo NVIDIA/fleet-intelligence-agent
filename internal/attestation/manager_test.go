@@ -231,6 +231,24 @@ func TestManagerHelpersAndSubmitterErrors(t *testing.T) {
 	require.ErrorContains(t, err, "requires jwt")
 }
 
+func TestBackendSubmitterValidationDoesNotBlockSubmit(t *testing.T) {
+	client := &recordingClient{}
+	result := &Result{
+		NodeUUID: "node-1",
+		Success:  true,
+		// Missing nonce refresh timestamp and evidences intentionally to trigger validation issues.
+		SDKResponse: SDKResponse{
+			ResultCode: 200,
+		},
+	}
+
+	err := NewBackendSubmitter(client).Submit(context.Background(), result, "jwt-token")
+	require.NoError(t, err)
+	require.Equal(t, "node-1", client.lastNodeUUID)
+	require.NotNil(t, client.lastReq)
+	require.True(t, client.lastReq.AttestationData.Success)
+}
+
 func TestStateJWTProviderAndNodeUUIDProviderErrors(t *testing.T) {
 	_, err := NewStateJWTProvider(nil).GetJWT(context.Background())
 	require.ErrorContains(t, err, "requires agent state")

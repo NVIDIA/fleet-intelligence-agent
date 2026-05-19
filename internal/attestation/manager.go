@@ -28,6 +28,7 @@ import (
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/validation/outbound"
 )
 
 // JWTProvider retrieves the current backend JWT.
@@ -282,7 +283,9 @@ func (s *backendSubmitter) Submit(ctx context.Context, result *Result, jwt strin
 	if jwt == "" {
 		return fmt.Errorf("attestation submission requires jwt")
 	}
-	return s.client.SubmitAttestation(ctx, result.NodeUUID, toAttestationRequest(result), jwt)
+	req := toAttestationRequest(result)
+	outbound.LogIssues("attestation-backend-submitter", "AttestationRequest", outbound.ValidateAttestationRequest(req), "node_uuid", result.NodeUUID)
+	return s.client.SubmitAttestation(ctx, result.NodeUUID, req, jwt)
 }
 
 type stateJWTProvider struct {

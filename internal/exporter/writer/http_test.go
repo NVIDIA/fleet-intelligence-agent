@@ -17,6 +17,7 @@ package writer
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -24,8 +25,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	logsv1 "go.opentelemetry.io/proto/otlp/logs/v1"
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
+	resourcev1 "go.opentelemetry.io/proto/otlp/resource/v1"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
@@ -92,6 +95,12 @@ func TestHTTPWriter_Send_Success(t *testing.T) {
 	assert.Empty(t, newToken)
 	assert.Equal(t, 1, metricsRequests)
 	assert.Equal(t, 1, logsRequests)
+}
+
+func TestHTTPWriter_Send_NilHealthData(t *testing.T) {
+	writer := NewHTTPWriter(&http.Client{}, &mockOTLPConverter{})
+	_, err := writer.Send(context.Background(), nil, "", "", 1, "test-token")
+	require.ErrorContains(t, err, "nil HealthData")
 }
 
 func TestHTTPWriter_Send_EmptyMetrics(t *testing.T) {
@@ -166,6 +175,62 @@ func TestHTTPWriter_Send_EmptyLogs(t *testing.T) {
 	ctx := context.Background()
 	_, err := writer.Send(ctx, testData, metricsServer.URL, "", 1, "test-token")
 
+	require.NoError(t, err)
+	assert.Equal(t, 1, metricsRequests)
+}
+
+func TestHTTPWriter_Send_ValidationDoesNotBlock(t *testing.T) {
+	metricsRequests := 0
+	metricsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		metricsRequests++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer metricsServer.Close()
+
+	testData := &collector.HealthData{
+		Timestamp:    time.Now(),
+		MachineID:    "test-machine",
+		CollectionID: "test-collection",
+	}
+	otlpConverter := &mockOTLPConverter{
+		convertFunc: func(data *collector.HealthData) *converter.OTLPData {
+			return &converter.OTLPData{
+				Metrics: &metricsv1.MetricsData{
+					ResourceMetrics: []*metricsv1.ResourceMetrics{{
+						Resource: &resourcev1.Resource{
+							Attributes: []*commonv1.KeyValue{
+								{
+									Key: "service.name",
+									Value: &commonv1.AnyValue{
+										Value: &commonv1.AnyValue_StringValue{StringValue: "fleet-intelligence-agent"},
+									},
+								},
+							},
+						},
+						ScopeMetrics: []*metricsv1.ScopeMetrics{{
+							Metrics: []*metricsv1.Metric{{
+								Name: "bad.metric",
+								Data: &metricsv1.Metric_Gauge{
+									Gauge: &metricsv1.Gauge{
+										DataPoints: []*metricsv1.NumberDataPoint{{
+											TimeUnixNano: 0,
+											Value: &metricsv1.NumberDataPoint_AsDouble{
+												AsDouble: math.NaN(),
+											},
+										}},
+									},
+								},
+							}},
+						}},
+					}},
+				},
+				Logs: nil,
+			}
+		},
+	}
+
+	writer := NewHTTPWriter(&http.Client{}, otlpConverter)
+	_, err := writer.Send(context.Background(), testData, metricsServer.URL, "", 1, "test-token")
 	require.NoError(t, err)
 	assert.Equal(t, 1, metricsRequests)
 }
