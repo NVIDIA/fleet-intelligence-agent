@@ -16,8 +16,8 @@ var (
 		pkgmetrics.MetricComponentLabelKey: Name,
 	}
 
-	metricRxBytes = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricRxBytes = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: SubSystem,
 			Name:      "rx_bytes",
@@ -26,8 +26,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "interface"},
 	).MustCurryWith(componentLabel)
 
-	metricRxPackets = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricRxPackets = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: SubSystem,
 			Name:      "rx_packets",
@@ -36,8 +36,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "interface"},
 	).MustCurryWith(componentLabel)
 
-	metricRxErrors = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricRxErrors = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: SubSystem,
 			Name:      "rx_errors",
@@ -46,8 +46,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "interface"},
 	).MustCurryWith(componentLabel)
 
-	metricRxDropped = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricRxDropped = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: SubSystem,
 			Name:      "rx_dropped",
@@ -56,8 +56,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "interface"},
 	).MustCurryWith(componentLabel)
 
-	metricTxBytes = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricTxBytes = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: SubSystem,
 			Name:      "tx_bytes",
@@ -66,8 +66,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "interface"},
 	).MustCurryWith(componentLabel)
 
-	metricTxPackets = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricTxPackets = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: SubSystem,
 			Name:      "tx_packets",
@@ -76,8 +76,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "interface"},
 	).MustCurryWith(componentLabel)
 
-	metricTxErrors = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricTxErrors = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: SubSystem,
 			Name:      "tx_errors",
@@ -86,8 +86,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "interface"},
 	).MustCurryWith(componentLabel)
 
-	metricTxDropped = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricTxDropped = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: SubSystem,
 			Name:      "tx_dropped",

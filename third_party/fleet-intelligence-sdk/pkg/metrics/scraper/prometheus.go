@@ -71,8 +71,10 @@ func (s *promScraper) Scrape(_ context.Context) (pkgmetrics.Metrics, error) {
 			// for now, only support counter and gauge
 			switch {
 			case mtRaw.GetCounter() != nil:
+				m.Type = pkgmetrics.MetricTypeCounter
 				m.Value = mtRaw.GetCounter().GetValue()
 			case mtRaw.GetGauge() != nil:
+				m.Type = pkgmetrics.MetricTypeGauge
 				m.Value = mtRaw.GetGauge().GetValue()
 			}
 

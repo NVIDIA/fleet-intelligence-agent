@@ -89,16 +89,19 @@ func TestPrometheusScraper(t *testing.T) {
 
 	require.Equal(t, "component-1", ms[0].Component)
 	require.Equal(t, "sqlite_insert_update_total", ms[0].Name)
+	require.Equal(t, pkgmetrics.MetricTypeCounter, ms[0].Type)
 	require.Nil(t, ms[0].Labels, "Expected no labels for the first metric")
 	require.Equal(t, float64(1), ms[0].Value)
 
 	require.Equal(t, "component-1", ms[1].Component)
 	require.Equal(t, "test_current_celsius", ms[1].Name)
+	require.Equal(t, pkgmetrics.MetricTypeGauge, ms[1].Type)
 	require.Equal(t, "GPU-0", ms[1].Labels["label_uuid"])
 	require.Equal(t, float64(100), ms[1].Value)
 
 	require.Equal(t, "component-1", ms[2].Component)
 	require.Equal(t, "test_slowdown_used_percent", ms[2].Name)
+	require.Equal(t, pkgmetrics.MetricTypeGauge, ms[2].Type)
 	require.Equal(t, "GPU-0", ms[2].Labels["label_uuid"])
 	require.Equal(t, float64(98), ms[2].Value)
 }
@@ -263,10 +266,12 @@ func TestPrometheusScraper_MultipleMetricTypes(t *testing.T) {
 	for _, m := range ms {
 		if m.Name == "test_operations_total" && m.Component == "component1" {
 			foundCounter = true
+			require.Equal(t, pkgmetrics.MetricTypeCounter, m.Type)
 			require.Equal(t, float64(1), m.Value)
 		}
 		if m.Name == "test_resources_utilization" && m.Component == "component1" {
 			foundGauge = true
+			require.Equal(t, pkgmetrics.MetricTypeGauge, m.Type)
 			if labels := m.Labels; labels != nil {
 				require.Equal(t, "resource1", labels["label_uuid"])
 			}

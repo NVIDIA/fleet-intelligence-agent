@@ -43,6 +43,9 @@ const (
 
 	// columnMetricValue represents the numeric value of the metric.
 	columnMetricValue = "metric_value"
+
+	// columnMetricType represents the Prometheus metric type.
+	columnMetricType = "metric_type"
 )
 
 // TODO: drop the old table "gpud_metrics"
@@ -99,13 +102,17 @@ CREATE TABLE IF NOT EXISTS %s (
 	%s TEXT NOT NULL,
 	%s TEXT,
 	%s REAL NOT NULL,
+	%s TEXT NOT NULL DEFAULT '%s',
 	PRIMARY KEY (%s, %s, %s, %s)
 ) WITHOUT ROWID;`,
 		table,
-		columnUnixMilliseconds, columnComponentName, columnMetricName, columnMetricLabels, columnMetricValue, // columns
+		columnUnixMilliseconds, columnComponentName, columnMetricName, columnMetricLabels, columnMetricValue, columnMetricType, pkgmetrics.MetricTypeGauge, // columns
 		columnUnixMilliseconds, columnComponentName, columnMetricName, columnMetricLabels, // primary keys
 	))
-	return err
+	if err != nil {
+		return err
+	}
+	return ensureMetricTypeColumn(ctx, dbRW, table)
 }
 
 func insert(ctx context.Context, dbRW *sql.DB, table string, ms ...pkgmetrics.Metric) error {
@@ -129,23 +136,24 @@ func insert(ctx context.Context, dbRW *sql.DB, table string, ms ...pkgmetrics.Me
 
 	// Build the query with placeholders for all metrics
 	query := fmt.Sprintf(
-		"INSERT OR REPLACE INTO %s (%s, %s, %s, %s, %s) VALUES ",
+		"INSERT OR REPLACE INTO %s (%s, %s, %s, %s, %s, %s) VALUES ",
 		table,
 		columnUnixMilliseconds,
 		columnComponentName,
 		columnMetricName,
 		columnMetricLabels,
 		columnMetricValue,
+		columnMetricType,
 	)
 
 	// Create proper placeholders with commas between value sets
 	placeholders := make([]string, len(ms))
 	for i := range placeholders {
-		placeholders[i] = "(?, ?, ?, ?, ?)"
+		placeholders[i] = "(?, ?, ?, ?, ?, ?)"
 	}
 	query += strings.Join(placeholders, ", ")
 
-	args := make([]interface{}, 0, len(ms)*5)
+	args := make([]interface{}, 0, len(ms)*6)
 	for _, m := range ms {
 		labels := ""
 		if len(m.Labels) > 0 {
@@ -155,7 +163,11 @@ func insert(ctx context.Context, dbRW *sql.DB, table string, ms ...pkgmetrics.Me
 			}
 			labels = string(b)
 		}
-		args = append(args, m.UnixMilliseconds, m.Component, m.Name, labels, m.Value)
+		metricType := m.Type
+		if metricType == "" {
+			metricType = pkgmetrics.MetricTypeGauge
+		}
+		args = append(args, m.UnixMilliseconds, m.Component, m.Name, labels, m.Value, metricType)
 	}
 
 	log.Logger.Infow("inserting metrics", "metrics", len(ms))
@@ -205,7 +217,7 @@ func read(ctx context.Context, dbRO *sql.DB, table string, opts ...pkgmetrics.Op
 		whereStatement = fmt.Sprintf("WHERE %s", whereStatement)
 	}
 
-	query := fmt.Sprintf(`SELECT %s, %s, %s, %s, %s
+	query := fmt.Sprintf(`SELECT %s, %s, %s, %s, %s, %s
 FROM %s
 `,
 		columnUnixMilliseconds,
@@ -213,6 +225,7 @@ FROM %s
 		columnMetricName,
 		columnMetricLabels,
 		columnMetricValue,
+		columnMetricType,
 		table,
 	)
 	if whereStatement != "" {
@@ -240,8 +253,11 @@ FROM %s
 	for queryRows.Next() {
 		m := pkgmetrics.Metric{}
 		var labels sql.NullString
-		if err := queryRows.Scan(&m.UnixMilliseconds, &m.Component, &m.Name, &labels, &m.Value); err != nil {
+		if err := queryRows.Scan(&m.UnixMilliseconds, &m.Component, &m.Name, &labels, &m.Value, &m.Type); err != nil {
 			return nil, err
+		}
+		if m.Type == "" {
+			m.Type = pkgmetrics.MetricTypeGauge
 		}
 		if labels.Valid && labels.String != "" {
 			lm := make(map[string]string, 0)
@@ -256,6 +272,41 @@ FROM %s
 		return nil, err
 	}
 	return rows, nil
+}
+
+func ensureMetricTypeColumn(ctx context.Context, dbRW *sql.DB, table string) error {
+	rows, err := dbRW.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s);", table))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull int
+		var defaultValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			return err
+		}
+		if name == columnMetricType {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	_, err = dbRW.ExecContext(ctx, fmt.Sprintf(
+		"ALTER TABLE %s ADD COLUMN %s TEXT NOT NULL DEFAULT '%s';",
+		table,
+		columnMetricType,
+		pkgmetrics.MetricTypeGauge,
+	))
+	return err
 }
 
 // purge purges the data for the corresponding component that is older
