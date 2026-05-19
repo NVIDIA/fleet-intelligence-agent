@@ -129,6 +129,7 @@ func TestOTLPConverter_Convert_CounterMetricsBecomeCumulativeSums(t *testing.T) 
 	convertedMetrics := otlpData.Metrics.ResourceMetrics[0].ScopeMetrics[0].Metrics
 	counterMetric := findOTLPMetric(convertedMetrics, "dcgm_fi_dev_pcie_replay_counter")
 	require.NotNil(t, counterMetric)
+	assert.Empty(t, counterMetric.Unit)
 	sum := counterMetric.GetSum()
 	require.NotNil(t, sum)
 	assert.True(t, sum.IsMonotonic)
@@ -138,6 +139,7 @@ func TestOTLPConverter_Convert_CounterMetricsBecomeCumulativeSums(t *testing.T) 
 
 	gaugeMetric := findOTLPMetric(convertedMetrics, "dcgm_fi_dev_gpu_temp")
 	require.NotNil(t, gaugeMetric)
+	assert.Empty(t, gaugeMetric.Unit)
 	gauge := gaugeMetric.GetGauge()
 	require.NotNil(t, gauge)
 	require.Len(t, gauge.DataPoints, 1)
@@ -778,7 +780,7 @@ func TestOTLPConverter_UpMetric(t *testing.T) {
 	}
 
 	require.NotNil(t, upMetric, "Should have fleetint_agent_up metric")
-	assert.Equal(t, "1", upMetric.Unit)
+	assert.Empty(t, upMetric.Unit)
 	assert.Contains(t, upMetric.Description, "liveness")
 
 	gauge := upMetric.Data.(*metricsv1.Metric_Gauge).Gauge

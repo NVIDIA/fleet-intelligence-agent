@@ -161,7 +161,6 @@ func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metr
 	summaryMetric := &metricsv1.Metric{
 		Name:        "fleetint_agent_collection_summary",
 		Description: "Summary of Fleet Intelligence data collection including counts of metrics, events, and components",
-		Unit:        "1",
 		Data: &metricsv1.Metric_Gauge{
 			Gauge: &metricsv1.Gauge{
 				DataPoints: []*metricsv1.NumberDataPoint{
@@ -200,7 +199,6 @@ func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metr
 	upMetric := &metricsv1.Metric{
 		Name:        "fleetint_agent_up",
 		Description: "Fleet Intelligence agent liveness. A value of 1 indicates the agent was running when telemetry was exported.",
-		Unit:        "1",
 		Data: &metricsv1.Metric_Gauge{
 			Gauge: &metricsv1.Gauge{
 				DataPoints: []*metricsv1.NumberDataPoint{
@@ -231,7 +229,6 @@ func (c *otlpConverter) convertMetricToOTLP(metric pkgmetrics.Metric, gpuUUIDToI
 	otlpMetric := &metricsv1.Metric{
 		Name:        metric.Name,
 		Description: fmt.Sprintf("Metric from component %s", metric.Component),
-		Unit:        "1",
 	}
 
 	if metric.Type == pkgmetrics.MetricTypeCounter {
