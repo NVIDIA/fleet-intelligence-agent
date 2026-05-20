@@ -73,6 +73,16 @@ CREATE TABLE %s (
 	assert.Equal(t, pkgmetrics.MetricTypeCounter, results[0].Type)
 }
 
+func TestEnsureMetricTypeColumnRejectsInvalidTableName(t *testing.T) {
+	dbRW, _, cleanup := pkgsqlite.OpenTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	err := ensureMetricTypeColumn(ctx, dbRW, `test_metrics; DROP TABLE test_metrics;`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid sqlite identifier")
+}
+
 func TestSQLiteStore_Record(t *testing.T) {
 	// Setup test database
 	dbRW, dbRO, cleanup := pkgsqlite.OpenTestDB(t)

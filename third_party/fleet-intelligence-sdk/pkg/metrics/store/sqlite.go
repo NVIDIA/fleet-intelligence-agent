@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -60,6 +61,8 @@ var (
 )
 
 var _ pkgmetrics.Store = &sqliteStore{}
+
+var sqliteIdentifierRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 type sqliteStore struct {
 	dbRW  *sql.DB
@@ -275,7 +278,12 @@ FROM %s
 }
 
 func ensureMetricTypeColumn(ctx context.Context, dbRW *sql.DB, table string) error {
-	rows, err := dbRW.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s);", table))
+	quotedTable, err := quoteSQLiteIdentifier(table)
+	if err != nil {
+		return err
+	}
+
+	rows, err := dbRW.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s);", quotedTable))
 	if err != nil {
 		return err
 	}
@@ -302,11 +310,21 @@ func ensureMetricTypeColumn(ctx context.Context, dbRW *sql.DB, table string) err
 
 	_, err = dbRW.ExecContext(ctx, fmt.Sprintf(
 		"ALTER TABLE %s ADD COLUMN %s TEXT NOT NULL DEFAULT '%s';",
-		table,
+		quotedTable,
 		columnMetricType,
 		pkgmetrics.MetricTypeGauge,
 	))
 	return err
+}
+
+func quoteSQLiteIdentifier(name string) (string, error) {
+	if name == "" {
+		return "", ErrEmptyTableName
+	}
+	if !sqliteIdentifierRE.MatchString(name) {
+		return "", fmt.Errorf("invalid sqlite identifier %q", name)
+	}
+	return `"` + name + `"`, nil
 }
 
 // purge purges the data for the corresponding component that is older

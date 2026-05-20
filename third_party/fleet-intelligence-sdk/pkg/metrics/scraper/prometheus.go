@@ -76,6 +76,8 @@ func (s *promScraper) Scrape(_ context.Context) (pkgmetrics.Metrics, error) {
 			case mtRaw.GetGauge() != nil:
 				m.Type = pkgmetrics.MetricTypeGauge
 				m.Value = mtRaw.GetGauge().GetValue()
+			default:
+				continue
 			}
 
 			ms = append(ms, m)

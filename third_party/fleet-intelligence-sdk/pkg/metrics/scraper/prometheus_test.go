@@ -115,6 +115,14 @@ func (m *mockGathererWithError) Gather() ([]*dto.MetricFamily, error) {
 	return nil, m.err
 }
 
+type mockGatherer struct {
+	metricFamilies []*dto.MetricFamily
+}
+
+func (m *mockGatherer) Gather() ([]*dto.MetricFamily, error) {
+	return m.metricFamilies, nil
+}
+
 func TestPrometheusScraper_GatherError(t *testing.T) {
 	t.Parallel()
 
@@ -137,6 +145,39 @@ func TestPrometheusScraper_GatherError(t *testing.T) {
 	require.Nil(t, metrics)
 }
 
+func TestPrometheusScraper_SkipsUnsupportedMetricKinds(t *testing.T) {
+	t.Parallel()
+
+	scraper := &promScraper{
+		gatherer: &mockGatherer{
+			metricFamilies: []*dto.MetricFamily{
+				{
+					Name: stringPtr("test_summary"),
+					Type: dto.MetricType_SUMMARY.Enum(),
+					Metric: []*dto.Metric{
+						{
+							Label: []*dto.LabelPair{
+								{
+									Name:  stringPtr(pkgmetrics.MetricComponentLabelKey),
+									Value: stringPtr("component-1"),
+								},
+							},
+							Summary: &dto.Summary{},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	metrics, err := scraper.Scrape(ctx)
+	require.NoError(t, err)
+	require.Empty(t, metrics)
+}
+
 func TestPrometheusScraper_NilGatherer(t *testing.T) {
 	t.Parallel()
 
@@ -152,6 +193,10 @@ func TestPrometheusScraper_NilGatherer(t *testing.T) {
 	metrics, err := scraper.Scrape(ctx)
 	require.NoError(t, err)
 	require.Nil(t, metrics)
+}
+
+func stringPtr(s string) *string {
+	return &s
 }
 
 func TestPrometheusScraper_NilScraper(t *testing.T) {
@@ -257,9 +302,7 @@ func TestPrometheusScraper_MultipleMetricTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, ms)
 
-	// Should have more than 4 metrics because histograms and summaries
-	// generate multiple underlying metrics
-	require.True(t, len(ms) >= 4, "Expected at least 4 metrics, got %d", len(ms))
+	require.Len(t, ms, 2, "Only counter and gauge metrics should be returned")
 
 	// Verify the counter and gauge are included
 	var foundCounter, foundGauge bool
