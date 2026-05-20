@@ -243,8 +243,7 @@ func (e *healthExporter) exportToHTTP(ctx context.Context, data *collector.Healt
 	}
 
 	if e.options.config.AuthToken == "" {
-		log.Logger.Infow("No auth token configured, skipping HTTP export")
-		return nil
+		log.Logger.Warnw("No auth token configured, exporting without authentication")
 	}
 
 	newToken, err := e.httpWriter.Send(ctx, data, e.options.config.MetricsEndpoint, e.options.config.LogsEndpoint, e.options.config.RetryMaxAttempts, e.options.config.AuthToken)
