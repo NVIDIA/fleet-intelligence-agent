@@ -18,7 +18,6 @@ package sink
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
@@ -102,11 +101,7 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 		req.EnrolledAt = &normalized
 	}
 	outbound.LogIssues("inventory-backend-sink", "NodeUpsertRequest", outbound.ValidateNodeUpsertRequest(req), "node_uuid", nodeUUID)
-	if payload, err := json.Marshal(req); err != nil {
-		log.Logger.Warnw("failed to marshal node upsert request for logging", "node_uuid", nodeUUID, "error", err)
-	} else {
-		log.Logger.Infow("inventory node upsert request", "node_uuid", nodeUUID, "request", string(payload))
-	}
+
 	if err := client.UpsertNode(ctx, nodeUUID, req, jwt); err != nil {
 		return err
 	}

@@ -140,7 +140,7 @@ Metadata update behavior for `--nodegroup` and `--compute-zone`:
 1. Runs the same prerequisite validation as `fleetint precheck`
 2. Validates the endpoint URL (must be HTTPS)
 3. Makes an enrollment request to exchange the SAK token for a JWT token
-4. Stores the JWT token, backend endpoints (metrics, logs, nonce), and optional enrollment metadata (`nodegroup`, `compute-zone`) in the local metadata database
+4. Stores the JWT token, backend endpoints (metrics, logs, nonce), and optional enrollment metadata (`nodegroup`, `compute_zone`) in the local metadata database
 5. The stored credentials are used automatically by the agent for data export
 
 **Example output:**
