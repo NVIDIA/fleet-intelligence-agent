@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
@@ -33,6 +34,10 @@ type fakeBackendClient struct {
 	enrollSAK string
 	enrollJWT string
 	enrollErr error
+}
+
+func strPtr(value string) *string {
+	return &value
 }
 
 func (f *fakeBackendClient) Enroll(_ context.Context, sakToken string) (string, error) {
@@ -108,6 +113,137 @@ func TestEnrollWorkflowPassesConfigToInventorySync(t *testing.T) {
 
 	err := EnrollWithConfig(context.Background(), "https://example.com", "sak-token", wantCfg)
 	require.NoError(t, err)
+}
+
+func TestEnrollWorkflowStoresOptionalMetadata(t *testing.T) {
+	originalFactory := newBackendClient
+	originalSync := syncInventoryAfterEnroll
+	t.Cleanup(func() {
+		newBackendClient = originalFactory
+		syncInventoryAfterEnroll = originalSync
+	})
+
+	newBackendClient = func(rawBaseURL string) (backendclient.Client, error) {
+		return &fakeBackendClient{enrollJWT: "jwt-token"}, nil
+	}
+	syncInventoryAfterEnroll = func(context.Context, *config.Config) error { return nil }
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	err := EnrollWithConfigAndMetadata(
+		context.Background(),
+		"https://example.com",
+		"sak-token",
+		nil,
+		&EnrollMetadata{
+			NodeGroup:   strPtr("  nodegroup-a  "),
+			ComputeZone: strPtr("  zone-a "),
+		},
+	)
+	require.NoError(t, err)
+
+	state := agentstate.NewSQLite()
+	nodeGroup, ok, err := state.GetNodeGroup(context.Background())
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "nodegroup-a", nodeGroup)
+
+	computeZone, ok, err := state.GetComputeZone(context.Background())
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "zone-a", computeZone)
+}
+
+func TestStoreConfigInMetadataPreservesOptionalMetadataWhenUnset(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("test expects non-root default state path resolution")
+	}
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	ctx := context.Background()
+
+	err := storeConfigInMetadata(
+		ctx,
+		"https://example.com",
+		"jwt-token",
+		"sak-token",
+		time.Now().UTC(),
+		EnrollMetadata{
+			NodeGroup:   strPtr("group-a"),
+			ComputeZone: strPtr("zone-a"),
+		},
+	)
+	require.NoError(t, err)
+
+	err = storeConfigInMetadata(
+		ctx,
+		"https://example.com",
+		"jwt-token-2",
+		"sak-token-2",
+		time.Now().UTC(),
+		EnrollMetadata{},
+	)
+	require.NoError(t, err)
+
+	state := agentstate.NewSQLite()
+	nodeGroup, ok, err := state.GetNodeGroup(ctx)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "group-a", nodeGroup)
+
+	computeZone, ok, err := state.GetComputeZone(ctx)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "zone-a", computeZone)
+}
+
+func TestStoreConfigInMetadataClearsOptionalMetadataWhenSetToEmpty(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("test expects non-root default state path resolution")
+	}
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	ctx := context.Background()
+
+	err := storeConfigInMetadata(
+		ctx,
+		"https://example.com",
+		"jwt-token",
+		"sak-token",
+		time.Now().UTC(),
+		EnrollMetadata{
+			NodeGroup:   strPtr("group-a"),
+			ComputeZone: strPtr("zone-a"),
+		},
+	)
+	require.NoError(t, err)
+
+	err = storeConfigInMetadata(
+		ctx,
+		"https://example.com",
+		"jwt-token-2",
+		"sak-token-2",
+		time.Now().UTC(),
+		EnrollMetadata{
+			NodeGroup:   strPtr(""),
+			ComputeZone: strPtr(""),
+		},
+	)
+	require.NoError(t, err)
+
+	state := agentstate.NewSQLite()
+	nodeGroup, ok, err := state.GetNodeGroup(ctx)
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.Empty(t, nodeGroup)
+
+	computeZone, ok, err := state.GetComputeZone(ctx)
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.Empty(t, computeZone)
 }
 
 func TestEnrollWorkflowDefaultWrapperUsesNilConfig(t *testing.T) {
@@ -336,6 +472,7 @@ func TestStoreConfigInMetadataSecuresFreshStateFile(t *testing.T) {
 		"jwt-token",
 		"sak-token",
 		time.Now().UTC(),
+		EnrollMetadata{},
 	)
 	require.NoError(t, err)
 

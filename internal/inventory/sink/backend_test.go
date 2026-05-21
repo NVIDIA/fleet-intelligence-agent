@@ -31,6 +31,10 @@ type fakeState struct {
 	baseURL       string
 	jwt           string
 	nodeUUID      string
+	nodeGroup     string
+	computeZone   string
+	nodeGroupErr  error
+	computeErr    error
 	enrolled      time.Time
 	enrollmentErr error
 	err           error
@@ -59,6 +63,26 @@ func (f *fakeState) GetNodeUUID(context.Context) (string, bool, error) {
 	return f.nodeUUID, f.nodeUUID != "", nil
 }
 func (f *fakeState) SetNodeUUID(context.Context, string) error { return nil }
+func (f *fakeState) GetNodeGroup(context.Context) (string, bool, error) {
+	if f.nodeGroupErr != nil {
+		return "", false, f.nodeGroupErr
+	}
+	if f.err != nil {
+		return "", false, f.err
+	}
+	return f.nodeGroup, f.nodeGroup != "", nil
+}
+func (f *fakeState) SetNodeGroup(context.Context, string) error { return nil }
+func (f *fakeState) GetComputeZone(context.Context) (string, bool, error) {
+	if f.computeErr != nil {
+		return "", false, f.computeErr
+	}
+	if f.err != nil {
+		return "", false, f.err
+	}
+	return f.computeZone, f.computeZone != "", nil
+}
+func (f *fakeState) SetComputeZone(context.Context, string) error { return nil }
 func (f *fakeState) GetEnrollmentTime(context.Context) (time.Time, bool, error) {
 	if f.enrollmentErr != nil {
 		return time.Time{}, false, f.enrollmentErr
@@ -133,10 +157,12 @@ func TestBackendSinkExportUsesState(t *testing.T) {
 	client := &fakeClient{}
 	s := &backendSink{
 		state: &fakeState{
-			baseURL:  "https://example.com",
-			jwt:      "jwt-token",
-			nodeUUID: "node-1",
-			enrolled: enrollmentTime,
+			baseURL:     "https://example.com",
+			jwt:         "jwt-token",
+			nodeUUID:    "node-1",
+			nodeGroup:   "group-a",
+			computeZone: "zone-a",
+			enrolled:    enrollmentTime,
 		},
 		clientFactory: func(string) (backendclient.Client, error) {
 			return client, nil
@@ -152,8 +178,33 @@ func TestBackendSinkExportUsesState(t *testing.T) {
 	require.Equal(t, "jwt-token", client.jwt)
 	require.NotNil(t, client.req)
 	require.Equal(t, "host-a", client.req.Hostname)
+	require.Equal(t, "group-a", client.req.NodeGroup)
+	require.Equal(t, "zone-a", client.req.ComputeZone)
 	require.NotNil(t, client.req.EnrolledAt)
 	require.Equal(t, enrollmentTime, *client.req.EnrolledAt)
+}
+
+func TestBackendSinkExportWithoutOptionalMetadataUsesEmptyStrings(t *testing.T) {
+	client := &fakeClient{}
+	s := &backendSink{
+		state: &fakeState{
+			baseURL:  "https://example.com",
+			jwt:      "jwt-token",
+			nodeUUID: "node-1",
+		},
+		clientFactory: func(string) (backendclient.Client, error) {
+			return client, nil
+		},
+	}
+
+	err := s.Export(context.Background(), &inventory.Snapshot{
+		Hostname:  "host-a",
+		MachineID: "machine-id",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, client.req)
+	require.Equal(t, "", client.req.NodeGroup)
+	require.Equal(t, "", client.req.ComputeZone)
 }
 
 func TestBackendSinkExportEnrollmentTimeErrorIsNonFatal(t *testing.T) {
@@ -177,6 +228,31 @@ func TestBackendSinkExportEnrollmentTimeErrorIsNonFatal(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, client.req)
 	require.Nil(t, client.req.EnrolledAt)
+}
+
+func TestBackendSinkExportOptionalMetadataErrorsAreNonFatal(t *testing.T) {
+	client := &fakeClient{}
+	s := &backendSink{
+		state: &fakeState{
+			baseURL:      "https://example.com",
+			jwt:          "jwt-token",
+			nodeUUID:     "node-1",
+			nodeGroupErr: errors.New("failed to read nodegroup"),
+			computeErr:   errors.New("failed to read compute zone"),
+		},
+		clientFactory: func(string) (backendclient.Client, error) {
+			return client, nil
+		},
+	}
+
+	err := s.Export(context.Background(), &inventory.Snapshot{
+		Hostname:  "host-a",
+		MachineID: "machine-id",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, client.req)
+	require.Empty(t, client.req.NodeGroup)
+	require.Empty(t, client.req.ComputeZone)
 }
 
 func TestBackendSinkValidationDoesNotBlockExport(t *testing.T) {

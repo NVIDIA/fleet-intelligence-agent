@@ -50,6 +50,8 @@ func GenerateEventID() string {
 type HealthData struct {
 	CollectionID   string
 	MachineID      string
+	NodeGroup      string
+	ComputeZone    string
 	Timestamp      time.Time
 	MachineInfo    *machineinfo.MachineInfo
 	GPUUUIDToIndex map[string]string

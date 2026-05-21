@@ -126,6 +126,22 @@ func (c *otlpConverter) createOTLPResource(data *collector.HealthData) *resource
 			},
 		})
 	}
+	if data.NodeGroup != "" {
+		attributes = append(attributes, &commonv1.KeyValue{
+			Key: "nodegroup",
+			Value: &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_StringValue{StringValue: data.NodeGroup},
+			},
+		})
+	}
+	if data.ComputeZone != "" {
+		attributes = append(attributes, &commonv1.KeyValue{
+			Key: "compute_zone",
+			Value: &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_StringValue{StringValue: data.ComputeZone},
+			},
+		})
+	}
 
 	return &resourcev1.Resource{
 		Attributes: attributes,

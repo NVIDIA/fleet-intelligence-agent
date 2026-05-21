@@ -51,6 +51,14 @@ func (s *stubState) GetNodeUUID(context.Context) (string, bool, error) {
 	return s.nodeUUID, s.nodeOK, s.nodeErr
 }
 func (s *stubState) SetNodeUUID(context.Context, string) error { return nil }
+func (s *stubState) GetNodeGroup(context.Context) (string, bool, error) {
+	return "", false, nil
+}
+func (s *stubState) SetNodeGroup(context.Context, string) error { return nil }
+func (s *stubState) GetComputeZone(context.Context) (string, bool, error) {
+	return "", false, nil
+}
+func (s *stubState) SetComputeZone(context.Context, string) error { return nil }
 func (s *stubState) GetEnrollmentTime(context.Context) (time.Time, bool, error) {
 	return time.Time{}, false, nil
 }

@@ -18,6 +18,7 @@ package sink
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
@@ -81,6 +82,18 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 		return fmt.Errorf("create backend client: %w", err)
 	}
 	req := mapper.ToNodeUpsertRequest(snap)
+	nodeGroup, ok, err := s.state.GetNodeGroup(ctx)
+	if err != nil {
+		log.Logger.Warnw("inventory export continuing without nodegroup metadata", "error", err)
+	} else if ok {
+		req.NodeGroup = nodeGroup
+	}
+	computeZone, ok, err := s.state.GetComputeZone(ctx)
+	if err != nil {
+		log.Logger.Warnw("inventory export continuing without compute zone metadata", "error", err)
+	} else if ok {
+		req.ComputeZone = computeZone
+	}
 	enrollmentTime, ok, err := s.state.GetEnrollmentTime(ctx)
 	if err != nil {
 		log.Logger.Warnw("inventory export continuing without enrollment time", "error", err)
@@ -89,6 +102,11 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 		req.EnrolledAt = &normalized
 	}
 	outbound.LogIssues("inventory-backend-sink", "NodeUpsertRequest", outbound.ValidateNodeUpsertRequest(req), "node_uuid", nodeUUID)
+	if payload, err := json.Marshal(req); err != nil {
+		log.Logger.Warnw("failed to marshal node upsert request for logging", "node_uuid", nodeUUID, "error", err)
+	} else {
+		log.Logger.Infow("inventory node upsert request", "node_uuid", nodeUUID, "request", string(payload))
+	}
 	if err := client.UpsertNode(ctx, nodeUUID, req, jwt); err != nil {
 		return err
 	}

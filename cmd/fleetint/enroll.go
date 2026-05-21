@@ -30,7 +30,7 @@ import (
 )
 
 var (
-	performEnrollWorkflow = enrollment.EnrollWithConfig
+	performEnrollWorkflow = enrollment.EnrollWithConfigAndMetadata
 	fleetintEnvFilePath   = config.DefaultEnvFilePath
 )
 
@@ -84,6 +84,10 @@ func resolveToken(cliContext *cli.Context) (string, error) {
 func enrollCommand(cliContext *cli.Context) error {
 	baseEndpoint := cliContext.String("endpoint")
 	force := cliContext.Bool("force")
+	metadata := &enrollment.EnrollMetadata{
+		NodeGroup:   optionalFlagValue(cliContext, "nodegroup"),
+		ComputeZone: optionalFlagValue(cliContext, "compute-zone"),
+	}
 
 	sakToken, err := resolveToken(cliContext)
 	if err != nil {
@@ -117,5 +121,13 @@ func enrollCommand(cliContext *cli.Context) error {
 		return fmt.Errorf("failed to configure loop settings from environment variables: %w", err)
 	}
 
-	return performEnrollWorkflow(ctx, baseEndpoint, sakToken, cfg)
+	return performEnrollWorkflow(ctx, baseEndpoint, sakToken, cfg, metadata)
+}
+
+func optionalFlagValue(cliContext *cli.Context, name string) *string {
+	if !cliContext.IsSet(name) {
+		return nil
+	}
+	value := strings.TrimSpace(cliContext.String(name))
+	return &value
 }

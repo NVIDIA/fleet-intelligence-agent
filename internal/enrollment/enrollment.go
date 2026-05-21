@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
@@ -44,6 +45,12 @@ var (
 	postEnrollInventorySyncTimeout = time.Minute
 )
 
+// EnrollMetadata contains optional enrollment metadata values persisted for runtime use.
+type EnrollMetadata struct {
+	NodeGroup   *string
+	ComputeZone *string
+}
+
 // Enroll runs the full enrollment workflow and performs a best-effort initial inventory sync.
 func Enroll(ctx context.Context, baseEndpoint, sakToken string) error {
 	return EnrollWithConfig(ctx, baseEndpoint, sakToken, nil)
@@ -51,6 +58,11 @@ func Enroll(ctx context.Context, baseEndpoint, sakToken string) error {
 
 // EnrollWithConfig runs the full enrollment workflow and uses cfg for best-effort inventory metadata.
 func EnrollWithConfig(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
+	return EnrollWithConfigAndMetadata(ctx, baseEndpoint, sakToken, cfg, nil)
+}
+
+// EnrollWithConfigAndMetadata runs the full enrollment workflow and persists optional metadata values.
+func EnrollWithConfigAndMetadata(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config, metadata *EnrollMetadata) error {
 	baseURL, err := normalizeBackendBaseURL(baseEndpoint)
 	if err != nil {
 		return fmt.Errorf("invalid enrollment endpoint: %w", err)
@@ -65,7 +77,7 @@ func EnrollWithConfig(ctx context.Context, baseEndpoint, sakToken string, cfg *c
 		return err
 	}
 	enrolledAt := time.Now().UTC()
-	if err := storeConfigInMetadata(ctx, baseURL.String(), jwtToken, sakToken, enrolledAt); err != nil {
+	if err := storeConfigInMetadata(ctx, baseURL.String(), jwtToken, sakToken, enrolledAt, normalizedEnrollMetadata(metadata)); err != nil {
 		return fmt.Errorf("failed to store configuration: %w", err)
 	}
 	syncCtx, cancel := context.WithTimeout(ctx, postEnrollInventorySyncTimeout)
@@ -112,7 +124,25 @@ func normalizeBackendBaseURL(raw string) (*url.URL, error) {
 	return endpoint.ValidateBackendEndpoint(normalized)
 }
 
-func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken string, enrolledAt time.Time) error {
+func normalizedEnrollMetadata(metadata *EnrollMetadata) EnrollMetadata {
+	if metadata == nil {
+		return EnrollMetadata{}
+	}
+	return EnrollMetadata{
+		NodeGroup:   trimmedOptionalString(metadata.NodeGroup),
+		ComputeZone: trimmedOptionalString(metadata.ComputeZone),
+	}
+}
+
+func trimmedOptionalString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	return &trimmed
+}
+
+func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken string, enrolledAt time.Time, metadata EnrollMetadata) error {
 	stateFile, err := config.DefaultStateFile()
 	if err != nil {
 		return fmt.Errorf("failed to get state file path: %w", err)
@@ -142,6 +172,16 @@ func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken stri
 	}
 	if err := pkgmetadata.SetMetadata(ctx, dbRW, agentstate.MetadataKeyEnrolledAt, enrolledAt.Format(time.RFC3339Nano)); err != nil {
 		return fmt.Errorf("failed to set enrollment time: %w", err)
+	}
+	if metadata.NodeGroup != nil {
+		if err := pkgmetadata.SetMetadata(ctx, dbRW, agentstate.MetadataKeyNodeGroup, *metadata.NodeGroup); err != nil {
+			return fmt.Errorf("failed to set nodegroup: %w", err)
+		}
+	}
+	if metadata.ComputeZone != nil {
+		if err := pkgmetadata.SetMetadata(ctx, dbRW, agentstate.MetadataKeyComputeZone, *metadata.ComputeZone); err != nil {
+			return fmt.Errorf("failed to set compute zone: %w", err)
+		}
 	}
 	return nil
 }
