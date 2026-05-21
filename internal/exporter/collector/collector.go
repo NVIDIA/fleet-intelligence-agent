@@ -28,11 +28,14 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
+	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 	"github.com/google/uuid"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
 )
+
+const initialMachineInfoWait = 5 * time.Second
 
 // GenerateCollectionID generates a unique identifier for a data collection cycle
 func GenerateCollectionID() string {
@@ -65,12 +68,27 @@ type Collector interface {
 
 // collector implements the Collector interface
 type collector struct {
-	config             *config.HealthExporterConfig
-	metricsStore       pkgmetrics.Store
-	eventStore         eventstore.Store
-	componentsRegistry components.Registry
-	machineID          string            // Agent's stable identity from server initialization
-	dcgmGPUIndexes     map[string]string // UUID → DCGM device ID override for GPU indices
+	config              *config.HealthExporterConfig
+	metricsStore        pkgmetrics.Store
+	eventStore          eventstore.Store
+	componentsRegistry  components.Registry
+	machineID           string            // Agent's stable identity from server initialization
+	dcgmGPUIndexes      map[string]string // UUID → DCGM device ID override for GPU indices
+	machineInfoProvider machineInfoProvider
+}
+
+type collectorOptions struct {
+	nvmlInstance nvidianvml.Instance
+}
+
+// Option configures optional collector dependencies.
+type Option func(*collectorOptions)
+
+// WithNVMLInstance enables cached machine-info collection for health exports.
+func WithNVMLInstance(nvmlInstance nvidianvml.Instance) Option {
+	return func(o *collectorOptions) {
+		o.nvmlInstance = nvmlInstance
+	}
 }
 
 // New creates a new health data collector
@@ -81,14 +99,31 @@ func New(
 	componentsRegistry components.Registry,
 	machineID string,
 	dcgmGPUIndexes map[string]string,
+	opts ...Option,
 ) Collector {
+	var collectorOpts collectorOptions
+	for _, opt := range opts {
+		opt(&collectorOpts)
+	}
+
+	var provider machineInfoProvider
+	if cfg != nil && cfg.IncludeMachineInfo && collectorOpts.nvmlInstance != nil {
+		var machineInfoOpts []machineinfo.MachineInfoOption
+		if len(dcgmGPUIndexes) > 0 {
+			machineInfoOpts = append(machineInfoOpts, machineinfo.WithDCGMGPUIndexes(dcgmGPUIndexes))
+		}
+		provider = newCachedMachineInfoProvider(collectorOpts.nvmlInstance, 0, machineInfoOpts...)
+		provider.RefreshAsync(context.Background())
+	}
+
 	return &collector{
-		config:             cfg,
-		metricsStore:       metricsStore,
-		eventStore:         eventStore,
-		componentsRegistry: componentsRegistry,
-		machineID:          machineID,
-		dcgmGPUIndexes:     dcgmGPUIndexes,
+		config:              cfg,
+		metricsStore:        metricsStore,
+		eventStore:          eventStore,
+		componentsRegistry:  componentsRegistry,
+		machineID:           machineID,
+		dcgmGPUIndexes:      dcgmGPUIndexes,
+		machineInfoProvider: provider,
 	}
 }
 
@@ -108,6 +143,11 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 		MachineID:      c.machineID,
 		Timestamp:      time.Now().UTC(),
 		GPUUUIDToIndex: cloneStringMap(c.dcgmGPUIndexes),
+	}
+
+	// Collect machine info if enabled. The converter only exports selected fields.
+	if c.config.IncludeMachineInfo {
+		c.collectMachineInfo(ctx, data)
 	}
 
 	// Collect metrics if enabled
@@ -132,6 +172,23 @@ func (c *collector) Collect(ctx context.Context) (*HealthData, error) {
 	}
 
 	return data, nil
+}
+
+// collectMachineInfo reads cached machine info and triggers a best-effort refresh.
+func (c *collector) collectMachineInfo(ctx context.Context, data *HealthData) {
+	if c.machineInfoProvider == nil {
+		return
+	}
+
+	if _, ok := c.machineInfoProvider.Get(); !ok {
+		c.machineInfoProvider.WaitForInitialRefresh(ctx, initialMachineInfoWait)
+	}
+
+	if machineInfo, ok := c.machineInfoProvider.Get(); ok {
+		data.MachineInfo = machineInfo
+	}
+
+	c.machineInfoProvider.RefreshAsync(ctx)
 }
 
 // collectMetrics collects metrics data from the metrics store

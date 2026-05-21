@@ -24,6 +24,7 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/eventstore"
 	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
+	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
 )
@@ -40,6 +41,7 @@ type exporterOptions struct {
 	metricsStore       pkgmetrics.Store
 	eventStore         eventstore.Store
 	componentsRegistry components.Registry
+	nvmlInstance       nvidianvml.Instance
 	httpClient         *http.Client
 	timeout            time.Duration
 	dbRW               *sql.DB           // Read-write database connection
@@ -80,6 +82,14 @@ func WithEventStore(store eventstore.Store) ExporterOption {
 func WithComponentsRegistry(registry components.Registry) ExporterOption {
 	return func(c *exporterOptions) error {
 		c.componentsRegistry = registry
+		return nil
+	}
+}
+
+// WithNVMLInstance sets the NVML instance used for cached machine-info collection.
+func WithNVMLInstance(instance nvidianvml.Instance) ExporterOption {
+	return func(c *exporterOptions) error {
+		c.nvmlInstance = instance
 		return nil
 	}
 }
