@@ -395,6 +395,7 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 			exporter.WithMetricsStore(metricsSQLiteStore),
 			exporter.WithEventStore(eventStore),
 			exporter.WithComponentsRegistry(s.componentsRegistry),
+			exporter.WithNVMLInstance(nvmlInstance),
 			exporter.WithDatabaseConnections(dbRW, dbRO),
 			exporter.WithMachineID(machineID),
 			exporter.WithDCGMGPUIndexes(dcgmGPUIndexes),
