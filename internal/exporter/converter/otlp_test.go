@@ -773,6 +773,49 @@ func TestOTLPConverter_ResourceAttributes(t *testing.T) {
 	assert.Equal(t, "test-machine-123", attrMap["machine.id"])
 }
 
+func TestOTLPConverter_ResourceAttributes_IncludesOnlyGPUInfoGPUs(t *testing.T) {
+	data := &collector.HealthData{
+		Timestamp: time.Now(),
+		MachineID: "test-machine-123",
+		MachineInfo: &machineinfo.MachineInfo{
+			GPUInfo: &apiv1.MachineGPUInfo{
+				Product:      "NVIDIA-H100",
+				Manufacturer: "NVIDIA",
+				Architecture: "hopper",
+				Memory:       "85899345920",
+				GPUs: []apiv1.MachineGPUInstance{
+					{
+						UUID:         "GPU-123",
+						GPUIndex:     "0",
+						BusID:        "0000:01:00.0",
+						SN:           "serial-123",
+						MinorID:      "0",
+						BoardID:      7,
+						VBIOSVersion: "96.00.68.00.01",
+						ChassisSN:    "chassis-123",
+					},
+				},
+			},
+		},
+	}
+
+	converter := NewOTLPConverter()
+	otlpData := converter.Convert(data)
+
+	attrs := otlpData.Metrics.ResourceMetrics[0].Resource.Attributes
+	gpus := findAttribute(t, attrs, "gpuInfo.gpus").GetStringValue()
+	assert.JSONEq(t, `[{"uuid":"GPU-123","gpuIndex":"0","busID":"0000:01:00.0","sn":"serial-123","minorID":"0","boardID":7,"vbiosVersion":"96.00.68.00.01","chassisSN":"chassis-123"}]`, gpus)
+
+	for _, attr := range attrs {
+		assert.NotContains(t, []string{
+			"gpuInfo.product",
+			"gpuInfo.manufacturer",
+			"gpuInfo.architecture",
+			"gpuInfo.memory",
+		}, attr.Key)
+	}
+}
+
 func TestOTLPConverter_Interface(t *testing.T) {
 	// Verify otlpConverter implements OTLPConverter interface
 	var _ OTLPConverter = (*otlpConverter)(nil)

@@ -134,6 +134,28 @@ func TestCollector_CollectMachineInfo_NoNVML(t *testing.T) {
 	assert.Nil(t, data.MachineInfo, "MachineInfo should be nil without NVML")
 }
 
+func TestCollector_CollectMachineInfo_UsesCachedProvider(t *testing.T) {
+	info := &machineinfo.MachineInfo{
+		GPUInfo: &apiv1.MachineGPUInfo{
+			GPUs: []apiv1.MachineGPUInstance{{UUID: "GPU-123", GPUIndex: "0"}},
+		},
+	}
+	provider := &fakeMachineInfoProvider{
+		info: info,
+		ok:   true,
+	}
+	data := &HealthData{}
+	c := &collector{
+		machineInfoProvider: provider,
+	}
+
+	c.collectMachineInfo(context.Background(), data)
+
+	assert.Same(t, info, data.MachineInfo)
+	assert.True(t, provider.refreshed)
+	assert.False(t, provider.waited)
+}
+
 func TestCachedMachineInfoProvider_DeduplicatesConcurrentRefresh(t *testing.T) {
 	originalGetMachineInfo := getMachineInfo
 	defer func() {
@@ -601,6 +623,26 @@ func (m *mockEventStore) Close(ctx context.Context) error {
 
 func (m *mockEventStore) Bucket(name string, opts ...eventstore.OpOption) (eventstore.Bucket, error) {
 	return nil, nil
+}
+
+type fakeMachineInfoProvider struct {
+	info      *machineinfo.MachineInfo
+	ok        bool
+	refreshed bool
+	waited    bool
+}
+
+func (f *fakeMachineInfoProvider) Get() (*machineinfo.MachineInfo, bool) {
+	return f.info, f.ok
+}
+
+func (f *fakeMachineInfoProvider) RefreshAsync(parent context.Context) {
+	f.refreshed = true
+}
+
+func (f *fakeMachineInfoProvider) WaitForInitialRefresh(ctx context.Context, maxWait time.Duration) bool {
+	f.waited = true
+	return f.ok
 }
 
 type mockComponent struct {
