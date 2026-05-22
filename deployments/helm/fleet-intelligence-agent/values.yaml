@@ -61,6 +61,10 @@ enroll:
   tokenSecretName: ""
   tokenSecretKey: "token"
   tokenValue: ""
+  # Optional enrollment metadata. Keep null to omit flag (preserve existing value).
+  # Set to a string to overwrite. Set to empty string "" to clear.
+  nodeGroup: ""
+  computeZone: ""
 
 ports:
   http: 15133

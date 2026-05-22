@@ -21,6 +21,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -160,25 +161,60 @@ func TestGetInventorySyncTimeout(t *testing.T) {
 }
 
 func TestShouldLogLoopExitError(t *testing.T) {
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	deadlineCtx, deadlineCancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer deadlineCancel()
+	<-deadlineCtx.Done()
+
 	t.Run("nil error", func(t *testing.T) {
-		assert.False(t, shouldLogLoopExitError(nil))
+		assert.False(t, shouldLogLoopExitError(context.Background(), nil))
 	})
 
-	t.Run("context canceled", func(t *testing.T) {
-		assert.False(t, shouldLogLoopExitError(context.Canceled))
+	t.Run("context canceled during shutdown", func(t *testing.T) {
+		assert.False(t, shouldLogLoopExitError(canceledCtx, context.Canceled))
 	})
 
-	t.Run("context deadline exceeded", func(t *testing.T) {
-		assert.False(t, shouldLogLoopExitError(context.DeadlineExceeded))
+	t.Run("context deadline exceeded during shutdown", func(t *testing.T) {
+		assert.False(t, shouldLogLoopExitError(deadlineCtx, context.DeadlineExceeded))
 	})
 
 	t.Run("wrapped deadline exceeded", func(t *testing.T) {
 		err := errors.Join(errors.New("loop stopped"), context.DeadlineExceeded)
-		assert.False(t, shouldLogLoopExitError(err))
+		assert.False(t, shouldLogLoopExitError(deadlineCtx, err))
+	})
+
+	t.Run("deadline exceeded while parent context still active", func(t *testing.T) {
+		assert.True(t, shouldLogLoopExitError(context.Background(), context.DeadlineExceeded))
+	})
+
+	t.Run("canceled while parent context still active", func(t *testing.T) {
+		assert.True(t, shouldLogLoopExitError(context.Background(), context.Canceled))
 	})
 
 	t.Run("real error", func(t *testing.T) {
-		assert.True(t, shouldLogLoopExitError(errors.New("unexpected failure")))
+		assert.True(t, shouldLogLoopExitError(context.Background(), errors.New("unexpected failure")))
+	})
+}
+
+func TestWaitForWaitGroup(t *testing.T) {
+	t.Run("returns true when waitgroup completes", func(t *testing.T) {
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			time.Sleep(10 * time.Millisecond)
+		}()
+		assert.True(t, waitForWaitGroup(&wg, 200*time.Millisecond))
+	})
+
+	t.Run("returns false on timeout", func(t *testing.T) {
+		var wg sync.WaitGroup
+		wg.Add(1)
+		assert.False(t, waitForWaitGroup(&wg, 10*time.Millisecond))
+		wg.Done()
+		assert.True(t, waitForWaitGroup(&wg, 100*time.Millisecond))
 	})
 }
 
@@ -461,6 +497,24 @@ func TestServerStop(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestServerStopCancelsBackgroundLoops(t *testing.T) {
+	loopCtx, loopCancel := context.WithCancel(context.Background())
+	s := &Server{
+		loopCtx:    loopCtx,
+		loopCancel: loopCancel,
+	}
+	s.loopWG.Add(1)
+	go func() {
+		defer s.loopWG.Done()
+		<-loopCtx.Done()
+	}()
+
+	s.Stop()
+
+	assert.ErrorIs(t, loopCtx.Err(), context.Canceled)
+	assert.True(t, waitForWaitGroup(&s.loopWG, 100*time.Millisecond))
 }
 
 // TestServerStopWithDatabases tests Stop with actual database connections.

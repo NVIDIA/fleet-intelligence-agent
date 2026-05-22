@@ -51,6 +51,8 @@ Common values (defaults from `values.yaml`):
 | `enroll.tokenSecretName` | `""` | Secret name for enrollment token. |
 | `enroll.tokenSecretKey` | `token` | Secret key for enrollment token. |
 | `enroll.tokenValue` | `""` | Inline token value (optional). |
+| `enroll.nodeGroup` | `null` | Optional `--node-group` enroll flag. `null` omits flag, `""` clears stored value. |
+| `enroll.computeZone` | `null` | Optional `--compute-zone` enroll flag. `null` omits flag, `""` clears stored value. |
 | `enroll.securityContext.runAsUser` | `0` | Run enrollment init as root. |
 | `ports.http` | `15133` | HTTP port. |
 | `resources.requests.cpu` | `100m` | CPU request. |
@@ -70,6 +72,7 @@ Common values (defaults from `values.yaml`):
 
 `enroll.enabled` and `enroll.unenroll` are mutually exclusive; do not set both to `true`.
 Set `enroll.force=true` to append `--force` to `fleetint enroll`.
+Set `enroll.nodeGroup` / `enroll.computeZone` to pass optional enrollment metadata via the init container command.
 
 See `docs/install-helm.md` for the enrollment flow and secret creation steps.
 

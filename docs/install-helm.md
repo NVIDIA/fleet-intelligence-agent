@@ -75,6 +75,23 @@ helm upgrade fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intellig
   --set enroll.tokenSecretName="$ENROLL_TOKEN_SECRET_NAME"
 ```
 
+Optional: include node metadata during automatic enrollment:
+
+```bash
+helm upgrade fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intelligence-agent \
+  --version "$CHART_VERSION" \
+  --namespace "$NS" \
+  --set enroll.enabled=true \
+  --set enroll.endpoint="$ENROLL_ENDPOINT" \
+  --set enroll.tokenSecretName="$ENROLL_TOKEN_SECRET_NAME" \
+  --set-string enroll.nodeGroup="prod-a" \
+  --set-string enroll.computeZone="us-east-1c"
+```
+
+Notes:
+- Keep `enroll.nodeGroup` / `enroll.computeZone` unset (`null`) to omit the flag and preserve existing stored values.
+- Set either value to an empty string to clear it (for example: `--set-string enroll.nodeGroup=""`).
+
 Upgrade (no enrollment):
 
 ```bash
