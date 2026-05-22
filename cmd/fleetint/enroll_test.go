@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/config"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/enrollment"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/precheck"
 )
 
@@ -107,8 +108,11 @@ func TestEnrollCommandBlocksOnFailedPrecheck(t *testing.T) {
 			},
 		}, nil
 	}
-	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config, metadata *enrollment.EnrollMetadata) error {
 		enrollmentCalled = true
+		require.NotNil(t, metadata)
+		require.Nil(t, metadata.NodeGroup)
+		require.Nil(t, metadata.ComputeZone)
 		return nil
 	}
 
@@ -142,8 +146,11 @@ func TestEnrollCommandForceBypassesFailedPrecheck(t *testing.T) {
 			},
 		}, nil
 	}
-	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config, metadata *enrollment.EnrollMetadata) error {
 		enrollmentCalled = true
+		require.NotNil(t, metadata)
+		require.Nil(t, metadata.NodeGroup)
+		require.Nil(t, metadata.ComputeZone)
 		return nil
 	}
 
@@ -174,11 +181,14 @@ func TestEnrollCommandPassesTimeoutContext(t *testing.T) {
 		}, nil
 	}
 
-	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config, metadata *enrollment.EnrollMetadata) error {
 		deadline, ok := ctx.Deadline()
 		require.True(t, ok)
 		require.LessOrEqual(t, time.Until(deadline), defaultEnrollTimeout)
 		require.Greater(t, time.Until(deadline), 55*time.Second)
+		require.NotNil(t, metadata)
+		require.Nil(t, metadata.NodeGroup)
+		require.Nil(t, metadata.ComputeZone)
 		return nil
 	}
 
@@ -217,7 +227,7 @@ FLEETINT_ATTESTATION_INTERVAL="6h"
 `), 0o600))
 	fleetintEnvFilePath = envFilePath
 
-	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config) error {
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config, metadata *enrollment.EnrollMetadata) error {
 		require.NotNil(t, cfg)
 		require.NotNil(t, cfg.Inventory)
 		require.False(t, cfg.Inventory.Enabled)
@@ -225,6 +235,9 @@ FLEETINT_ATTESTATION_INTERVAL="6h"
 		require.NotNil(t, cfg.Attestation)
 		require.True(t, cfg.Attestation.Enabled)
 		require.Equal(t, 6*time.Hour, cfg.Attestation.Interval.Duration)
+		require.NotNil(t, metadata)
+		require.Nil(t, metadata.NodeGroup)
+		require.Nil(t, metadata.ComputeZone)
 		return nil
 	}
 
@@ -232,5 +245,85 @@ FLEETINT_ATTESTATION_INTERVAL="6h"
 	app.Writer = &bytes.Buffer{}
 
 	err := app.Run([]string{"fleetint", "enroll", "--endpoint", "https://example.com", "--token", "token"})
+	require.NoError(t, err)
+}
+
+func TestEnrollCommandPassesOptionalMetadata(t *testing.T) {
+	useMissingFleetintEnvFile(t)
+
+	originalRunPrecheck := runPrecheck
+	originalEnrollWorkflow := performEnrollWorkflow
+	t.Cleanup(func() {
+		runPrecheck = originalRunPrecheck
+		performEnrollWorkflow = originalEnrollWorkflow
+	})
+
+	runPrecheck = func() (precheck.Result, error) {
+		return precheck.Result{
+			Checks: []precheck.Check{
+				{Name: "gpu-present", Message: "ok", Passed: true},
+			},
+		}, nil
+	}
+
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config, metadata *enrollment.EnrollMetadata) error {
+		require.NotNil(t, metadata)
+		require.NotNil(t, metadata.NodeGroup)
+		require.Equal(t, "prod-group", *metadata.NodeGroup)
+		require.NotNil(t, metadata.ComputeZone)
+		require.Equal(t, "us-east-1c", *metadata.ComputeZone)
+		return nil
+	}
+
+	app := App()
+	app.Writer = &bytes.Buffer{}
+
+	err := app.Run([]string{
+		"fleetint", "enroll",
+		"--endpoint", "https://example.com",
+		"--token", "token",
+		"--node-group", "prod-group",
+		"--compute-zone", "us-east-1c",
+	})
+	require.NoError(t, err)
+}
+
+func TestEnrollCommandTreatsExplicitEmptyMetadataAsClear(t *testing.T) {
+	useMissingFleetintEnvFile(t)
+
+	originalRunPrecheck := runPrecheck
+	originalEnrollWorkflow := performEnrollWorkflow
+	t.Cleanup(func() {
+		runPrecheck = originalRunPrecheck
+		performEnrollWorkflow = originalEnrollWorkflow
+	})
+
+	runPrecheck = func() (precheck.Result, error) {
+		return precheck.Result{
+			Checks: []precheck.Check{
+				{Name: "gpu-present", Message: "ok", Passed: true},
+			},
+		}, nil
+	}
+
+	performEnrollWorkflow = func(ctx context.Context, baseEndpoint, sakToken string, cfg *config.Config, metadata *enrollment.EnrollMetadata) error {
+		require.NotNil(t, metadata)
+		require.NotNil(t, metadata.NodeGroup)
+		require.Empty(t, *metadata.NodeGroup)
+		require.NotNil(t, metadata.ComputeZone)
+		require.Empty(t, *metadata.ComputeZone)
+		return nil
+	}
+
+	app := App()
+	app.Writer = &bytes.Buffer{}
+
+	err := app.Run([]string{
+		"fleetint", "enroll",
+		"--endpoint", "https://example.com",
+		"--token", "token",
+		"--node-group=",
+		"--compute-zone=",
+	})
 	require.NoError(t, err)
 }

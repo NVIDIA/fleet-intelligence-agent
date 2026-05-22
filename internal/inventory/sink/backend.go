@@ -81,6 +81,18 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 		return fmt.Errorf("create backend client: %w", err)
 	}
 	req := mapper.ToNodeUpsertRequest(snap)
+	nodeGroup, ok, err := s.state.GetNodeGroup(ctx)
+	if err != nil {
+		log.Logger.Warnw("inventory export continuing without nodegroup metadata", "error", err)
+	} else if ok {
+		req.NodeGroup = nodeGroup
+	}
+	computeZone, ok, err := s.state.GetComputeZone(ctx)
+	if err != nil {
+		log.Logger.Warnw("inventory export continuing without compute zone metadata", "error", err)
+	} else if ok {
+		req.ComputeZone = computeZone
+	}
 	enrollmentTime, ok, err := s.state.GetEnrollmentTime(ctx)
 	if err != nil {
 		log.Logger.Warnw("inventory export continuing without enrollment time", "error", err)
@@ -89,6 +101,7 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 		req.EnrolledAt = &normalized
 	}
 	outbound.LogIssues("inventory-backend-sink", "NodeUpsertRequest", outbound.ValidateNodeUpsertRequest(req), "node_uuid", nodeUUID)
+
 	if err := client.UpsertNode(ctx, nodeUUID, req, jwt); err != nil {
 		return err
 	}

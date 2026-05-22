@@ -36,6 +36,8 @@ type NodeUpsertRequest struct {
 	Uptime                  *time.Time    `json:"uptime,omitempty"`
 	EnrolledAt              *time.Time    `json:"enrolledAt,omitempty"`
 	NetPrivateIP            string        `json:"netPrivateIP,omitempty"`
+	NodeGroup               string        `json:"nodeGroup"`
+	ComputeZone             string        `json:"computeZone"`
 }
 
 type NodeResources struct {

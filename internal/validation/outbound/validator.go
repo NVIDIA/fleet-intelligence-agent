@@ -89,6 +89,8 @@ func ValidateNodeUpsertRequest(req *backendclient.NodeUpsertRequest) []Issue {
 	validateLen(&issues, "length", "osImage", req.OSImage, 1024)
 	validateLen(&issues, "length", "agentVersion", req.AgentVersion, 255)
 	validateIP(&issues, "format", "netPrivateIP", req.NetPrivateIP)
+	validateLen(&issues, "length", "nodeGroup", req.NodeGroup, 255)
+	validateLen(&issues, "length", "computeZone", req.ComputeZone, 255)
 
 	validateNonNegative(&issues, "numeric", "agentConfig.totalComponents", req.AgentConfig.TotalComponents)
 	validateNonNegative(&issues, "numeric", "agentConfig.retentionPeriodSeconds", req.AgentConfig.RetentionPeriodSeconds)

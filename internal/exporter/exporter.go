@@ -30,6 +30,7 @@ import (
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/backendclient"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/endpoint"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/exporter/collector"
@@ -166,6 +167,7 @@ func (e *healthExporter) export() error {
 	if err != nil {
 		return fmt.Errorf("collection failed: %w", err)
 	}
+	e.populateOptionalResourceMetadata(collectionCtx, healthData)
 
 	// Export data based on mode
 	if e.options.config.OfflineMode {
@@ -174,6 +176,26 @@ func (e *healthExporter) export() error {
 		exportCtx, cancelExport := context.WithTimeout(e.ctx, e.options.timeout)
 		defer cancelExport()
 		return e.exportToHTTP(exportCtx, healthData)
+	}
+}
+
+func (e *healthExporter) populateOptionalResourceMetadata(ctx context.Context, data *collector.HealthData) {
+	if data == nil || e.options.dbRO == nil {
+		return
+	}
+
+	nodeGroup, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, agentstate.MetadataKeyNodeGroup)
+	if err != nil {
+		log.Logger.Debugw("nodegroup metadata not available for telemetry resource", "error", err)
+	} else {
+		data.NodeGroup = nodeGroup
+	}
+
+	computeZone, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, agentstate.MetadataKeyComputeZone)
+	if err != nil {
+		log.Logger.Debugw("compute zone metadata not available for telemetry resource", "error", err)
+	} else {
+		data.ComputeZone = computeZone
 	}
 }
 

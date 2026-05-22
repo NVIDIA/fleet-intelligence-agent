@@ -51,6 +51,10 @@ func TestSQLiteStateRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	err = state.SetNodeUUID(ctx, "node-1")
 	require.NoError(t, err)
+	err = state.SetNodeGroup(ctx, "group-a")
+	require.NoError(t, err)
+	err = state.SetComputeZone(ctx, "us-west-2a")
+	require.NoError(t, err)
 	enrollmentTime := time.Date(2026, 5, 6, 15, 0, 0, 123456789, time.UTC)
 	err = state.SetEnrollmentTime(ctx, enrollmentTime)
 	require.NoError(t, err)
@@ -74,6 +78,16 @@ func TestSQLiteStateRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, "node-1", value)
+
+	value, ok, err = state.GetNodeGroup(ctx)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "group-a", value)
+
+	value, ok, err = state.GetComputeZone(ctx)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "us-west-2a", value)
 
 	gotEnrollmentTime, ok, err := state.GetEnrollmentTime(ctx)
 	require.NoError(t, err)
@@ -115,6 +129,8 @@ func TestSQLiteStateMissingMetadataTableIsTreatedAsAbsent(t *testing.T) {
 		state.GetJWT,
 		state.GetSAK,
 		state.GetNodeUUID,
+		state.GetNodeGroup,
+		state.GetComputeZone,
 	} {
 		value, ok, err := get(ctx)
 		require.NoError(t, err)

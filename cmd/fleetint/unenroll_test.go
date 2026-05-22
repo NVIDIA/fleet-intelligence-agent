@@ -23,6 +23,8 @@ import (
 	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 	"github.com/stretchr/testify/require"
+
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/agentstate"
 )
 
 func TestRemoveEnrollmentMetadata(t *testing.T) {
@@ -36,14 +38,16 @@ func TestRemoveEnrollmentMetadata(t *testing.T) {
 	require.NoError(t, pkgmetadata.CreateTableMetadata(ctx, db))
 
 	for key, value := range map[string]string{
-		pkgmetadata.MetadataKeyToken: "jwt-token",
-		"sak_token":                  "sak-token",
-		"backend_base_url":           "https://backend.example.com",
-		"enroll_endpoint":            "https://backend.example.com/api/v1/enroll",
-		"metrics_endpoint":           "https://backend.example.com/api/v1/health/metrics",
-		"logs_endpoint":              "https://backend.example.com/api/v1/health/logs",
-		"nonce_endpoint":             "https://backend.example.com/api/v1/attest/nonce",
-		"keep_me":                    "still-here",
+		pkgmetadata.MetadataKeyToken:         "jwt-token",
+		agentstate.MetadataKeySAKToken:       "sak-token",
+		agentstate.MetadataKeyBackendBaseURL: "https://backend.example.com",
+		agentstate.MetadataKeyNodeGroup:      "group-a",
+		agentstate.MetadataKeyComputeZone:    "zone-a",
+		"enroll_endpoint":                    "https://backend.example.com/api/v1/enroll",
+		"metrics_endpoint":                   "https://backend.example.com/api/v1/health/metrics",
+		"logs_endpoint":                      "https://backend.example.com/api/v1/health/logs",
+		"nonce_endpoint":                     "https://backend.example.com/api/v1/attest/nonce",
+		"keep_me":                            "still-here",
 	} {
 		require.NoError(t, pkgmetadata.SetMetadata(ctx, db, key, value))
 	}
@@ -52,8 +56,10 @@ func TestRemoveEnrollmentMetadata(t *testing.T) {
 
 	for _, key := range []string{
 		pkgmetadata.MetadataKeyToken,
-		"sak_token",
-		"backend_base_url",
+		agentstate.MetadataKeySAKToken,
+		agentstate.MetadataKeyBackendBaseURL,
+		agentstate.MetadataKeyNodeGroup,
+		agentstate.MetadataKeyComputeZone,
 		"enroll_endpoint",
 		"metrics_endpoint",
 		"logs_endpoint",

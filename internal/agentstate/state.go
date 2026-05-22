@@ -25,6 +25,8 @@ const (
 	MetadataKeyBackendBaseURL = "backend_base_url"
 	MetadataKeySAKToken       = "sak_token"
 	MetadataKeyEnrolledAt     = "enrolled_at"
+	MetadataKeyNodeGroup      = "nodegroup"
+	MetadataKeyComputeZone    = "compute_zone"
 )
 
 // State provides local persisted metadata/state access for backend workflows.
@@ -43,4 +45,10 @@ type State interface {
 
 	GetEnrollmentTime(ctx context.Context) (value time.Time, ok bool, err error)
 	SetEnrollmentTime(ctx context.Context, value time.Time) error
+
+	GetNodeGroup(ctx context.Context) (value string, ok bool, err error)
+	SetNodeGroup(ctx context.Context, value string) error
+
+	GetComputeZone(ctx context.Context) (value string, ok bool, err error)
+	SetComputeZone(ctx context.Context, value string) error
 }

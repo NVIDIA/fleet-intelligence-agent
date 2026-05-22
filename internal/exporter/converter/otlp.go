@@ -126,6 +126,22 @@ func (c *otlpConverter) createOTLPResource(data *collector.HealthData) *resource
 			},
 		})
 	}
+	if data.NodeGroup != "" {
+		attributes = append(attributes, &commonv1.KeyValue{
+			Key: "node_group",
+			Value: &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_StringValue{StringValue: data.NodeGroup},
+			},
+		})
+	}
+	if data.ComputeZone != "" {
+		attributes = append(attributes, &commonv1.KeyValue{
+			Key: "compute_zone",
+			Value: &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_StringValue{StringValue: data.ComputeZone},
+			},
+		})
+	}
 
 	if data.MachineInfo != nil && data.MachineInfo.GPUInfo != nil && len(data.MachineInfo.GPUInfo.GPUs) > 0 {
 		if gpus, err := json.Marshal(data.MachineInfo.GPUInfo.GPUs); err == nil {

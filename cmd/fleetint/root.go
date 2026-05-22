@@ -214,6 +214,14 @@ func App() *cli.App {
 					Name:  "force",
 					Usage: "continue enrollment even when precheck fails",
 				},
+				&cli.StringFlag{
+					Name:  "node-group",
+					Usage: "optional node group metadata associated with this node",
+				},
+				&cli.StringFlag{
+					Name:  "compute-zone",
+					Usage: "optional compute zone metadata associated with this node",
+				},
 			},
 		},
 		{

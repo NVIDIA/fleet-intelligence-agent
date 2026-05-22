@@ -112,6 +112,22 @@ func (s *sqliteState) SetNodeUUID(ctx context.Context, value string) error {
 	return s.setMetadata(ctx, pkgmetadata.MetadataKeyMachineID, value)
 }
 
+func (s *sqliteState) GetNodeGroup(ctx context.Context) (string, bool, error) {
+	return s.getMetadata(ctx, MetadataKeyNodeGroup)
+}
+
+func (s *sqliteState) SetNodeGroup(ctx context.Context, value string) error {
+	return s.setMetadata(ctx, MetadataKeyNodeGroup, value)
+}
+
+func (s *sqliteState) GetComputeZone(ctx context.Context) (string, bool, error) {
+	return s.getMetadata(ctx, MetadataKeyComputeZone)
+}
+
+func (s *sqliteState) SetComputeZone(ctx context.Context, value string) error {
+	return s.setMetadata(ctx, MetadataKeyComputeZone, value)
+}
+
 func (s *sqliteState) GetEnrollmentTime(ctx context.Context) (time.Time, bool, error) {
 	value, ok, err := s.getMetadata(ctx, MetadataKeyEnrolledAt)
 	if err != nil || !ok {

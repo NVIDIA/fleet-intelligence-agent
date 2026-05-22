@@ -747,8 +747,10 @@ func TestOTLPConverter_UpMetric(t *testing.T) {
 
 func TestOTLPConverter_ResourceAttributes(t *testing.T) {
 	data := &collector.HealthData{
-		Timestamp: time.Now(),
-		MachineID: "test-machine-123",
+		Timestamp:   time.Now(),
+		MachineID:   "test-machine-123",
+		NodeGroup:   "group-a",
+		ComputeZone: "zone-a",
 		ComponentData: map[string]interface{}{
 			"comp1": map[string]any{},
 			"comp2": map[string]any{},
@@ -771,6 +773,38 @@ func TestOTLPConverter_ResourceAttributes(t *testing.T) {
 
 	assert.Equal(t, "fleet-intelligence-agent", attrMap["service.name"])
 	assert.Equal(t, "test-machine-123", attrMap["machine.id"])
+	assert.Equal(t, "group-a", attrMap["node_group"])
+	assert.Equal(t, "zone-a", attrMap["compute_zone"])
+
+	logResourceAttrMap := make(map[string]string)
+	for _, attr := range otlpData.Logs.ResourceLogs[0].Resource.Attributes {
+		if attr.Value.GetStringValue() != "" {
+			logResourceAttrMap[attr.Key] = attr.Value.GetStringValue()
+		}
+	}
+	assert.Equal(t, "group-a", logResourceAttrMap["node_group"])
+	assert.Equal(t, "zone-a", logResourceAttrMap["compute_zone"])
+}
+
+func TestOTLPConverter_ResourceAttributesOmitEmptyOptionalValues(t *testing.T) {
+	data := &collector.HealthData{
+		Timestamp: time.Now(),
+		MachineID: "test-machine-123",
+	}
+
+	converter := NewOTLPConverter()
+	otlpData := converter.Convert(data)
+
+	rm := otlpData.Metrics.ResourceMetrics[0]
+	attrMap := make(map[string]string)
+	for _, attr := range rm.Resource.Attributes {
+		attrMap[attr.Key] = attr.Value.GetStringValue()
+	}
+
+	_, nodeGroupExists := attrMap["node_group"]
+	_, computeZoneExists := attrMap["compute_zone"]
+	assert.False(t, nodeGroupExists)
+	assert.False(t, computeZoneExists)
 }
 
 func TestOTLPConverter_ResourceAttributes_IncludesOnlyGPUInfoGPUs(t *testing.T) {

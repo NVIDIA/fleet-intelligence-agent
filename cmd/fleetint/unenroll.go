@@ -71,6 +71,8 @@ func removeEnrollmentMetadata(ctx context.Context, dbRW *sql.DB) error {
 		agentstate.MetadataKeySAKToken,
 		agentstate.MetadataKeyBackendBaseURL,
 		agentstate.MetadataKeyEnrolledAt,
+		agentstate.MetadataKeyNodeGroup,
+		agentstate.MetadataKeyComputeZone,
 		"enroll_endpoint",
 		"metrics_endpoint",
 		"logs_endpoint",
