@@ -284,6 +284,85 @@ func TestStart(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("offline mode performs initial export before first tick", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.HealthExporterConfig{
+			Interval:     metav1.Duration{Duration: 1 * time.Hour},
+			Timeout:      metav1.Duration{Duration: 30 * time.Second},
+			OfflineMode:  true,
+			OutputPath:   tmpDir,
+			OutputFormat: "json",
+		}
+
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		err = exporter.Start()
+		require.NoError(t, err)
+
+		// Initial export should be written immediately, without waiting for ticker.
+		time.Sleep(100 * time.Millisecond)
+		entries, err := os.ReadDir(tmpDir)
+		require.NoError(t, err)
+		assert.Greater(t, len(entries), 0, "Expected offline files from initial export")
+
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
+	t.Run("offline initial export includes collected data", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.HealthExporterConfig{
+			Interval:     metav1.Duration{Duration: 1 * time.Hour},
+			Timeout:      metav1.Duration{Duration: 30 * time.Second},
+			OfflineMode:  true,
+			OutputPath:   tmpDir,
+			OutputFormat: "json",
+		}
+
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+		mockCollector := &MockCollector{}
+		mockCollector.On("Collect", mock.Anything).Return(&collector.HealthData{
+			MachineID: "test-machine",
+			Timestamp: time.Now(),
+			Metrics: []pkgmetrics.Metric{
+				{
+					Name:             "test_metric",
+					Value:            42.0,
+					UnixMilliseconds: time.Now().UnixMilli(),
+				},
+			},
+		}, nil).Once()
+		he.collector = mockCollector
+
+		err = exporter.Start()
+		require.NoError(t, err)
+
+		entries, err := os.ReadDir(tmpDir)
+		require.NoError(t, err)
+		require.Greater(t, len(entries), 0, "Expected offline files from initial export")
+
+		allContent := ""
+		for _, entry := range entries {
+			fullPath := filepath.Join(tmpDir, entry.Name())
+			content, readErr := os.ReadFile(fullPath)
+			require.NoError(t, readErr)
+			allContent += string(content)
+		}
+		assert.Contains(t, allContent, "test_metric")
+		assert.Contains(t, allContent, "machine.id")
+
+		mockCollector.AssertExpectations(t)
+
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
 }
 
 // TestStop tests the Stop function

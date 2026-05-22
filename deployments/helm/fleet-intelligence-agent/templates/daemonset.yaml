@@ -74,6 +74,12 @@ spec:
               {{- if .Values.enroll.force }}
               --force
               {{- end }}
+              {{- if hasKey .Values.enroll "nodeGroup" }}
+              --node-group {{ .Values.enroll.nodeGroup | quote }}
+              {{- end }}
+              {{- if hasKey .Values.enroll "computeZone" }}
+              --compute-zone {{ .Values.enroll.computeZone | quote }}
+              {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:

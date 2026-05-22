@@ -89,6 +89,12 @@ type Server struct {
 	// signal handler in run.go both call Stop(), so without this guard
 	// components, databases, and the health exporter would be closed twice.
 	stopOnce sync.Once
+	loopWG   sync.WaitGroup
+
+	// loopCtx/loopCancel control background inventory and attestation goroutines.
+	// Stop() cancels this context and waits on loopWG for graceful shutdown.
+	loopCtx    context.Context
+	loopCancel context.CancelFunc
 
 	machineID string
 }
@@ -210,6 +216,24 @@ func getAttestationTimeout(cfg *config.Config) time.Duration {
 	return config.DefaultAttestationTimeout
 }
 
+func waitForWaitGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	if timeout <= 0 {
+		<-done
+		return true
+	}
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
 // shouldEnableComponent determines if a component should be enabled based on configuration
 func shouldEnableComponent(name string, enabledByDefault bool, config *config.Config) bool {
 	shouldEnable := enabledByDefault
@@ -235,11 +259,14 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 		return nil, err
 	}
 
+	loopCtx, loopCancel := context.WithCancel(ctx)
 	s := &Server{
 		auditLogger: auditLogger,
 		dbRW:        dbRW,
 		dbRO:        dbRO,
 		config:      config,
+		loopCtx:     loopCtx,
+		loopCancel:  loopCancel,
 	}
 	defer func() {
 		if retErr != nil {
@@ -383,8 +410,8 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 		}
 	}
 
-	s.startInventoryLoop(ctx, config, nvmlInstance, dcgmGPUIndexes)
-	s.startAttestationLoop(ctx, config)
+	s.startInventoryLoop(loopCtx, config, nvmlInstance, dcgmGPUIndexes)
+	s.startAttestationLoop(loopCtx, config)
 
 	// Create and start health exporter with all dependencies if enabled
 	if config.HealthExporter != nil {
@@ -462,7 +489,9 @@ func (s *Server) startInventoryLoop(
 		StartupJitter: inventory.DefaultStartupJitter,
 	})
 
+	s.loopWG.Add(1)
 	go func() {
+		defer s.loopWG.Done()
 		if err := manager.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			log.Logger.Errorw("inventory loop manager exited", "error", err)
 		}
@@ -497,7 +526,9 @@ func (s *Server) startAttestationLoop(ctx context.Context, cfg *config.Config) {
 		},
 	)
 
+	s.loopWG.Add(1)
 	go func() {
+		defer s.loopWG.Done()
 		if err := manager.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			log.Logger.Errorw("attestation loop exited", "error", err)
 		}
@@ -516,6 +547,15 @@ func (s *Server) GetHealthExporter() exporter.Exporter {
 // signal handler in run.go both invoke it.
 func (s *Server) Stop() {
 	s.stopOnce.Do(func() {
+		// Signal inventory/attestation loops to stop and wait for graceful exit
+		// before we close dependencies they may still be using.
+		if s.loopCancel != nil {
+			s.loopCancel()
+		}
+		if !waitForWaitGroup(&s.loopWG, 10*time.Second) {
+			log.Logger.Warnw("timed out waiting for background loops to stop")
+		}
+
 		// Gracefully shut down the HTTP server so in-flight requests complete
 		// before we close databases and components underneath them.
 		if s.srv != nil {

@@ -20,6 +20,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -156,6 +157,26 @@ func TestGetInventorySyncTimeout(t *testing.T) {
 			assert.Equal(t, tt.expected, getInventorySyncTimeout(tt.config))
 		})
 	}
+}
+
+func TestWaitForWaitGroup(t *testing.T) {
+	t.Run("returns true when waitgroup completes", func(t *testing.T) {
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			time.Sleep(10 * time.Millisecond)
+		}()
+		assert.True(t, waitForWaitGroup(&wg, 200*time.Millisecond))
+	})
+
+	t.Run("returns false on timeout", func(t *testing.T) {
+		var wg sync.WaitGroup
+		wg.Add(1)
+		assert.False(t, waitForWaitGroup(&wg, 10*time.Millisecond))
+		wg.Done()
+		assert.True(t, waitForWaitGroup(&wg, 100*time.Millisecond))
+	})
 }
 
 func TestGetAttestationSettings(t *testing.T) {
@@ -437,6 +458,24 @@ func TestServerStop(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestServerStopCancelsBackgroundLoops(t *testing.T) {
+	loopCtx, loopCancel := context.WithCancel(context.Background())
+	s := &Server{
+		loopCtx:    loopCtx,
+		loopCancel: loopCancel,
+	}
+	s.loopWG.Add(1)
+	go func() {
+		defer s.loopWG.Done()
+		<-loopCtx.Done()
+	}()
+
+	s.Stop()
+
+	assert.ErrorIs(t, loopCtx.Err(), context.Canceled)
+	assert.True(t, waitForWaitGroup(&s.loopWG, 100*time.Millisecond))
 }
 
 // TestServerStopWithDatabases tests Stop with actual database connections.
