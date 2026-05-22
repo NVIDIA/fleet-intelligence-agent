@@ -773,7 +773,7 @@ func TestOTLPConverter_ResourceAttributes(t *testing.T) {
 
 	assert.Equal(t, "fleet-intelligence-agent", attrMap["service.name"])
 	assert.Equal(t, "test-machine-123", attrMap["machine.id"])
-	assert.Equal(t, "group-a", attrMap["nodegroup"])
+	assert.Equal(t, "group-a", attrMap["node_group"])
 	assert.Equal(t, "zone-a", attrMap["compute_zone"])
 
 	logResourceAttrMap := make(map[string]string)
@@ -782,7 +782,7 @@ func TestOTLPConverter_ResourceAttributes(t *testing.T) {
 			logResourceAttrMap[attr.Key] = attr.Value.GetStringValue()
 		}
 	}
-	assert.Equal(t, "group-a", logResourceAttrMap["nodegroup"])
+	assert.Equal(t, "group-a", logResourceAttrMap["node_group"])
 	assert.Equal(t, "zone-a", logResourceAttrMap["compute_zone"])
 }
 
@@ -801,7 +801,7 @@ func TestOTLPConverter_ResourceAttributesOmitEmptyOptionalValues(t *testing.T) {
 		attrMap[attr.Key] = attr.Value.GetStringValue()
 	}
 
-	_, nodeGroupExists := attrMap["nodegroup"]
+	_, nodeGroupExists := attrMap["node_group"]
 	_, computeZoneExists := attrMap["compute_zone"]
 	assert.False(t, nodeGroupExists)
 	assert.False(t, computeZoneExists)

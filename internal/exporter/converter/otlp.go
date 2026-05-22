@@ -128,7 +128,7 @@ func (c *otlpConverter) createOTLPResource(data *collector.HealthData) *resource
 	}
 	if data.NodeGroup != "" {
 		attributes = append(attributes, &commonv1.KeyValue{
-			Key: "nodegroup",
+			Key: "node_group",
 			Value: &commonv1.AnyValue{
 				Value: &commonv1.AnyValue_StringValue{StringValue: data.NodeGroup},
 			},
