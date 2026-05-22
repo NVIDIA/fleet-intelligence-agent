@@ -89,7 +89,7 @@ helm upgrade fleet-intelligence-agent oci://ghcr.io/nvidia/charts/fleet-intellig
 ```
 
 Notes:
-- Keep `enroll.nodeGroup` / `enroll.computeZone` unset (`null`) to omit the flag and preserve existing stored values.
+- Omit `enroll.nodeGroup` / `enroll.computeZone` keys to omit the flags and preserve existing stored values.
 - Set either value to an empty string to clear it (for example: `--set-string enroll.nodeGroup=""`).
 
 Upgrade (no enrollment):

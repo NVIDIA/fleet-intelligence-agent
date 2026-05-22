@@ -51,8 +51,8 @@ Common values (defaults from `values.yaml`):
 | `enroll.tokenSecretName` | `""` | Secret name for enrollment token. |
 | `enroll.tokenSecretKey` | `token` | Secret key for enrollment token. |
 | `enroll.tokenValue` | `""` | Inline token value (optional). |
-| `enroll.nodeGroup` | `null` | Optional `--node-group` enroll flag. `null` omits flag, `""` clears stored value. |
-| `enroll.computeZone` | `null` | Optional `--compute-zone` enroll flag. `null` omits flag, `""` clears stored value. |
+| `enroll.nodeGroup` | `(not set)` | Optional `--node-group` enroll flag. Omit key to omit flag, set `""` to clear stored value. |
+| `enroll.computeZone` | `(not set)` | Optional `--compute-zone` enroll flag. Omit key to omit flag, set `""` to clear stored value. |
 | `enroll.securityContext.runAsUser` | `0` | Run enrollment init as root. |
 | `ports.http` | `15133` | HTTP port. |
 | `resources.requests.cpu` | `100m` | CPU request. |
