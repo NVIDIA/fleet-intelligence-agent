@@ -284,6 +284,33 @@ func TestStart(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("offline mode performs initial export before first tick", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.HealthExporterConfig{
+			Interval:     metav1.Duration{Duration: 1 * time.Hour},
+			Timeout:      metav1.Duration{Duration: 30 * time.Second},
+			OfflineMode:  true,
+			OutputPath:   tmpDir,
+			OutputFormat: "json",
+		}
+
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		err = exporter.Start()
+		require.NoError(t, err)
+
+		// Initial export should be written immediately, without waiting for ticker.
+		time.Sleep(100 * time.Millisecond)
+		entries, err := os.ReadDir(tmpDir)
+		require.NoError(t, err)
+		assert.Greater(t, len(entries), 0, "Expected offline files from initial export")
+
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
 }
 
 // TestStop tests the Stop function

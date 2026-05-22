@@ -17,6 +17,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -156,6 +157,29 @@ func TestGetInventorySyncTimeout(t *testing.T) {
 			assert.Equal(t, tt.expected, getInventorySyncTimeout(tt.config))
 		})
 	}
+}
+
+func TestShouldLogLoopExitError(t *testing.T) {
+	t.Run("nil error", func(t *testing.T) {
+		assert.False(t, shouldLogLoopExitError(nil))
+	})
+
+	t.Run("context canceled", func(t *testing.T) {
+		assert.False(t, shouldLogLoopExitError(context.Canceled))
+	})
+
+	t.Run("context deadline exceeded", func(t *testing.T) {
+		assert.False(t, shouldLogLoopExitError(context.DeadlineExceeded))
+	})
+
+	t.Run("wrapped deadline exceeded", func(t *testing.T) {
+		err := errors.Join(errors.New("loop stopped"), context.DeadlineExceeded)
+		assert.False(t, shouldLogLoopExitError(err))
+	})
+
+	t.Run("real error", func(t *testing.T) {
+		assert.True(t, shouldLogLoopExitError(errors.New("unexpected failure")))
+	})
 }
 
 func TestGetAttestationSettings(t *testing.T) {

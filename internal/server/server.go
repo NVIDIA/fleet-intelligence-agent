@@ -210,6 +210,16 @@ func getAttestationTimeout(cfg *config.Config) time.Duration {
 	return config.DefaultAttestationTimeout
 }
 
+func shouldLogLoopExitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	return true
+}
+
 // shouldEnableComponent determines if a component should be enabled based on configuration
 func shouldEnableComponent(name string, enabledByDefault bool, config *config.Config) bool {
 	shouldEnable := enabledByDefault
@@ -463,7 +473,7 @@ func (s *Server) startInventoryLoop(
 	})
 
 	go func() {
-		if err := manager.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		if err := manager.Run(ctx); shouldLogLoopExitError(err) {
 			log.Logger.Errorw("inventory loop manager exited", "error", err)
 		}
 	}()
@@ -498,7 +508,7 @@ func (s *Server) startAttestationLoop(ctx context.Context, cfg *config.Config) {
 	)
 
 	go func() {
-		if err := manager.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		if err := manager.Run(ctx); shouldLogLoopExitError(err) {
 			log.Logger.Errorw("attestation loop exited", "error", err)
 		}
 	}()

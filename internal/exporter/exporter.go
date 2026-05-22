@@ -116,6 +116,16 @@ func (e *healthExporter) Start() error {
 
 	log.Logger.Infow("Starting health exporter")
 
+	// In offline mode, emit one export immediately so short runs don't exit
+	// before the first ticker cycle and leave an empty output directory.
+	if e.options.config.OfflineMode {
+		if err := e.export(); err != nil {
+			log.Logger.Errorw("Initial offline export failed", "error", err)
+		} else {
+			e.lastExport = time.Now().UTC()
+		}
+	}
+
 	// Start the health export ticker
 	go func() {
 		ticker := time.NewTicker(e.options.config.Interval.Duration)
