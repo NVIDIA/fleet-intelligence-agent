@@ -216,16 +216,6 @@ func getAttestationTimeout(cfg *config.Config) time.Duration {
 	return config.DefaultAttestationTimeout
 }
 
-func shouldLogLoopExitError(ctx context.Context, err error) bool {
-	if err == nil {
-		return false
-	}
-	if ctx != nil && ctx.Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
-		return false
-	}
-	return true
-}
-
 func waitForWaitGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
 	done := make(chan struct{})
 	go func() {
@@ -502,7 +492,7 @@ func (s *Server) startInventoryLoop(
 	s.loopWG.Add(1)
 	go func() {
 		defer s.loopWG.Done()
-		if err := manager.Run(ctx); shouldLogLoopExitError(ctx, err) {
+		if err := manager.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			log.Logger.Errorw("inventory loop manager exited", "error", err)
 		}
 	}()
@@ -539,7 +529,7 @@ func (s *Server) startAttestationLoop(ctx context.Context, cfg *config.Config) {
 	s.loopWG.Add(1)
 	go func() {
 		defer s.loopWG.Done()
-		if err := manager.Run(ctx); shouldLogLoopExitError(ctx, err) {
+		if err := manager.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			log.Logger.Errorw("attestation loop exited", "error", err)
 		}
 	}()

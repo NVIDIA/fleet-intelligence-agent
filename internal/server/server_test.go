@@ -17,7 +17,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -158,44 +157,6 @@ func TestGetInventorySyncTimeout(t *testing.T) {
 			assert.Equal(t, tt.expected, getInventorySyncTimeout(tt.config))
 		})
 	}
-}
-
-func TestShouldLogLoopExitError(t *testing.T) {
-	canceledCtx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	deadlineCtx, deadlineCancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
-	defer deadlineCancel()
-	<-deadlineCtx.Done()
-
-	t.Run("nil error", func(t *testing.T) {
-		assert.False(t, shouldLogLoopExitError(context.Background(), nil))
-	})
-
-	t.Run("context canceled during shutdown", func(t *testing.T) {
-		assert.False(t, shouldLogLoopExitError(canceledCtx, context.Canceled))
-	})
-
-	t.Run("context deadline exceeded during shutdown", func(t *testing.T) {
-		assert.False(t, shouldLogLoopExitError(deadlineCtx, context.DeadlineExceeded))
-	})
-
-	t.Run("wrapped deadline exceeded", func(t *testing.T) {
-		err := errors.Join(errors.New("loop stopped"), context.DeadlineExceeded)
-		assert.False(t, shouldLogLoopExitError(deadlineCtx, err))
-	})
-
-	t.Run("deadline exceeded while parent context still active", func(t *testing.T) {
-		assert.True(t, shouldLogLoopExitError(context.Background(), context.DeadlineExceeded))
-	})
-
-	t.Run("canceled while parent context still active", func(t *testing.T) {
-		assert.True(t, shouldLogLoopExitError(context.Background(), context.Canceled))
-	})
-
-	t.Run("real error", func(t *testing.T) {
-		assert.True(t, shouldLogLoopExitError(context.Background(), errors.New("unexpected failure")))
-	})
 }
 
 func TestWaitForWaitGroup(t *testing.T) {
