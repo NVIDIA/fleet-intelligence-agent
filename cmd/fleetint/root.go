@@ -215,7 +215,7 @@ func App() *cli.App {
 					Usage: "continue enrollment even when precheck fails",
 				},
 				&cli.StringFlag{
-					Name:  "nodegroup",
+					Name:  "node-group",
 					Usage: "optional node group metadata associated with this node",
 				},
 				&cli.StringFlag{

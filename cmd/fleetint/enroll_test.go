@@ -282,7 +282,7 @@ func TestEnrollCommandPassesOptionalMetadata(t *testing.T) {
 		"fleetint", "enroll",
 		"--endpoint", "https://example.com",
 		"--token", "token",
-		"--nodegroup", "prod-group",
+		"--node-group", "prod-group",
 		"--compute-zone", "us-east-1c",
 	})
 	require.NoError(t, err)
@@ -322,7 +322,7 @@ func TestEnrollCommandTreatsExplicitEmptyMetadataAsClear(t *testing.T) {
 		"fleetint", "enroll",
 		"--endpoint", "https://example.com",
 		"--token", "token",
-		"--nodegroup=",
+		"--node-group=",
 		"--compute-zone=",
 	})
 	require.NoError(t, err)

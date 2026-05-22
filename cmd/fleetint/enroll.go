@@ -85,7 +85,7 @@ func enrollCommand(cliContext *cli.Context) error {
 	baseEndpoint := cliContext.String("endpoint")
 	force := cliContext.Bool("force")
 	metadata := &enrollment.EnrollMetadata{
-		NodeGroup:   optionalFlagValue(cliContext, "nodegroup"),
+		NodeGroup:   optionalFlagValue(cliContext, "node-group"),
 		ComputeZone: optionalFlagValue(cliContext, "compute-zone"),
 	}
 

@@ -128,19 +128,19 @@ One of `--token` or `--token-file` is required.
 
 **Optional Flags:**
 - `--force`: Continue enrollment even if `fleetint precheck` fails
-- `--nodegroup`: Optional node group metadata persisted in local agent metadata
+- `--node-group`: Optional node group metadata persisted in local agent metadata
 - `--compute-zone`: Optional compute zone metadata persisted in local agent metadata
 
-Metadata update behavior for `--nodegroup` and `--compute-zone`:
+Metadata update behavior for `--node-group` and `--compute-zone`:
 - If the flag is omitted, the existing stored value is preserved.
 - If the flag is provided, the stored value is overwritten with the provided value.
-- Providing an empty value (for example `--nodegroup=""`) clears the stored value.
+- Providing an empty value (for example `--node-group=""`) clears the stored value.
 
 **What it does:**
 1. Runs the same prerequisite validation as `fleetint precheck`
 2. Validates the endpoint URL (must be HTTPS)
 3. Makes an enrollment request to exchange the SAK token for a JWT token
-4. Stores the JWT token, backend endpoints (metrics, logs, nonce), and optional enrollment metadata (`nodegroup`, `compute_zone`) in the local metadata database
+4. Stores the JWT token, backend endpoints (metrics, logs, nonce), and optional enrollment metadata (`node_group`, `compute_zone`) in the local metadata database
 5. The stored credentials are used automatically by the agent for data export
 
 **Example output:**
