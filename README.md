@@ -52,4 +52,4 @@ Related: [leptonai/gpud](https://github.com/leptonai/gpud) (upstream dependency)
 
 ## License
 
-Apache License 2.0 - see [LICENSE](LICENSE) for details.
+Apache License 2.0 - see [LICENSE](LICENSE) for details. 
