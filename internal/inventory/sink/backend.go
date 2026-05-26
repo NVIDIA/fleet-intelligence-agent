@@ -101,6 +101,7 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 		req.EnrolledAt = &normalized
 	}
 	outbound.LogIssues("inventory-backend-sink", "NodeUpsertRequest", outbound.ValidateNodeUpsertRequest(req), "node_uuid", nodeUUID)
+	log.Logger.Infow("inventory export to backend", "node_uuid", nodeUUID, "request", req)
 
 	if err := client.UpsertNode(ctx, nodeUUID, req, jwt); err != nil {
 		return err

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -35,6 +36,8 @@ var (
 )
 
 const defaultEnrollTimeout = time.Minute
+
+var enrollMetadataNamePattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9 ._-]*$`)
 
 // resolveToken returns the SAK token from --token, --token-file, or stdin.
 func resolveToken(cliContext *cli.Context) (string, error) {
@@ -84,9 +87,17 @@ func resolveToken(cliContext *cli.Context) (string, error) {
 func enrollCommand(cliContext *cli.Context) error {
 	baseEndpoint := cliContext.String("endpoint")
 	force := cliContext.Bool("force")
+	nodeGroup, err := validatedOptionalMetadataFlagValue(cliContext, "node-group", "Node group")
+	if err != nil {
+		return err
+	}
+	computeZone, err := validatedOptionalMetadataFlagValue(cliContext, "compute-zone", "Compute zone")
+	if err != nil {
+		return err
+	}
 	metadata := &enrollment.EnrollMetadata{
-		NodeGroup:   optionalFlagValue(cliContext, "node-group"),
-		ComputeZone: optionalFlagValue(cliContext, "compute-zone"),
+		NodeGroup:   nodeGroup,
+		ComputeZone: computeZone,
 	}
 
 	sakToken, err := resolveToken(cliContext)
@@ -124,10 +135,20 @@ func enrollCommand(cliContext *cli.Context) error {
 	return performEnrollWorkflow(ctx, baseEndpoint, sakToken, cfg, metadata)
 }
 
-func optionalFlagValue(cliContext *cli.Context, name string) *string {
+func validatedOptionalMetadataFlagValue(cliContext *cli.Context, name, fieldName string) (*string, error) {
 	if !cliContext.IsSet(name) {
-		return nil
+		return nil, nil
 	}
 	value := strings.TrimSpace(cliContext.String(name))
-	return &value
+	// Explicit empty means clear/unassign for reserved assignment fields.
+	if value == "" {
+		return &value, nil
+	}
+	if len(value) > 255 {
+		return nil, fmt.Errorf("%s name must be 255 characters or fewer", fieldName)
+	}
+	if !enrollMetadataNamePattern.MatchString(value) {
+		return nil, fmt.Errorf("%s name must start with a letter and contain only letters, numbers, spaces, hyphens, underscores, or periods", fieldName)
+	}
+	return &value, nil
 }
