@@ -303,6 +303,16 @@ func TestValidatedOptionalMetadataFlagValueAllowsExplicitEmpty(t *testing.T) {
 	require.Empty(t, *value)
 }
 
+func TestValidatedOptionalMetadataFlagValueRejectsReservedUnassignedName(t *testing.T) {
+	flagSet := flag.NewFlagSet("enroll", flag.ContinueOnError)
+	flagSet.String("node-group", "", "")
+	require.NoError(t, flagSet.Set("node-group", "unassigned"))
+	cliContext := cli.NewContext(cli.NewApp(), flagSet, nil)
+
+	_, err := validatedOptionalMetadataFlagValue(cliContext, "node-group", "Node group")
+	require.ErrorContains(t, err, `Node group name "Unassigned" is reserved; use empty value to clear assignment`)
+}
+
 func TestEnrollCommandRejectsInvalidMetadataCharacters(t *testing.T) {
 	app := App()
 	app.Writer = &bytes.Buffer{}
@@ -328,4 +338,61 @@ func TestEnrollCommandRejectsOverlongMetadataNames(t *testing.T) {
 		"--node-group", longName,
 	})
 	require.ErrorContains(t, err, "Node group name must be 255 characters or fewer")
+}
+
+func TestValidateReservedPairMetadata(t *testing.T) {
+	strPtr := func(v string) *string { return &v }
+	tests := []struct {
+		name        string
+		nodeGroup   *string
+		computeZone *string
+		wantErr     bool
+	}{
+		{name: "both omitted", nodeGroup: nil, computeZone: nil, wantErr: false},
+		{name: "both empty", nodeGroup: strPtr(""), computeZone: strPtr(""), wantErr: false},
+		{name: "both non-empty", nodeGroup: strPtr("ng-a"), computeZone: strPtr("cz-a"), wantErr: false},
+		{name: "node-group only", nodeGroup: strPtr("ng-a"), computeZone: nil, wantErr: true},
+		{name: "compute-zone only", nodeGroup: nil, computeZone: strPtr("cz-a"), wantErr: true},
+		{name: "node-group empty compute-zone non-empty", nodeGroup: strPtr(""), computeZone: strPtr("cz-a"), wantErr: true},
+		{name: "node-group non-empty compute-zone empty", nodeGroup: strPtr("ng-a"), computeZone: strPtr(""), wantErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateReservedPairMetadata(tc.nodeGroup, tc.computeZone)
+			if tc.wantErr {
+				require.ErrorContains(t, err, "--node-group and --compute-zone must be both omitted, both empty, or both non-empty")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestEnrollCommandRejectsMixedReservedPairValues(t *testing.T) {
+	app := App()
+	app.Writer = &bytes.Buffer{}
+
+	err := app.Run([]string{
+		"fleetint", "enroll",
+		"--endpoint", "https://example.com",
+		"--token", "token",
+		"--node-group", "",
+		"--compute-zone", "cz-a",
+	})
+	require.ErrorContains(t, err, "--node-group and --compute-zone must be both omitted, both empty, or both non-empty")
+}
+
+func TestEnrollCommandRejectsReservedUnassignedName(t *testing.T) {
+	app := App()
+	app.Writer = &bytes.Buffer{}
+
+	err := app.Run([]string{
+		"fleetint", "enroll",
+		"--endpoint", "https://example.com",
+		"--token", "token",
+		"--node-group", "Unassigned",
+		"--compute-zone", "cz-a",
+	})
+	require.ErrorContains(t, err, `Node group name "Unassigned" is reserved; use empty value to clear assignment`)
 }
