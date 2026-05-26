@@ -49,7 +49,9 @@ func TestToNodeUpsertRequestAgentConfigJSONIncludesZeroValues(t *testing.T) {
 
 func TestToNodeUpsertRequest(t *testing.T) {
 	bootTime := time.Date(2026, 4, 28, 12, 30, 0, 0, time.FixedZone("PDT", -7*60*60))
+	collectedAt := time.Date(2026, 4, 28, 13, 30, 0, 0, time.FixedZone("PDT", -7*60*60))
 	req := ToNodeUpsertRequest(&inventory.Snapshot{
+		CollectedAt:             collectedAt,
 		Hostname:                "host-a",
 		MachineID:               "machine-id",
 		SystemUUID:              "uuid-1",
@@ -128,6 +130,8 @@ func TestToNodeUpsertRequest(t *testing.T) {
 	require.Equal(t, "machine-id", req.MachineID)
 	require.NotNil(t, req.Uptime)
 	require.Equal(t, bootTime.UTC(), *req.Uptime)
+	require.NotNil(t, req.CollectedAt)
+	require.Equal(t, collectedAt.UTC(), *req.CollectedAt)
 	require.Equal(t, int64(30), req.AgentConfig.TotalComponents)
 	require.Equal(t, int64(86400), req.AgentConfig.RetentionPeriodSeconds)
 	require.Equal(t, []string{"cpu", "gpu"}, req.AgentConfig.EnabledComponents)

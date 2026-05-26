@@ -170,8 +170,9 @@ func TestBackendSinkExportUsesState(t *testing.T) {
 	}
 
 	err := s.Export(context.Background(), &inventory.Snapshot{
-		Hostname:  "host-a",
-		MachineID: "machine-id",
+		CollectedAt: time.Date(2026, 5, 6, 16, 0, 0, 0, time.UTC),
+		Hostname:    "host-a",
+		MachineID:   "machine-id",
 	})
 	require.NoError(t, err)
 	require.Equal(t, "node-1", client.nodeUUID)
@@ -180,6 +181,8 @@ func TestBackendSinkExportUsesState(t *testing.T) {
 	require.Equal(t, "host-a", client.req.Hostname)
 	require.Equal(t, "group-a", client.req.NodeGroup)
 	require.Equal(t, "zone-a", client.req.ComputeZone)
+	require.NotNil(t, client.req.CollectedAt)
+	require.Equal(t, time.Date(2026, 5, 6, 16, 0, 0, 0, time.UTC), *client.req.CollectedAt)
 	require.NotNil(t, client.req.EnrolledAt)
 	require.Equal(t, enrollmentTime, *client.req.EnrolledAt)
 }

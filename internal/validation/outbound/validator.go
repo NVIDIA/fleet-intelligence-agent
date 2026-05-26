@@ -79,6 +79,7 @@ func ValidateNodeUpsertRequest(req *backendclient.NodeUpsertRequest) []Issue {
 	requireNonEmpty(&issues, "identity", "systemUUID", req.SystemUUID, SeverityCritical)
 
 	validateTimeSanity(&issues, "time", "uptime", req.Uptime)
+	validateTimeSanity(&issues, "time", "collectedAt", req.CollectedAt)
 	validateTimeSanity(&issues, "time", "enrolledAt", req.EnrolledAt)
 
 	validateLen(&issues, "length", "hostname", req.Hostname, 255)

@@ -71,6 +71,11 @@ func ToNodeUpsertRequest(s *inventory.Snapshot) *backendclient.NodeUpsertRequest
 		normalized := s.Uptime.UTC()
 		uptime = &normalized
 	}
+	var collectedAt *time.Time
+	if !s.CollectedAt.IsZero() {
+		normalized := s.CollectedAt.UTC()
+		collectedAt = &normalized
+	}
 
 	return &backendclient.NodeUpsertRequest{
 		Hostname: s.Hostname,
@@ -88,6 +93,7 @@ func ToNodeUpsertRequest(s *inventory.Snapshot) *backendclient.NodeUpsertRequest
 		SystemUUID:              s.SystemUUID,
 		BootID:                  s.BootID,
 		Uptime:                  uptime,
+		CollectedAt:             collectedAt,
 		OperatingSystem:         s.OperatingSystem,
 		OSImage:                 s.OSImage,
 		KernelVersion:           s.KernelVersion,
