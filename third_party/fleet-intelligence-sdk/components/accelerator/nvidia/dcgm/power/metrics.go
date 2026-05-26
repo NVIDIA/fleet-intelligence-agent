@@ -57,18 +57,18 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevPowerViolation = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_power_violation", Help: "Power Violation time in ns"},
+	metricDCGMFIDevPowerViolation = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{Name: "dcgm_fi_dev_power_violation", Help: "Power Violation time in ns"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevReliabilityViolation = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_reliability_violation", Help: "Reliability violation limit"},
+	metricDCGMFIDevReliabilityViolation = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{Name: "dcgm_fi_dev_reliability_violation", Help: "Reliability violation limit"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevBoardLimitViolation = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_board_limit_violation", Help: "Board violation limit"},
+	metricDCGMFIDevBoardLimitViolation = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{Name: "dcgm_fi_dev_board_limit_violation", Help: "Board violation limit"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 )

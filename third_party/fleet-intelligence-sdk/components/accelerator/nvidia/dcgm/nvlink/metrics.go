@@ -61,8 +61,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevNvlinkErrorDLCrc = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevNvlinkErrorDLCrc = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: "",
 			Name:      "dcgm_fi_dev_nvlink_error_dl_crc",
@@ -71,8 +71,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevNvlinkErrorDLRecovery = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevNvlinkErrorDLRecovery = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: "",
 			Name:      "dcgm_fi_dev_nvlink_error_dl_recovery",
@@ -81,8 +81,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevNvlinkErrorDLReplay = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevNvlinkErrorDLReplay = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: "",
 			Name:      "dcgm_fi_dev_nvlink_error_dl_replay",
@@ -91,8 +91,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevNvlinkCountLinkRecoverySuccessfulEvents = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevNvlinkCountLinkRecoverySuccessfulEvents = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: "",
 			Name:      "dcgm_fi_dev_nvlink_count_link_recovery_successful_events",
@@ -101,8 +101,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevNvlinkCountLinkRecoveryFailedEvents = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevNvlinkCountLinkRecoveryFailedEvents = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: "",
 			Name:      "dcgm_fi_dev_nvlink_count_link_recovery_failed_events",
@@ -115,40 +115,40 @@ var (
 		prometheus.GaugeOpts{Name: "dcgm_fi_dev_fabric_manager_status", Help: "The status of the fabric manager - a value from dcgmFabricManagerStatus_t"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
-	metricDCGMFIDevC2CLinkErrorReplay = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_c2c_link_error_replay", Help: "C2C Link Replay Error Counter"},
+	metricDCGMFIDevC2CLinkErrorReplay = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{Name: "dcgm_fi_dev_c2c_link_error_replay", Help: "C2C Link Replay Error Counter"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
-	metricDCGMFIDevNvlinkCountRxGeneralErrors = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_rx_general_errors", Help: "Total number of packets Rx with header mismatch"},
+	metricDCGMFIDevNvlinkCountRxGeneralErrors = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{Name: "dcgm_fi_dev_nvlink_count_rx_general_errors", Help: "Total number of packets Rx with header mismatch"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
-	metricDCGMFIDevNvlinkCountRxErrors = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_rx_errors", Help: "Total number of packets with errors Rx on a link"},
+	metricDCGMFIDevNvlinkCountRxErrors = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{Name: "dcgm_fi_dev_nvlink_count_rx_errors", Help: "Total number of packets with errors Rx on a link"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
-	metricDCGMFIDevNvlinkCountRxMalformedPacketErrors = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_rx_malformed_packet_errors", Help: "Number of packets Rx on a link where packets are malformed"},
+	metricDCGMFIDevNvlinkCountRxMalformedPacketErrors = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{Name: "dcgm_fi_dev_nvlink_count_rx_malformed_packet_errors", Help: "Number of packets Rx on a link where packets are malformed"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
-	metricDCGMFIDevNvlinkCountRxRemoteErrors = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_rx_remote_errors", Help: "Total number of packets Rx - stomp/EBP marker"},
+	metricDCGMFIDevNvlinkCountRxRemoteErrors = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{Name: "dcgm_fi_dev_nvlink_count_rx_remote_errors", Help: "Total number of packets Rx - stomp/EBP marker"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
-	metricDCGMFIDevNvlinkCountRxSymbolErrors = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_rx_symbol_errors", Help: "Number of errors in rx symbols"},
+	metricDCGMFIDevNvlinkCountRxSymbolErrors = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{Name: "dcgm_fi_dev_nvlink_count_rx_symbol_errors", Help: "Number of errors in rx symbols"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
-	metricDCGMFIDevNvlinkCountRxBufferOverrunErrors = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_rx_buffer_overrun_errors", Help: "Number of packets that were discarded on Rx due to buffer overrun"},
+	metricDCGMFIDevNvlinkCountRxBufferOverrunErrors = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{Name: "dcgm_fi_dev_nvlink_count_rx_buffer_overrun_errors", Help: "Number of packets that were discarded on Rx due to buffer overrun"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
-	metricDCGMFIDevNvlinkCountLocalLinkIntegrityErrors = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_local_link_integrity_errors", Help: "Total number of times that the count of local errors exceeded a threshold"},
+	metricDCGMFIDevNvlinkCountLocalLinkIntegrityErrors = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{Name: "dcgm_fi_dev_nvlink_count_local_link_integrity_errors", Help: "Total number of times that the count of local errors exceeded a threshold"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
-	metricDCGMFIDevNvlinkCountEffectiveErrors = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_effective_errors", Help: "Sum of the number of errors in each Nvlink packet"},
+	metricDCGMFIDevNvlinkCountEffectiveErrors = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{Name: "dcgm_fi_dev_nvlink_count_effective_errors", Help: "Sum of the number of errors in each Nvlink packet"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 	metricDCGMFIDevNvlinkCountEffectiveBERFloat = prometheus.NewGaugeVec(
@@ -159,8 +159,8 @@ var (
 		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_symbol_ber_float", Help: "BER for symbol errors - decoded float value"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
-	metricDCGMFIDevNvlinkCountTxDiscards = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_nvlink_count_tx_discards", Help: "Total number of tx error packets that were discarded"},
+	metricDCGMFIDevNvlinkCountTxDiscards = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{Name: "dcgm_fi_dev_nvlink_count_tx_discards", Help: "Total number of tx error packets that were discarded"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 )
