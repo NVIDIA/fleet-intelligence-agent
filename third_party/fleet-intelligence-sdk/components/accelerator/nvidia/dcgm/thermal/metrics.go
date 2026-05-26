@@ -67,8 +67,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevThermalViolation = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{Name: "dcgm_fi_dev_thermal_violation", Help: "Thermal Violation time in ns"},
+	metricDCGMFIDevThermalViolation = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{Name: "dcgm_fi_dev_thermal_violation", Help: "Thermal Violation time in ns"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
@@ -76,7 +76,6 @@ var (
 		prometheus.GaugeOpts{Name: "dcgm_fi_dev_gpu_temp_limit", Help: "Thermal margin temperature (distance to nearest slowdown threshold) for this GPU"},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
-
 )
 
 func init() {

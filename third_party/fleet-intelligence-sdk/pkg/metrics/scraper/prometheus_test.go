@@ -89,16 +89,19 @@ func TestPrometheusScraper(t *testing.T) {
 
 	require.Equal(t, "component-1", ms[0].Component)
 	require.Equal(t, "sqlite_insert_update_total", ms[0].Name)
+	require.Equal(t, pkgmetrics.MetricTypeCounter, ms[0].Type)
 	require.Nil(t, ms[0].Labels, "Expected no labels for the first metric")
 	require.Equal(t, float64(1), ms[0].Value)
 
 	require.Equal(t, "component-1", ms[1].Component)
 	require.Equal(t, "test_current_celsius", ms[1].Name)
+	require.Equal(t, pkgmetrics.MetricTypeGauge, ms[1].Type)
 	require.Equal(t, "GPU-0", ms[1].Labels["label_uuid"])
 	require.Equal(t, float64(100), ms[1].Value)
 
 	require.Equal(t, "component-1", ms[2].Component)
 	require.Equal(t, "test_slowdown_used_percent", ms[2].Name)
+	require.Equal(t, pkgmetrics.MetricTypeGauge, ms[2].Type)
 	require.Equal(t, "GPU-0", ms[2].Labels["label_uuid"])
 	require.Equal(t, float64(98), ms[2].Value)
 }
@@ -110,6 +113,14 @@ type mockGathererWithError struct {
 
 func (m *mockGathererWithError) Gather() ([]*dto.MetricFamily, error) {
 	return nil, m.err
+}
+
+type mockGatherer struct {
+	metricFamilies []*dto.MetricFamily
+}
+
+func (m *mockGatherer) Gather() ([]*dto.MetricFamily, error) {
+	return m.metricFamilies, nil
 }
 
 func TestPrometheusScraper_GatherError(t *testing.T) {
@@ -134,6 +145,39 @@ func TestPrometheusScraper_GatherError(t *testing.T) {
 	require.Nil(t, metrics)
 }
 
+func TestPrometheusScraper_SkipsUnsupportedMetricKinds(t *testing.T) {
+	t.Parallel()
+
+	scraper := &promScraper{
+		gatherer: &mockGatherer{
+			metricFamilies: []*dto.MetricFamily{
+				{
+					Name: stringPtr("test_summary"),
+					Type: dto.MetricType_SUMMARY.Enum(),
+					Metric: []*dto.Metric{
+						{
+							Label: []*dto.LabelPair{
+								{
+									Name:  stringPtr(pkgmetrics.MetricComponentLabelKey),
+									Value: stringPtr("component-1"),
+								},
+							},
+							Summary: &dto.Summary{},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	metrics, err := scraper.Scrape(ctx)
+	require.NoError(t, err)
+	require.Empty(t, metrics)
+}
+
 func TestPrometheusScraper_NilGatherer(t *testing.T) {
 	t.Parallel()
 
@@ -149,6 +193,10 @@ func TestPrometheusScraper_NilGatherer(t *testing.T) {
 	metrics, err := scraper.Scrape(ctx)
 	require.NoError(t, err)
 	require.Nil(t, metrics)
+}
+
+func stringPtr(s string) *string {
+	return &s
 }
 
 func TestPrometheusScraper_NilScraper(t *testing.T) {
@@ -254,19 +302,19 @@ func TestPrometheusScraper_MultipleMetricTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, ms)
 
-	// Should have more than 4 metrics because histograms and summaries
-	// generate multiple underlying metrics
-	require.True(t, len(ms) >= 4, "Expected at least 4 metrics, got %d", len(ms))
+	require.Len(t, ms, 2, "Only counter and gauge metrics should be returned")
 
 	// Verify the counter and gauge are included
 	var foundCounter, foundGauge bool
 	for _, m := range ms {
 		if m.Name == "test_operations_total" && m.Component == "component1" {
 			foundCounter = true
+			require.Equal(t, pkgmetrics.MetricTypeCounter, m.Type)
 			require.Equal(t, float64(1), m.Value)
 		}
 		if m.Name == "test_resources_utilization" && m.Component == "component1" {
 			foundGauge = true
+			require.Equal(t, pkgmetrics.MetricTypeGauge, m.Type)
 			if labels := m.Labels; labels != nil {
 				require.Equal(t, "resource1", labels["label_uuid"])
 			}

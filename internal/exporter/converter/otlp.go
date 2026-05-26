@@ -25,6 +25,7 @@ import (
 	"time"
 
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	pkgmetrics "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics"
 	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	logsv1 "go.opentelemetry.io/proto/otlp/logs/v1"
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
@@ -179,25 +180,7 @@ func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metr
 	// Convert regular metrics if available
 	if len(data.Metrics) > 0 {
 		for _, metric := range data.Metrics {
-			otlpMetric := &metricsv1.Metric{
-				Name:        metric.Name,
-				Description: fmt.Sprintf("Metric from component %s", metric.Component),
-				Unit:        "1",
-				Data: &metricsv1.Metric_Gauge{
-					Gauge: &metricsv1.Gauge{
-						DataPoints: []*metricsv1.NumberDataPoint{
-							{
-								TimeUnixNano: uint64(metric.UnixMilliseconds) * 1_000_000,
-								Value: &metricsv1.NumberDataPoint_AsDouble{
-									AsDouble: metric.Value,
-								},
-								Attributes: c.convertLabelsToOTLPAttributes(metric.Labels, gpuUUIDToIndex),
-							},
-						},
-					},
-				},
-			}
-			otlpMetrics = append(otlpMetrics, otlpMetric)
+			otlpMetrics = append(otlpMetrics, c.convertMetricToOTLP(metric, gpuUUIDToIndex))
 		}
 	}
 
@@ -205,7 +188,6 @@ func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metr
 	summaryMetric := &metricsv1.Metric{
 		Name:        "fleetint_agent_collection_summary",
 		Description: "Summary of Fleet Intelligence data collection including counts of metrics, events, and components",
-		Unit:        "1",
 		Data: &metricsv1.Metric_Gauge{
 			Gauge: &metricsv1.Gauge{
 				DataPoints: []*metricsv1.NumberDataPoint{
@@ -244,7 +226,6 @@ func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metr
 	upMetric := &metricsv1.Metric{
 		Name:        "fleetint_agent_up",
 		Description: "Fleet Intelligence agent liveness. A value of 1 indicates the agent was running when telemetry was exported.",
-		Unit:        "1",
 		Data: &metricsv1.Metric_Gauge{
 			Gauge: &metricsv1.Gauge{
 				DataPoints: []*metricsv1.NumberDataPoint{
@@ -261,6 +242,39 @@ func (c *otlpConverter) convertMetricsToOTLP(data *collector.HealthData) []*metr
 	otlpMetrics = append(otlpMetrics, upMetric)
 
 	return otlpMetrics
+}
+
+func (c *otlpConverter) convertMetricToOTLP(metric pkgmetrics.Metric, gpuUUIDToIndex map[string]string) *metricsv1.Metric {
+	dataPoint := &metricsv1.NumberDataPoint{
+		TimeUnixNano: uint64(metric.UnixMilliseconds) * 1_000_000,
+		Value: &metricsv1.NumberDataPoint_AsDouble{
+			AsDouble: metric.Value,
+		},
+		Attributes: c.convertLabelsToOTLPAttributes(metric.Labels, gpuUUIDToIndex),
+	}
+
+	otlpMetric := &metricsv1.Metric{
+		Name:        metric.Name,
+		Description: fmt.Sprintf("Metric from component %s", metric.Component),
+	}
+
+	if metric.Type == pkgmetrics.MetricTypeCounter {
+		otlpMetric.Data = &metricsv1.Metric_Sum{
+			Sum: &metricsv1.Sum{
+				AggregationTemporality: metricsv1.AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE,
+				IsMonotonic:            true,
+				DataPoints:             []*metricsv1.NumberDataPoint{dataPoint},
+			},
+		}
+		return otlpMetric
+	}
+
+	otlpMetric.Data = &metricsv1.Metric_Gauge{
+		Gauge: &metricsv1.Gauge{
+			DataPoints: []*metricsv1.NumberDataPoint{dataPoint},
+		},
+	}
+	return otlpMetric
 }
 
 // convertLabelsToOTLPAttributes converts metric labels to OTLP attributes.

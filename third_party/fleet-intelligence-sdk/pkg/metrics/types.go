@@ -11,6 +11,13 @@ import (
 // MetricComponentLabelKey is the key for the component of the metric.
 const MetricComponentLabelKey = "gpud_component"
 
+type MetricType string
+
+const (
+	MetricTypeGauge   MetricType = "gauge"
+	MetricTypeCounter MetricType = "counter"
+)
+
 // Metric represents a metric row in the database table.
 type Metric struct {
 	// UnixMilliseconds represents the Unix timestamp of the metric.
@@ -19,6 +26,8 @@ type Metric struct {
 	Component string `json:"component"`
 	// Name represents the name of the metric.
 	Name string `json:"name"`
+	// Type represents the Prometheus metric type.
+	Type MetricType `json:"type,omitempty"`
 	// Value represents the numeric value of the metric.
 	Value float64 `json:"value"`
 
