@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -35,6 +36,9 @@ var (
 )
 
 const defaultEnrollTimeout = time.Minute
+const reservedUnassignedName = "Unassigned"
+
+var enrollMetadataNamePattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9 ._-]*$`)
 
 // resolveToken returns the SAK token from --token, --token-file, or stdin.
 func resolveToken(cliContext *cli.Context) (string, error) {
@@ -84,9 +88,20 @@ func resolveToken(cliContext *cli.Context) (string, error) {
 func enrollCommand(cliContext *cli.Context) error {
 	baseEndpoint := cliContext.String("endpoint")
 	force := cliContext.Bool("force")
+	nodeGroup, err := validatedOptionalMetadataFlagValue(cliContext, "node-group", "Node group")
+	if err != nil {
+		return err
+	}
+	computeZone, err := validatedOptionalMetadataFlagValue(cliContext, "compute-zone", "Compute zone")
+	if err != nil {
+		return err
+	}
+	if err := validateReservedPairMetadata(nodeGroup, computeZone); err != nil {
+		return err
+	}
 	metadata := &enrollment.EnrollMetadata{
-		NodeGroup:   optionalFlagValue(cliContext, "node-group"),
-		ComputeZone: optionalFlagValue(cliContext, "compute-zone"),
+		NodeGroup:   nodeGroup,
+		ComputeZone: computeZone,
 	}
 
 	sakToken, err := resolveToken(cliContext)
@@ -124,10 +139,40 @@ func enrollCommand(cliContext *cli.Context) error {
 	return performEnrollWorkflow(ctx, baseEndpoint, sakToken, cfg, metadata)
 }
 
-func optionalFlagValue(cliContext *cli.Context, name string) *string {
+func validatedOptionalMetadataFlagValue(cliContext *cli.Context, name, fieldName string) (*string, error) {
 	if !cliContext.IsSet(name) {
-		return nil
+		return nil, nil
 	}
 	value := strings.TrimSpace(cliContext.String(name))
-	return &value
+	// Explicit empty means clear/unassign for reserved assignment fields.
+	if value == "" {
+		return &value, nil
+	}
+	if strings.EqualFold(value, reservedUnassignedName) {
+		return nil, fmt.Errorf("%s name %q is reserved; use empty value to clear assignment", fieldName, reservedUnassignedName)
+	}
+	if len(value) > 255 {
+		return nil, fmt.Errorf("%s name must be 255 characters or fewer", fieldName)
+	}
+	if !enrollMetadataNamePattern.MatchString(value) {
+		return nil, fmt.Errorf("%s name must start with a letter and contain only letters, numbers, spaces, hyphens, underscores, or periods", fieldName)
+	}
+	return &value, nil
+}
+
+func validateReservedPairMetadata(nodeGroup, computeZone *string) error {
+	nodeGroupSet := nodeGroup != nil
+	computeZoneSet := computeZone != nil
+
+	if !nodeGroupSet && !computeZoneSet {
+		return nil
+	}
+	if nodeGroupSet && computeZoneSet {
+		nodeGroupEmpty := *nodeGroup == ""
+		computeZoneEmpty := *computeZone == ""
+		if nodeGroupEmpty == computeZoneEmpty {
+			return nil
+		}
+	}
+	return fmt.Errorf("--node-group and --compute-zone must be both omitted, both empty, or both non-empty")
 }

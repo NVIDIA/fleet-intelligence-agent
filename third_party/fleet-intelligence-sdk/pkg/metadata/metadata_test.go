@@ -126,3 +126,23 @@ func TestSetAndReadMetadata(t *testing.T) {
 	_, err = ReadMetadata(canceledCtx, dbRO, testKey)
 	assert.Error(t, err)
 }
+
+func TestSetMetadata_AllowsTransitionFromEmptyToNonEmpty(t *testing.T) {
+	t.Parallel()
+	dbRW, dbRO, cleanup := sqlite.OpenTestDB(t)
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	require.NoError(t, CreateTableMetadata(ctx, dbRW))
+
+	const key = "nodegroup"
+	require.NoError(t, SetMetadata(ctx, dbRW, key, "group-a"))
+	require.NoError(t, SetMetadata(ctx, dbRW, key, ""))
+	require.NoError(t, SetMetadata(ctx, dbRW, key, "group-b"))
+
+	value, err := ReadMetadata(ctx, dbRO, key)
+	require.NoError(t, err)
+	assert.Equal(t, "group-b", value)
+}
