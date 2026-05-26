@@ -6,9 +6,6 @@ Built on top of [leptonai/gpud](https://github.com/leptonai/gpud)
 
 ## Overview
 
-For installation prerequisites and setup details, see:
-[Helm Installation](docs/install-helm.md), [DEB Installation](docs/install-deb.md), and [RPM Installation](docs/install-rpm.md).
-
 **What It Monitors:**
 - GPU Metrics: Power, temperature, clocks, utilization, memory, Xid events
 - System Metrics: CPU, memory, disk, network usage
@@ -20,7 +17,7 @@ For installation prerequisites and setup details, see:
 - Remote Export: Sends telemetry data to OpenTelemetry-compatible endpoints via OTLP over HTTP
 
 **Key Features:**
-- Lightweight: <100MB RAM, <1% CPU usage
+- Lightweight: <500MB RAM, <1% CPU usage
 - Non-intrusive: Read-only operations, no system modifications
 - Production-ready: 24/7 datacenter operation
 
@@ -28,13 +25,15 @@ For installation prerequisites and setup details, see:
 
 | OS Family | Supported Versions | Architecture | GPU |
 |-----------|--------------------|--------------|-----|
-| Ubuntu | 22.04, 24.04 | x86_64, ARM64 | Hopper, Blackwell, Rubin |
-| RHEL | 8, 9, 10 | x86_64, ARM64 | Hopper, Blackwell, Rubin |
-| Rocky Linux | 8, 9, 10 | x86_64, ARM64 | Hopper, Blackwell, Rubin |
-| AlmaLinux | 8, 9, 10 | x86_64, ARM64 | Hopper, Blackwell, Rubin |
-| Amazon Linux | 2023 | x86_64, ARM64 | Hopper, Blackwell, Rubin |
+| Ubuntu | 22.04, 24.04 | x86_64, ARM64 | Ampere, Ada Lovelace, Hopper, Blackwell, Rubin |
+| RHEL | 8, 9, 10 | x86_64, ARM64 | Ampere, Ada Lovelace, Hopper, Blackwell, Rubin |
+| Rocky Linux | 8, 9, 10 | x86_64, ARM64 | Ampere, Ada Lovelace, Hopper, Blackwell, Rubin |
+| AlmaLinux | 8, 9, 10 | x86_64, ARM64 | Ampere, Ada Lovelace, Hopper, Blackwell, Rubin |
+| Amazon Linux | 2023 | x86_64, ARM64 | Ampere, Ada Lovelace, Hopper, Blackwell, Rubin |
 
 ## Documentation
+
+**Important:** Documentation links are relative to the branch or tag you are viewing. The default GitHub view uses `main`, which may describe unreleased changes. When installing or upgrading a specific agent version, switch to that version's release tag first.
 
 - [Helm Installation](docs/install-helm.md) - Kubernetes (Helm) installation and troubleshooting
 - [DEB Installation](docs/install-deb.md) - Ubuntu package install, update, and uninstall

@@ -92,7 +92,7 @@ Validates the local prerequisites required for installation and enrollment.
 
 **What it checks:**
 - NVIDIA GPU presence
-- supported GPU architecture (`Hopper`, `Blackwell`, `Rubin`, `Ampere`, `Ada Lovelace`)
+- supported GPU architecture (`Ampere`, `Ada Lovelace`, `Hopper`, `Blackwell`, `Rubin`)
 - NVIDIA driver major version (`510` or newer)
 - DCGM HostEngine reachability
 - DCGM HostEngine minimum version (`4.2.3`)
@@ -384,7 +384,7 @@ scrape_configs:
 
 ### High resource usage
 
-The agent should use <100MB RAM and <1% CPU. Higher usage might indicate:
+The agent should use <500MB RAM and <1% CPU. Higher usage might indicate:
 
 - Very frequent collection intervals (check `FLEETINT_COLLECT_INTERVAL`)
 - Large lookback windows (check `FLEETINT_METRICS_LOOKBACK` and `FLEETINT_EVENTS_LOOKBACK`)
