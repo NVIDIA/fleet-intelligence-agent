@@ -21,6 +21,9 @@ const (
 	columnKey             = "key"
 	columnValue           = "value"
 )
+const setMetadataUpsertQuery = `
+INSERT INTO gpud_metadata (key, value) VALUES (?, ?)
+ON CONFLICT(key) DO UPDATE SET value = excluded.value`
 
 // CreateTableMetadata creates the table for the metadata.
 func CreateTableMetadata(ctx context.Context, dbRW *sql.DB) error {
@@ -54,9 +57,7 @@ const (
 // If the metadata entry is found, it is updated in-place.
 func SetMetadata(ctx context.Context, dbRW *sql.DB, key string, value string) error {
 	start := time.Now()
-	_, err := dbRW.ExecContext(ctx, fmt.Sprintf(`
-INSERT INTO %s (%s, %s) VALUES (?, ?)
-ON CONFLICT(%s) DO UPDATE SET %s = excluded.%s`, tableNameGPUdMetadata, columnKey, columnValue, columnKey, columnValue, columnValue), key, value)
+	_, err := dbRW.ExecContext(ctx, setMetadataUpsertQuery, key, value)
 	pkgmetricsrecorder.RecordSQLiteInsertUpdate(time.Since(start).Seconds())
 
 	return err
