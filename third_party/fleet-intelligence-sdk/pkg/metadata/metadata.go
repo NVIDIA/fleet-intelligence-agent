@@ -21,6 +21,9 @@ const (
 	columnKey             = "key"
 	columnValue           = "value"
 )
+const setMetadataUpsertQuery = `
+INSERT INTO gpud_metadata (key, value) VALUES (?, ?)
+ON CONFLICT(key) DO UPDATE SET value = excluded.value`
 
 // CreateTableMetadata creates the table for the metadata.
 func CreateTableMetadata(ctx context.Context, dbRW *sql.DB) error {
@@ -51,28 +54,10 @@ const (
 
 // SetMetadata sets the value of a metadata entry.
 // If the metadata entry is not found, it is created.
-// If the metadata entry is found and the value is the same, it is not updated.
-// If the metadata entry is found and the value is different, it is updated.
+// If the metadata entry is found, it is updated in-place.
 func SetMetadata(ctx context.Context, dbRW *sql.DB, key string, value string) error {
-	prev, err := ReadMetadata(ctx, dbRW, key)
-	if err != nil {
-		return err
-	}
-
-	if prev == value {
-		return nil
-	}
-
 	start := time.Now()
-	if prev == "" {
-		// the "name" is not in the table, so we need to insert it
-		_, err = dbRW.ExecContext(ctx, fmt.Sprintf(`
-INSERT INTO %s (%s, %s) VALUES (?, ?)`, tableNameGPUdMetadata, columnKey, columnValue), key, value)
-	} else {
-		// the "name" is already in the table, so we need to update it
-		_, err = dbRW.ExecContext(ctx, fmt.Sprintf(`
-UPDATE %s SET %s = ? WHERE %s = ?`, tableNameGPUdMetadata, columnValue, columnKey), value, key)
-	}
+	_, err := dbRW.ExecContext(ctx, setMetadataUpsertQuery, key, value)
 	pkgmetricsrecorder.RecordSQLiteInsertUpdate(time.Since(start).Seconds())
 
 	return err
