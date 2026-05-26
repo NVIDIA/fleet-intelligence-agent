@@ -83,8 +83,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevUncorrectableRemappedRows = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevUncorrectableRemappedRows = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: "",
 			Name:      "dcgm_fi_dev_uncorrectable_remapped_rows",
@@ -93,8 +93,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevCorrectableRemappedRows = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevCorrectableRemappedRows = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: "",
 			Name:      "dcgm_fi_dev_correctable_remapped_rows",
@@ -133,8 +133,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevECCSBEVolTotal = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevECCSBEVolTotal = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: "",
 			Name:      "dcgm_fi_dev_ecc_sbe_vol_total",
@@ -143,8 +143,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevECCDBEVolTotal = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevECCDBEVolTotal = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: "",
 			Name:      "dcgm_fi_dev_ecc_dbe_vol_total",
@@ -153,8 +153,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevECCSBEAggTotal = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevECCSBEAggTotal = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: "",
 			Name:      "dcgm_fi_dev_ecc_sbe_agg_total",
@@ -163,8 +163,8 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevECCDBAggTotal = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevECCDBAggTotal = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: "",
 			Name:      "dcgm_fi_dev_ecc_dbe_agg_total",
@@ -173,32 +173,32 @@ var (
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevECCSBEVolDev = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevECCSBEVolDev = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Name: "dcgm_fi_dev_ecc_sbe_vol_dev",
 			Help: "Device memory single bit volatile ECC errors.",
 		},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevECCDBEVolDev = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevECCDBEVolDev = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Name: "dcgm_fi_dev_ecc_dbe_vol_dev",
 			Help: "Device memory double bit volatile ECC errors.",
 		},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevECCSBEAggDev = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevECCSBEAggDev = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Name: "dcgm_fi_dev_ecc_sbe_agg_dev",
 			Help: "Device memory single bit aggregate (persistent) ECC errors. Note: monotonically increasing.",
 		},
 		[]string{pkgmetrics.MetricComponentLabelKey, "uuid", "gpu"},
 	).MustCurryWith(componentLabel)
 
-	metricDCGMFIDevECCDBEAggDev = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevECCDBEAggDev = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Name: "dcgm_fi_dev_ecc_dbe_agg_dev",
 			Help: "Device memory double bit aggregate (persistent) ECC errors. Note: monotonically increasing.",
 		},

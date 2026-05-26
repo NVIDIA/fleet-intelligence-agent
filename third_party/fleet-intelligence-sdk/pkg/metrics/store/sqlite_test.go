@@ -34,6 +34,55 @@ func TestSQLiteNewStore(t *testing.T) {
 	assert.Equal(t, ErrEmptyTableName, err)
 }
 
+func TestSQLiteNewStore_AddsMetricTypeColumnToExistingTable(t *testing.T) {
+	dbRW, dbRO, cleanup := pkgsqlite.OpenTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	table := "test_metrics_legacy"
+	_, err := dbRW.ExecContext(ctx, fmt.Sprintf(`
+CREATE TABLE %s (
+	%s INTEGER NOT NULL,
+	%s TEXT NOT NULL,
+	%s TEXT NOT NULL,
+	%s TEXT,
+	%s REAL NOT NULL,
+	PRIMARY KEY (%s, %s, %s, %s)
+) WITHOUT ROWID;`,
+		table,
+		columnUnixMilliseconds, columnComponentName, columnMetricName, columnMetricLabels, columnMetricValue,
+		columnUnixMilliseconds, columnComponentName, columnMetricName, columnMetricLabels,
+	))
+	require.NoError(t, err)
+
+	store, err := NewSQLiteStore(ctx, dbRW, dbRO, table)
+	require.NoError(t, err)
+
+	err = store.Record(ctx, pkgmetrics.Metric{
+		UnixMilliseconds: time.Now().UnixMilli(),
+		Component:        "test-component",
+		Name:             "counter_metric",
+		Type:             pkgmetrics.MetricTypeCounter,
+		Value:            10,
+	})
+	require.NoError(t, err)
+
+	results, err := store.Read(ctx)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, pkgmetrics.MetricTypeCounter, results[0].Type)
+}
+
+func TestEnsureMetricTypeColumnRejectsInvalidTableName(t *testing.T) {
+	dbRW, _, cleanup := pkgsqlite.OpenTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	err := ensureMetricTypeColumn(ctx, dbRW, `test_metrics; DROP TABLE test_metrics;`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid sqlite identifier")
+}
+
 func TestSQLiteStore_Record(t *testing.T) {
 	// Setup test database
 	dbRW, dbRO, cleanup := pkgsqlite.OpenTestDB(t)
@@ -52,6 +101,7 @@ func TestSQLiteStore_Record(t *testing.T) {
 			UnixMilliseconds: now,
 			Component:        "test-component",
 			Name:             "metric1",
+			Type:             pkgmetrics.MetricTypeCounter,
 			Value:            42.0,
 		},
 		{
@@ -90,6 +140,7 @@ func TestSQLiteStore_Record(t *testing.T) {
 		UnixMilliseconds: now,
 		Component:        "test-component",
 		Name:             "metric1",
+		Type:             pkgmetrics.MetricTypeCounter,
 		Value:            99.9,
 	}
 	err = store.Record(ctx, updatedMetric)
@@ -102,7 +153,11 @@ func TestSQLiteStore_Record(t *testing.T) {
 	for _, m := range results {
 		if m.Component == "test-component" && m.Name == "metric1" {
 			assert.Equal(t, 99.9, m.Value)
+			assert.Equal(t, pkgmetrics.MetricTypeCounter, m.Type)
 			found = true
+		}
+		if m.Component == "test-component" && m.Name == "metric2" {
+			assert.Equal(t, pkgmetrics.MetricTypeGauge, m.Type)
 		}
 	}
 	assert.True(t, found, "Updated metric not found in results")

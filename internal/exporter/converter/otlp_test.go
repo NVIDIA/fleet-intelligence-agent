@@ -99,6 +99,53 @@ func TestOTLPConverter_Convert_WithMetrics(t *testing.T) {
 	assert.Contains(t, metrics[0].Description, "gpu")
 }
 
+func TestOTLPConverter_Convert_CounterMetricsBecomeCumulativeSums(t *testing.T) {
+	data := &collector.HealthData{
+		Timestamp: time.Now(),
+		MachineID: "test-machine",
+		Metrics: metrics.Metrics{
+			{
+				Component:        "gpu",
+				Name:             "dcgm_fi_dev_pcie_replay_counter",
+				Type:             metrics.MetricTypeCounter,
+				UnixMilliseconds: 1699200000000,
+				Value:            42,
+				Labels:           map[string]string{"uuid": "GPU-0", "gpu": "0"},
+			},
+			{
+				Component:        "gpu",
+				Name:             "dcgm_fi_dev_gpu_temp",
+				Type:             metrics.MetricTypeGauge,
+				UnixMilliseconds: 1699200001000,
+				Value:            65,
+				Labels:           map[string]string{"uuid": "GPU-0", "gpu": "0"},
+			},
+		},
+	}
+
+	converter := NewOTLPConverter()
+	otlpData := converter.Convert(data)
+
+	convertedMetrics := otlpData.Metrics.ResourceMetrics[0].ScopeMetrics[0].Metrics
+	counterMetric := findOTLPMetric(convertedMetrics, "dcgm_fi_dev_pcie_replay_counter")
+	require.NotNil(t, counterMetric)
+	assert.Empty(t, counterMetric.Unit)
+	sum := counterMetric.GetSum()
+	require.NotNil(t, sum)
+	assert.True(t, sum.IsMonotonic)
+	assert.Equal(t, metricsv1.AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE, sum.AggregationTemporality)
+	require.Len(t, sum.DataPoints, 1)
+	assert.Equal(t, 42.0, sum.DataPoints[0].GetAsDouble())
+
+	gaugeMetric := findOTLPMetric(convertedMetrics, "dcgm_fi_dev_gpu_temp")
+	require.NotNil(t, gaugeMetric)
+	assert.Empty(t, gaugeMetric.Unit)
+	gauge := gaugeMetric.GetGauge()
+	require.NotNil(t, gauge)
+	require.Len(t, gauge.DataPoints, 1)
+	assert.Equal(t, 65.0, gauge.DataPoints[0].GetAsDouble())
+}
+
 func TestOTLPConverter_Convert_WithEvents(t *testing.T) {
 	data := &collector.HealthData{
 		Timestamp: time.Now(),
@@ -733,7 +780,7 @@ func TestOTLPConverter_UpMetric(t *testing.T) {
 	}
 
 	require.NotNil(t, upMetric, "Should have fleetint_agent_up metric")
-	assert.Equal(t, "1", upMetric.Unit)
+	assert.Empty(t, upMetric.Unit)
 	assert.Contains(t, upMetric.Description, "liveness")
 
 	gauge := upMetric.Data.(*metricsv1.Metric_Gauge).Gauge
@@ -743,6 +790,15 @@ func TestOTLPConverter_UpMetric(t *testing.T) {
 	assert.Equal(t, uint64(timestamp.UnixNano()), point.TimeUnixNano)
 	assert.Equal(t, int64(1), point.GetAsInt())
 	assert.Empty(t, point.Attributes)
+}
+
+func findOTLPMetric(metrics []*metricsv1.Metric, name string) *metricsv1.Metric {
+	for _, metric := range metrics {
+		if metric.Name == name {
+			return metric
+		}
+	}
+	return nil
 }
 
 func TestOTLPConverter_ResourceAttributes(t *testing.T) {

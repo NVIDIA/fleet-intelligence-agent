@@ -33,8 +33,8 @@ var (
 		pkgmetrics.MetricComponentLabelKey: Name,
 	}
 
-	metricDCGMFIDevPCIeReplayCounter = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricDCGMFIDevPCIeReplayCounter = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: "",
 			Name:      "dcgm_fi_dev_pcie_replay_counter",

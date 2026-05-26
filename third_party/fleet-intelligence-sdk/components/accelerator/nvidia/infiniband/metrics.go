@@ -16,8 +16,8 @@ var (
 		pkgmetrics.MetricComponentLabelKey: Name,
 	}
 
-	metricIbLinkedDowned = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	metricIbLinkedDowned = pkgmetrics.NewSettableCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "",
 			Subsystem: SubSystem,
 			Name:      "link_downed",
