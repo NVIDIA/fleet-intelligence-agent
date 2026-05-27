@@ -61,6 +61,7 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           COMMIT_SHORT=$(git rev-parse --short=7 HEAD)
+          BUILD_TIMESTAMP=$(git show -s --format=%cI HEAD)
           BRANCH="release"
           SOURCE="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz"
           
@@ -75,23 +76,10 @@ jobs:
           
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "commit=$COMMIT_SHORT" >> $GITHUB_OUTPUT
+          echo "build_timestamp=$BUILD_TIMESTAMP" >> $GITHUB_OUTPUT
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
           echo "source=$SOURCE" >> $GITHUB_OUTPUT
           echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
-
-      - name: Prepare fleet-intelligence-agent image tags
-        id: agent_image
-        run: |
-          set -euo pipefail
-          VERSION="${{ steps.version.outputs.version }}"
-          IMAGE="nvcr.io/0753215517602916/agent-artifact/fleet-intelligence-agent"
-          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "tags<<EOF" >> "$GITHUB_OUTPUT"
-          echo "${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
-          if [ "${{ steps.version.outputs.is_prerelease }}" = "false" ]; then
-            echo "${IMAGE}:latest" >> "$GITHUB_OUTPUT"
-          fi
-          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Prepare fleet-intelligence-agent GHCR image tags
         id: agent_image_ghcr
@@ -115,13 +103,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to NVCR (nvcr.io)
-        uses: docker/login-action@v3
-        with:
-          registry: nvcr.io
-          username: $oauthtoken
-          password: ${{ secrets.NVCR_API_KEY }}
-
       - name: Login to GHCR (ghcr.io)
         uses: docker/login-action@v3
         with:
@@ -137,12 +118,11 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ steps.agent_image.outputs.tags }}
             ${{ steps.agent_image_ghcr.outputs.tags }}
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
             REVISION=${{ steps.version.outputs.commit }}
-            BUILD_TIMESTAMP=${{ github.event.head_commit.timestamp }}
+            BUILD_TIMESTAMP=${{ steps.version.outputs.build_timestamp }}
 
       - name: Package Helm chart
         run: |
@@ -150,31 +130,6 @@ jobs:
             --destination dist \
             --version "${{ steps.version.outputs.version }}" \
             --app-version "${{ steps.version.outputs.version }}"
-
-      - name: Ensure Helm push plugin is installed
-        run: |
-          set -euo pipefail
-          if helm plugin list | awk '{print $1}' | grep -qx 'cm-push'; then
-            echo "helm-push plugin already installed"
-          else
-            helm plugin install https://github.com/chartmuseum/helm-push
-          fi
-
-      - name: Add NGC Helm repo
-        env:
-          NGC_API_KEY: ${{ secrets.NVCR_API_KEY }}
-        run: |
-          set -euo pipefail
-          helm repo remove ngc || true
-          helm repo add ngc https://helm.ngc.nvidia.com/0753215517602916/agent-artifact \
-            --username '$oauthtoken' \
-            --password "${NGC_API_KEY}"
-
-      - name: Push Helm chart to NGC Helm repo
-        run: |
-          set -euo pipefail
-          CHART_VERSION="${{ steps.version.outputs.version }}"
-          helm cm-push "dist/fleet-intelligence-agent-${CHART_VERSION}.tgz" ngc
 
       - name: Login to GHCR Helm registry
         run: |
@@ -234,12 +189,7 @@ jobs:
           echo "**Pre-release:** ${{ steps.version.outputs.is_prerelease }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**fleet-intelligence-agent image tags:**" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.agent_image.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.agent_image_ghcr.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Helm chart (NGC Helm repo):**" >> $GITHUB_STEP_SUMMARY
-          echo "repo: https://helm.ngc.nvidia.com/0753215517602916/agent-artifact" >> $GITHUB_STEP_SUMMARY
-          echo "chart: fleet-intelligence-agent-${{ steps.version.outputs.version }}.tgz" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Helm chart (GHCR OCI):**" >> $GITHUB_STEP_SUMMARY
           echo "repo: oci://ghcr.io/${{ steps.agent_image_ghcr.outputs.owner_lc }}/charts" >> $GITHUB_STEP_SUMMARY
