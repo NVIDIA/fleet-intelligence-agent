@@ -35,7 +35,6 @@ import (
 	componentsnvml "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/nvml"
 	componentspeermem "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/peermem"
 	componentspersistencemode "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/persistence-mode"
-	componentsprocesses "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/processes"
 	componentssxid "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/sxid"
 	componentsxid "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/xid"
 	componentscpu "github.com/NVIDIA/fleet-intelligence-sdk/components/cpu"
@@ -57,7 +56,7 @@ type Component struct {
 // All returns all available components with their default enable/disable state
 func All() []Component {
 	return []Component{
-		// NVIDIA GPU Components - enabled by default unless noted otherwise
+		// NVIDIA GPU Components - all enabled by default
 		{
 			Name:             componentsinfiniband.Name,
 			InitFunc:         componentsinfiniband.New,
@@ -77,11 +76,6 @@ func All() []Component {
 			Name:             componentspersistencemode.Name,
 			InitFunc:         componentspersistencemode.New,
 			EnabledByDefault: true,
-		},
-		{
-			Name:             componentsprocesses.Name,
-			InitFunc:         componentsprocesses.New,
-			EnabledByDefault: false,
 		},
 		{
 			Name:             componentsnvml.Name,

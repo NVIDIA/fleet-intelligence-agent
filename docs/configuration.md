@@ -151,12 +151,8 @@ Rules:
 
 - `all`, `*`, or an empty component list uses the built-in default component set.
 - `all,-<component-name>` starts with the built-in default component set, then disables specific ones.
-- An explicit comma-separated list enables only the named components (including components disabled by default).
+- An explicit comma-separated list enables only the named components.
 - A non-matching explicit value effectively disables all components.
-
-Default disabled components:
-
-- `accelerator-nvidia-processes`
 
 Available component names:
 
@@ -166,7 +162,6 @@ Available component names:
 - `accelerator-nvidia-nccl`
 - `accelerator-nvidia-peermem`
 - `accelerator-nvidia-persistence-mode`
-- `accelerator-nvidia-processes`
 - `accelerator-nvidia-error-sxid`
 - `accelerator-nvidia-error-xid`
 

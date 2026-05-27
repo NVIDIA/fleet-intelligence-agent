@@ -48,23 +48,9 @@ func TestGetEnabledComponents(t *testing.T) {
 		assert.True(t, c.EnabledByDefault, "Enabled component should have EnabledByDefault=true")
 	}
 
-	// GetEnabledComponents should be a subset of All().
+	// GetEnabledComponents should match All() in this implementation.
 	allComponents := All()
-	assert.Less(t, len(enabled), len(allComponents))
-
-	// accelerator-nvidia-processes should be available but not enabled by default.
-	var hasProcesses bool
-	for _, c := range allComponents {
-		if c.Name == "accelerator-nvidia-processes" {
-			hasProcesses = true
-			break
-		}
-	}
-	assert.True(t, hasProcesses, "accelerator-nvidia-processes should exist in All()")
-
-	for _, c := range enabled {
-		assert.NotEqual(t, "accelerator-nvidia-processes", c.Name, "accelerator-nvidia-processes should be disabled by default")
-	}
+	assert.Equal(t, len(enabled), len(allComponents))
 }
 
 func TestGetComponent(t *testing.T) {
@@ -152,6 +138,7 @@ func TestAllComponentsHaveUniqueNames(t *testing.T) {
 
 func TestRemovedComponentsAbsent(t *testing.T) {
 	removed := []string{
+		"accelerator-nvidia-processes",
 		"accelerator-nvidia-fabric-manager",
 		"accelerator-nvidia-gpu-counts",
 		"accelerator-nvidia-nvlink",
