@@ -40,7 +40,7 @@ func TestAll(t *testing.T) {
 func TestGetEnabledComponents(t *testing.T) {
 	enabled := GetEnabledComponents()
 
-	// There should be a non-empty default enabled set.
+	// All components should be enabled by default in this codebase
 	require.NotEmpty(t, enabled)
 
 	// Verify all enabled components have EnabledByDefault = true
@@ -48,9 +48,9 @@ func TestGetEnabledComponents(t *testing.T) {
 		assert.True(t, c.EnabledByDefault, "Enabled component should have EnabledByDefault=true")
 	}
 
-	// GetEnabledComponents should match All() in this implementation.
+	// GetEnabledComponents should return the same as All() in this implementation
 	allComponents := All()
-	assert.Equal(t, len(enabled), len(allComponents))
+	assert.Equal(t, len(allComponents), len(enabled))
 }
 
 func TestGetComponent(t *testing.T) {
