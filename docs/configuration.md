@@ -162,7 +162,6 @@ Available component names:
 - `accelerator-nvidia-nccl`
 - `accelerator-nvidia-peermem`
 - `accelerator-nvidia-persistence-mode`
-- `accelerator-nvidia-processes`
 - `accelerator-nvidia-error-sxid`
 - `accelerator-nvidia-error-xid`
 

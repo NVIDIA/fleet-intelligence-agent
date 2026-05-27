@@ -138,6 +138,7 @@ func TestAllComponentsHaveUniqueNames(t *testing.T) {
 
 func TestRemovedComponentsAbsent(t *testing.T) {
 	removed := []string{
+		"accelerator-nvidia-processes",
 		"accelerator-nvidia-fabric-manager",
 		"accelerator-nvidia-gpu-counts",
 		"accelerator-nvidia-nvlink",

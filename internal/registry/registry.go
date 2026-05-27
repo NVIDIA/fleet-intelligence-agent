@@ -35,7 +35,6 @@ import (
 	componentsnvml "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/nvml"
 	componentspeermem "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/peermem"
 	componentspersistencemode "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/persistence-mode"
-	componentsprocesses "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/processes"
 	componentssxid "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/sxid"
 	componentsxid "github.com/NVIDIA/fleet-intelligence-sdk/components/accelerator/nvidia/xid"
 	componentscpu "github.com/NVIDIA/fleet-intelligence-sdk/components/cpu"
@@ -76,11 +75,6 @@ func All() []Component {
 		{
 			Name:             componentspersistencemode.Name,
 			InitFunc:         componentspersistencemode.New,
-			EnabledByDefault: true,
-		},
-		{
-			Name:             componentsprocesses.Name,
-			InitFunc:         componentsprocesses.New,
 			EnabledByDefault: true,
 		},
 		{
