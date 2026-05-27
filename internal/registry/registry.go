@@ -57,7 +57,7 @@ type Component struct {
 // All returns all available components with their default enable/disable state
 func All() []Component {
 	return []Component{
-		// NVIDIA GPU Components - all enabled by default
+		// NVIDIA GPU Components - enabled by default unless noted otherwise
 		{
 			Name:             componentsinfiniband.Name,
 			InitFunc:         componentsinfiniband.New,
@@ -81,7 +81,7 @@ func All() []Component {
 		{
 			Name:             componentsprocesses.Name,
 			InitFunc:         componentsprocesses.New,
-			EnabledByDefault: true,
+			EnabledByDefault: false,
 		},
 		{
 			Name:             componentsnvml.Name,

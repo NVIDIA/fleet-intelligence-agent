@@ -40,7 +40,7 @@ func TestAll(t *testing.T) {
 func TestGetEnabledComponents(t *testing.T) {
 	enabled := GetEnabledComponents()
 
-	// All components should be enabled by default in this codebase
+	// There should be a non-empty default enabled set.
 	require.NotEmpty(t, enabled)
 
 	// Verify all enabled components have EnabledByDefault = true
@@ -48,9 +48,23 @@ func TestGetEnabledComponents(t *testing.T) {
 		assert.True(t, c.EnabledByDefault, "Enabled component should have EnabledByDefault=true")
 	}
 
-	// GetEnabledComponents should return the same as All() in this implementation
+	// GetEnabledComponents should be a subset of All().
 	allComponents := All()
-	assert.Equal(t, len(allComponents), len(enabled))
+	assert.Less(t, len(enabled), len(allComponents))
+
+	// accelerator-nvidia-processes should be available but not enabled by default.
+	var hasProcesses bool
+	for _, c := range allComponents {
+		if c.Name == "accelerator-nvidia-processes" {
+			hasProcesses = true
+			break
+		}
+	}
+	assert.True(t, hasProcesses, "accelerator-nvidia-processes should exist in All()")
+
+	for _, c := range enabled {
+		assert.NotEqual(t, "accelerator-nvidia-processes", c.Name, "accelerator-nvidia-processes should be disabled by default")
+	}
 }
 
 func TestGetComponent(t *testing.T) {

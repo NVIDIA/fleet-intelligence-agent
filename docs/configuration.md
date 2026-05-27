@@ -123,7 +123,7 @@ These are the `fleetint run` flags supported by the CLI.
 | `--log-file` | Log file path. Leave empty to log to stdout/stderr. | empty | `FLEETINT_FLAGS="--log-file=..."` | not exposed by chart by default |
 | `--listen-address` | Listen address for the agent API server. An absolute path creates a Unix socket; a `host:port` value opens a TCP listener. | `/run/fleetint/fleetint.sock` | `FLEETINT_FLAGS="--listen-address=..."` | `listenAddress` |
 | `--retention-period` | Retention period for stored metrics and events. Minimum `1m`. | `24h` | `FLEETINT_FLAGS="--retention-period=..."` | `retentionPeriod` |
-| `--components` | Comma-separated component selection. Use `all`, `*`, explicit names, and `-name` exclusions. | empty flag value, which means enable all components by default | `FLEETINT_FLAGS="--components=..."` | `components` |
+| `--components` | Comma-separated component selection. Use `all`, `*`, explicit names, and `-name` exclusions. | empty flag value, which means use the built-in default component set | `FLEETINT_FLAGS="--components=..."` | `components` |
 | `--offline-mode` | Disable the HTTP API server and write telemetry to files instead. | `false` | `FLEETINT_FLAGS="--offline-mode ..."` | not exposed by chart by default |
 | `--path` | Absolute path to the output directory for offline mode. Must not point inside restricted system directories. Required with `--offline-mode`. | empty | `FLEETINT_FLAGS="--path=/path ..."` | not exposed by chart by default |
 | `--duration` | Offline-mode collection duration in `HH:MM:SS` format. Required with `--offline-mode`. | empty | `FLEETINT_FLAGS="--duration=00:05:00 ..."` | not exposed by chart by default |
@@ -137,7 +137,7 @@ Use `--components` to control which monitoring components are enabled.
 Examples:
 
 ```bash
-# Enable all components
+# Use the default component set
 fleetint run --components=all
 
 # Enable only specific components
@@ -149,10 +149,14 @@ fleetint run --components=all,-accelerator-nvidia-dcgm-prof
 
 Rules:
 
-- `all`, `*`, or an empty component list enables all components.
-- `all,-<component-name>` starts with all components, then disables specific ones.
-- An explicit comma-separated list enables only the named components.
+- `all`, `*`, or an empty component list uses the built-in default component set.
+- `all,-<component-name>` starts with the built-in default component set, then disables specific ones.
+- An explicit comma-separated list enables only the named components (including components disabled by default).
 - A non-matching explicit value effectively disables all components.
+
+Default disabled components:
+
+- `accelerator-nvidia-processes`
 
 Available component names:
 
