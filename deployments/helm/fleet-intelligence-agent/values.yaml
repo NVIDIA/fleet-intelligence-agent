@@ -61,9 +61,10 @@ enroll:
   tokenSecretName: ""
   tokenSecretKey: "token"
   tokenValue: ""
-  # Optional enrollment metadata:
-  nodeGroup: ""
-  computeZone: ""
+  # Optional enrollment metadata. Omit these keys to preserve stored values.
+  # Set to "" explicitly to clear stored values.
+  # nodeGroup: ""
+  # computeZone: ""
 
 ports:
   http: 15133
