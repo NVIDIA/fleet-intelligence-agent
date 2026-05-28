@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	pkgmetadata "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metadata"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 	"github.com/stretchr/testify/require"
 )
@@ -82,6 +83,15 @@ func TestSQLiteStateRoundTrip(t *testing.T) {
 	value, ok, err = state.GetNodeGroup(ctx)
 	require.NoError(t, err)
 	require.True(t, ok)
+	require.Equal(t, "group-a", value)
+
+	stateFile, err := state.stateFileFn()
+	require.NoError(t, err)
+	db, err := sqlite.Open(stateFile, sqlite.WithReadOnly(true))
+	require.NoError(t, err)
+	defer db.Close()
+	value, err = pkgmetadata.ReadMetadata(ctx, db, "node_group")
+	require.NoError(t, err)
 	require.Equal(t, "group-a", value)
 
 	value, ok, err = state.GetComputeZone(ctx)
