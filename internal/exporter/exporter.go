@@ -196,7 +196,7 @@ func (e *healthExporter) populateOptionalResourceMetadata(ctx context.Context, d
 
 	nodeGroup, err := pkgmetadata.ReadMetadata(ctx, e.options.dbRO, agentstate.MetadataKeyNodeGroup)
 	if err != nil {
-		log.Logger.Debugw("nodegroup metadata not available for telemetry resource", "error", err)
+		log.Logger.Debugw("node_group metadata not available for telemetry resource", "error", err)
 	} else {
 		data.NodeGroup = nodeGroup
 	}

@@ -25,7 +25,7 @@ const (
 	MetadataKeyBackendBaseURL = "backend_base_url"
 	MetadataKeySAKToken       = "sak_token"
 	MetadataKeyEnrolledAt     = "enrolled_at"
-	MetadataKeyNodeGroup      = "nodegroup"
+	MetadataKeyNodeGroup      = "node_group"
 	MetadataKeyComputeZone    = "compute_zone"
 )
 

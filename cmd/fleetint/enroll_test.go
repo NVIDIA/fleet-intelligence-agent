@@ -340,47 +340,81 @@ func TestEnrollCommandRejectsOverlongMetadataNames(t *testing.T) {
 	require.ErrorContains(t, err, "Node group name must be 255 characters or fewer")
 }
 
-func TestValidateReservedPairMetadata(t *testing.T) {
+func TestValidatedOptionalMetadataFlagValueSupportsIndependentReservedUpdates(t *testing.T) {
 	strPtr := func(v string) *string { return &v }
 	tests := []struct {
-		name        string
-		nodeGroup   *string
-		computeZone *string
-		wantErr     bool
+		name              string
+		nodeGroupArg      *string
+		computeZoneArg    *string
+		expectNodeGroup   *string
+		expectComputeZone *string
 	}{
-		{name: "both omitted", nodeGroup: nil, computeZone: nil, wantErr: false},
-		{name: "both empty", nodeGroup: strPtr(""), computeZone: strPtr(""), wantErr: false},
-		{name: "both non-empty", nodeGroup: strPtr("ng-a"), computeZone: strPtr("cz-a"), wantErr: false},
-		{name: "node-group only", nodeGroup: strPtr("ng-a"), computeZone: nil, wantErr: true},
-		{name: "compute-zone only", nodeGroup: nil, computeZone: strPtr("cz-a"), wantErr: true},
-		{name: "node-group empty compute-zone non-empty", nodeGroup: strPtr(""), computeZone: strPtr("cz-a"), wantErr: true},
-		{name: "node-group non-empty compute-zone empty", nodeGroup: strPtr("ng-a"), computeZone: strPtr(""), wantErr: true},
+		{
+			name:              "clear compute-zone and set node-group",
+			nodeGroupArg:      strPtr("xx"),
+			computeZoneArg:    strPtr(""),
+			expectNodeGroup:   strPtr("xx"),
+			expectComputeZone: strPtr(""),
+		},
+		{
+			name:              "set compute-zone and clear node-group",
+			nodeGroupArg:      strPtr(""),
+			computeZoneArg:    strPtr("xx"),
+			expectNodeGroup:   strPtr(""),
+			expectComputeZone: strPtr("xx"),
+		},
+		{
+			name:              "set compute-zone and omit node-group",
+			nodeGroupArg:      nil,
+			computeZoneArg:    strPtr("xx"),
+			expectNodeGroup:   nil,
+			expectComputeZone: strPtr("xx"),
+		},
+		{
+			name:              "set node-group and omit compute-zone",
+			nodeGroupArg:      strPtr("xx"),
+			computeZoneArg:    nil,
+			expectNodeGroup:   strPtr("xx"),
+			expectComputeZone: nil,
+		},
+		{
+			name:              "clear compute-zone and omit node-group",
+			nodeGroupArg:      nil,
+			computeZoneArg:    strPtr(""),
+			expectNodeGroup:   nil,
+			expectComputeZone: strPtr(""),
+		},
+		{
+			name:              "clear node-group and omit compute-zone",
+			nodeGroupArg:      strPtr(""),
+			computeZoneArg:    nil,
+			expectNodeGroup:   strPtr(""),
+			expectComputeZone: nil,
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateReservedPairMetadata(tc.nodeGroup, tc.computeZone)
-			if tc.wantErr {
-				require.ErrorContains(t, err, "--node-group and --compute-zone must be both omitted, both empty, or both non-empty")
-				return
+			flagSet := flag.NewFlagSet("enroll", flag.ContinueOnError)
+			flagSet.String("node-group", "", "")
+			flagSet.String("compute-zone", "", "")
+			if tc.nodeGroupArg != nil {
+				require.NoError(t, flagSet.Set("node-group", *tc.nodeGroupArg))
 			}
+			if tc.computeZoneArg != nil {
+				require.NoError(t, flagSet.Set("compute-zone", *tc.computeZoneArg))
+			}
+			cliContext := cli.NewContext(cli.NewApp(), flagSet, nil)
+
+			nodeGroup, err := validatedOptionalMetadataFlagValue(cliContext, "node-group", "Node group")
 			require.NoError(t, err)
+			computeZone, err := validatedOptionalMetadataFlagValue(cliContext, "compute-zone", "Compute zone")
+			require.NoError(t, err)
+
+			assert.Equal(t, tc.expectNodeGroup, nodeGroup)
+			assert.Equal(t, tc.expectComputeZone, computeZone)
 		})
 	}
-}
-
-func TestEnrollCommandRejectsMixedReservedPairValues(t *testing.T) {
-	app := App()
-	app.Writer = &bytes.Buffer{}
-
-	err := app.Run([]string{
-		"fleetint", "enroll",
-		"--endpoint", "https://example.com",
-		"--token", "token",
-		"--node-group", "",
-		"--compute-zone", "cz-a",
-	})
-	require.ErrorContains(t, err, "--node-group and --compute-zone must be both omitted, both empty, or both non-empty")
 }
 
 func TestEnrollCommandRejectsReservedUnassignedName(t *testing.T) {
