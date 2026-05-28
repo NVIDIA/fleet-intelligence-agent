@@ -83,7 +83,7 @@ func (s *backendSink) Export(ctx context.Context, snap *inventory.Snapshot) erro
 	req := mapper.ToNodeUpsertRequest(snap)
 	nodeGroup, ok, err := s.state.GetNodeGroup(ctx)
 	if err != nil {
-		log.Logger.Warnw("inventory export continuing without nodegroup metadata", "error", err)
+		log.Logger.Warnw("inventory export continuing without node_group metadata", "error", err)
 	} else if ok {
 		req.NodeGroup = nodeGroup
 	}

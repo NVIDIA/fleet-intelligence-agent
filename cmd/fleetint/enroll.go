@@ -96,9 +96,6 @@ func enrollCommand(cliContext *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := validateReservedPairMetadata(nodeGroup, computeZone); err != nil {
-		return err
-	}
 	metadata := &enrollment.EnrollMetadata{
 		NodeGroup:   nodeGroup,
 		ComputeZone: computeZone,
@@ -158,21 +155,4 @@ func validatedOptionalMetadataFlagValue(cliContext *cli.Context, name, fieldName
 		return nil, fmt.Errorf("%s name must start with a letter and contain only letters, numbers, spaces, hyphens, underscores, or periods", fieldName)
 	}
 	return &value, nil
-}
-
-func validateReservedPairMetadata(nodeGroup, computeZone *string) error {
-	nodeGroupSet := nodeGroup != nil
-	computeZoneSet := computeZone != nil
-
-	if !nodeGroupSet && !computeZoneSet {
-		return nil
-	}
-	if nodeGroupSet && computeZoneSet {
-		nodeGroupEmpty := *nodeGroup == ""
-		computeZoneEmpty := *computeZone == ""
-		if nodeGroupEmpty == computeZoneEmpty {
-			return nil
-		}
-	}
-	return fmt.Errorf("--node-group and --compute-zone must be both omitted, both empty, or both non-empty")
 }

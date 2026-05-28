@@ -175,7 +175,7 @@ func storeConfigInMetadata(ctx context.Context, baseURL, jwtToken, sakToken stri
 	}
 	if metadata.NodeGroup != nil {
 		if err := pkgmetadata.SetMetadata(ctx, dbRW, agentstate.MetadataKeyNodeGroup, *metadata.NodeGroup); err != nil {
-			return fmt.Errorf("failed to set nodegroup: %w", err)
+			return fmt.Errorf("failed to set node_group: %w", err)
 		}
 	}
 	if metadata.ComputeZone != nil {
