@@ -43,6 +43,8 @@ const (
 
 	DefaultRetentionPeriod   = eventstore.DefaultRetention
 	DefaultStateUpdatePeriod = 30 * time.Second
+	// DefaultMetadataLookback is the strict window for extra_info SXID entries sent to the backend.
+	DefaultMetadataLookback = 1 * time.Minute
 )
 
 var _ components.Component = &component{}
@@ -480,7 +482,7 @@ func (c *component) updateCurrentState() error {
 	events := mergeEvents(rebootEvents, localEvents)
 
 	c.mu.Lock()
-	c.currState = evolveHealthyState(events)
+	c.currState = evolveHealthyState(events, now)
 	if rebootErr != "" {
 		c.currState.Error = fmt.Sprintf("%s\n%s", rebootErr, c.currState.Error)
 	}

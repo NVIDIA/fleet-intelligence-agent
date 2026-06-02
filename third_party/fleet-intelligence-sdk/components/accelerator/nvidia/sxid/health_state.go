@@ -6,7 +6,9 @@ package sxid
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -36,9 +38,19 @@ func translateToStateHealth(health int) apiv1.HealthStateType {
 
 const rebootThreshold = 2
 
+// sxidHealthStateExtraInfoEntry is one SXID occurrence exported in HealthState.ExtraInfo["data"].
+type sxidHealthStateExtraInfoEntry struct {
+	GPUUUID    string `json:"gpu_uuid,omitempty"`
+	DeviceUUID string `json:"device_uuid,omitempty"`
+	SXid       uint64 `json:"sxid"`
+	Time       string `json:"time,omitempty"`
+	Message    string `json:"message,omitempty"`
+	EventType  string `json:"event_type,omitempty"`
+}
+
 // evolveHealthyState resolves the state of the SXID error component.
 // note: assume events are sorted by time in descending order
-func evolveHealthyState(events eventstore.Events) (ret apiv1.HealthState) {
+func evolveHealthyState(events eventstore.Events, now time.Time) (ret apiv1.HealthState) {
 	defer func() {
 		log.Logger.Debugf("EvolveHealthyState: %v", ret)
 	}()
@@ -91,55 +103,151 @@ func evolveHealthyState(events eventstore.Events) (ret apiv1.HealthState) {
 			}
 		}
 	}
-	var reason string
-	if lastSXidErr == nil {
-		reason = "SXIDComponent is healthy"
-	} else {
-		if sxidDetail, ok := GetDetail(int(lastSXidErr.SXid)); ok {
-			reason = fmt.Sprintf("SXID %d(%s) detected on %s", lastSXidErr.SXid, sxidDetail.Name, lastSXidErr.DeviceUUID)
-		} else {
-			reason = fmt.Sprintf("SXID %d detected on %s", lastSXidErr.SXid, lastSXidErr.DeviceUUID)
-		}
-	}
-	return apiv1.HealthState{
+	since := now.Add(-DefaultMetadataLookback)
+	window := collectSXIDsInLookback(events, since)
+
+	state := apiv1.HealthState{
+		Time:             metav1.NewTime(now),
+		Component:        Name,
 		Name:             StateNameErrorSXid,
 		Health:           translateToStateHealth(lastHealth),
-		Reason:           reason,
+		Reason:           formatSXIDHealthStateReason(lastSXidErr, window),
 		SuggestedActions: lastSuggestedAction,
 	}
+	if len(window) > 0 {
+		if dataJSON, err := json.Marshal(window); err == nil {
+			state.ExtraInfo = map[string]string{"data": string(dataJSON)}
+		} else {
+			log.Logger.Errorw("failed to marshal SXID lookback extra_info", "error", err)
+		}
+	}
+	return state
+}
+
+// collectSXIDsInLookback returns every error_sxid event in [since, now] (option A: no reboot filtering).
+func collectSXIDsInLookback(events eventstore.Events, since time.Time) []sxidHealthStateExtraInfoEntry {
+	var entries []sxidHealthStateExtraInfoEntry
+	for _, event := range events {
+		if event.Name != EventNameErrorSXid {
+			continue
+		}
+		if event.Time.Before(since) {
+			continue
+		}
+		resolvedEvent := resolveSXIDEvent(event)
+		var sxidErr sxidErrorEventDetail
+		if err := json.Unmarshal([]byte(resolvedEvent.ExtraInfo[EventKeyErrorSXidData]), &sxidErr); err != nil {
+			log.Logger.Errorf("failed to unmarshal lookback SXID event: %s", err)
+			continue
+		}
+		if sxidErr.Time.IsZero() {
+			sxidErr.Time = metav1.NewTime(event.Time)
+		}
+		entries = append(entries, sxidHealthStateExtraInfoEntryFromDetail(&sxidErr, resolvedEvent.Type, resolvedEvent.Message))
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Time < entries[j].Time
+	})
+	return entries
+}
+
+func sxidHealthStateExtraInfoEntryFromDetail(sxidErr *sxidErrorEventDetail, eventType, message string) sxidHealthStateExtraInfoEntry {
+	entry := sxidHealthStateExtraInfoEntry{
+		DeviceUUID: sxidErr.DeviceUUID,
+		GPUUUID:    sxidErr.DeviceUUID,
+		SXid:       sxidErr.SXid,
+		Message:    message,
+		EventType:  eventType,
+	}
+	if entry.Message == "" {
+		if sxidDetail, ok := GetDetail(int(sxidErr.SXid)); ok {
+			entry.Message = fmt.Sprintf("SXID %d(%s) detected on %s", sxidErr.SXid, sxidDetail.Name, sxidErr.DeviceUUID)
+		} else {
+			entry.Message = fmt.Sprintf("SXID %d detected on %s", sxidErr.SXid, sxidErr.DeviceUUID)
+		}
+	}
+	if !sxidErr.Time.IsZero() {
+		entry.Time = sxidErr.Time.UTC().Format(time.RFC3339)
+	}
+	return entry
+}
+
+func formatSXIDHealthStateReason(lastSXidErr *sxidErrorEventDetail, window []sxidHealthStateExtraInfoEntry) string {
+	if len(window) == 0 {
+		if lastSXidErr == nil {
+			return "SXIDComponent is healthy"
+		}
+		if sxidDetail, ok := GetDetail(int(lastSXidErr.SXid)); ok {
+			return fmt.Sprintf("SXID %d(%s) detected on %s", lastSXidErr.SXid, sxidDetail.Name, lastSXidErr.DeviceUUID)
+		}
+		return fmt.Sprintf("SXID %d detected on %s", lastSXidErr.SXid, lastSXidErr.DeviceUUID)
+	}
+	if len(window) == 1 {
+		return window[0].Message
+	}
+	return fmt.Sprintf("%d SXID error(s) in the last minute; latest: %s", len(window), window[len(window)-1].Message)
 }
 
 func resolveSXIDEvent(event eventstore.Event) eventstore.Event {
 	ret := event
-	if event.ExtraInfo != nil {
-		if currSXid, err := strconv.Atoi(event.ExtraInfo[EventKeyErrorSXidData]); err == nil {
-			detail, ok := GetDetail(currSXid)
-			if !ok {
-				return ret
-			}
-			ret.Type = string(detail.EventType)
+	if event.ExtraInfo == nil {
+		return ret
+	}
 
-			var fatalType string
-			if detail.AlwaysFatal {
-				fatalType = " [Always Fatal]"
-			} else if detail.PotentialFatal {
-				fatalType = " [Potential Fatal]"
-			} else {
-				fatalType = " [Info]"
-			}
-			ret.Message = fmt.Sprintf("%s SXID %d(%s) detected on %s", fatalType, currSXid, detail.Name, event.ExtraInfo[EventKeyDeviceUUID])
-
-			sxidErr := sxidErrorEventDetail{
-				Time:                   metav1.NewTime(event.Time),
-				DataSource:             "kmsg",
-				DeviceUUID:             event.ExtraInfo[EventKeyDeviceUUID],
-				SXid:                   uint64(currSXid),
-				SuggestedActionsByGPUd: detail.SuggestedActionsByGPUd,
-			}
-			raw, _ := json.Marshal(sxidErr)
-
-			ret.ExtraInfo[EventKeyErrorSXidData] = string(raw)
+	rawData := event.ExtraInfo[EventKeyErrorSXidData]
+	var sxidErr sxidErrorEventDetail
+	if err := json.Unmarshal([]byte(rawData), &sxidErr); err == nil && sxidErr.SXid != 0 {
+		if sxidErr.Time.IsZero() {
+			sxidErr.Time = metav1.NewTime(event.Time)
 		}
+		if detail, ok := GetDetail(int(sxidErr.SXid)); ok && event.Type == "" {
+			ret.Type = string(detail.EventType)
+		}
+		if ret.Message == "" {
+			if detail, ok := GetDetail(int(sxidErr.SXid)); ok {
+				ret.Message = fmt.Sprintf("SXID %d(%s) detected on %s", sxidErr.SXid, detail.Name, sxidErr.DeviceUUID)
+			} else {
+				ret.Message = fmt.Sprintf("SXID %d detected on %s", sxidErr.SXid, sxidErr.DeviceUUID)
+			}
+		}
+		raw, _ := json.Marshal(sxidErr)
+		if ret.ExtraInfo == nil {
+			ret.ExtraInfo = make(map[string]string)
+		}
+		ret.ExtraInfo[EventKeyErrorSXidData] = string(raw)
+		return ret
+	}
+
+	if currSXid, err := strconv.Atoi(rawData); err == nil {
+		detail, ok := GetDetail(currSXid)
+		if !ok {
+			return ret
+		}
+		ret.Type = string(detail.EventType)
+
+		var fatalType string
+		if detail.AlwaysFatal {
+			fatalType = " [Always Fatal]"
+		} else if detail.PotentialFatal {
+			fatalType = " [Potential Fatal]"
+		} else {
+			fatalType = " [Info]"
+		}
+		ret.Message = fmt.Sprintf("%s SXID %d(%s) detected on %s", fatalType, currSXid, detail.Name, event.ExtraInfo[EventKeyDeviceUUID])
+
+		sxidErr := sxidErrorEventDetail{
+			Time:                   metav1.NewTime(event.Time),
+			DataSource:             "kmsg",
+			DeviceUUID:             event.ExtraInfo[EventKeyDeviceUUID],
+			SXid:                   uint64(currSXid),
+			SuggestedActionsByGPUd: detail.SuggestedActionsByGPUd,
+		}
+		raw, _ := json.Marshal(sxidErr)
+
+		if ret.ExtraInfo == nil {
+			ret.ExtraInfo = make(map[string]string)
+		}
+		ret.ExtraInfo[EventKeyErrorSXidData] = string(raw)
 	}
 	return ret
 }

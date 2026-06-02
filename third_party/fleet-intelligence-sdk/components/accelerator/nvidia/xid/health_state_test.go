@@ -64,7 +64,7 @@ func createXidEventWithNilSuggestedActions(eventTime time.Time, xid uint64, even
 
 func TestStateUpdateBasedOnEvents(t *testing.T) {
 	t.Run("no event found", func(t *testing.T) {
-		state := evolveHealthyState(eventstore.Events{}, nil, DefaultRebootThreshold)
+		state := evolveHealthyState(eventstore.Events{}, nil, DefaultRebootThreshold, time.Now())
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health)
 		assert.Equal(t, "XIDComponent is healthy", state.Reason)
 	})
@@ -77,7 +77,7 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 		events := eventstore.Events{
 			createXidEvent(time.Time{}, 123, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
 		}
-		state := evolveHealthyState(events, map[string]device.Device{"GPU-b850f46d-d5ea-c752-ddf3-c4453e44d3f7": mockDevice}, DefaultRebootThreshold)
+		state := evolveHealthyState(events, map[string]device.Device{"GPU-b850f46d-d5ea-c752-ddf3-c4453e44d3f7": mockDevice}, DefaultRebootThreshold, time.Now())
 		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, state.Health)
 		// XID 123 (SPI_PMU_RPC_WRITE_FAIL) has mnemonic, expect it in reason
 		assert.Contains(t, state.Reason, "XID 123")
@@ -91,7 +91,7 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 		t.Logf("original type=%s", events[0].Type)
 		resolved := resolveXIDEvent(events[0], map[string]device.Device{"GPU-b850f46d-d5ea-c752-ddf3-c4453e44d3f7": mockDevice})
 		t.Logf("resolved type=%s msg=%s", resolved.Type, resolved.Message)
-		state := evolveHealthyState(events, map[string]device.Device{"GPU-b850f46d-d5ea-c752-ddf3-c4453e44d3f7": mockDevice}, DefaultRebootThreshold)
+		state := evolveHealthyState(events, map[string]device.Device{"GPU-b850f46d-d5ea-c752-ddf3-c4453e44d3f7": mockDevice}, DefaultRebootThreshold, time.Now())
 		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, state.Health)
 		// XID 456 is unknown, so the reason should contain the XID number
 		assert.Contains(t, state.Reason, "XID 456")
@@ -103,7 +103,7 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 			{Name: "reboot"},
 			createXidEvent(time.Time{}, 789, apiv1.EventTypeCritical, apiv1.RepairActionTypeRebootSystem),
 		}
-		state := evolveHealthyState(events, nil, DefaultRebootThreshold)
+		state := evolveHealthyState(events, nil, DefaultRebootThreshold, time.Now())
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health)
 	})
 
@@ -118,7 +118,7 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 			createXidEvent(time.Time{}, 94, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
 			createXidEvent(time.Time{}, 31, apiv1.EventTypeWarning, apiv1.RepairActionTypeCheckUserAppAndGPU),
 		}
-		state := evolveHealthyState(events, nil, DefaultRebootThreshold)
+		state := evolveHealthyState(events, nil, DefaultRebootThreshold, time.Now())
 		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, state.Health)
 		assert.Equal(t, apiv1.RepairActionTypeHardwareInspection, state.SuggestedActions.RepairActions[0])
 	})
@@ -135,7 +135,7 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 			{Name: "reboot", Time: time.Now()},
 			createXidEventWithNilSuggestedActions(time.Now().Add(-1*time.Hour), 999, apiv1.EventTypeFatal),
 		}
-		state := evolveHealthyState(events, nil, DefaultRebootThreshold)
+		state := evolveHealthyState(events, nil, DefaultRebootThreshold, time.Now())
 		// Should remain unhealthy because SuggestedActionsByGPUd is nil
 		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, state.Health,
 			"XID with nil SuggestedActionsByGPUd should NOT be cleared on reboot")
@@ -148,7 +148,7 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 			{Name: "reboot", Time: time.Now()},
 			createXidEvent(time.Now().Add(-1*time.Hour), 999, apiv1.EventTypeFatal, apiv1.RepairActionTypeHardwareInspection),
 		}
-		state := evolveHealthyState(events, nil, DefaultRebootThreshold)
+		state := evolveHealthyState(events, nil, DefaultRebootThreshold, time.Now())
 		// Should remain unhealthy because HardwareInspection is not cleared by reboot
 		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, state.Health,
 			"XID with HardwareInspection action should NOT be cleared on reboot")
@@ -162,7 +162,7 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 			{Name: "reboot", Time: time.Now()},
 			createXidEvent(time.Now().Add(-1*time.Hour), 999, apiv1.EventTypeCritical, apiv1.RepairActionTypeCheckUserAppAndGPU),
 		}
-		state := evolveHealthyState(events, nil, DefaultRebootThreshold)
+		state := evolveHealthyState(events, nil, DefaultRebootThreshold, time.Now())
 		// Should be healthy because CheckUserAppAndGPU is cleared by reboot
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health,
 			"XID with CheckUserAppAndGPU action should be cleared on reboot")
@@ -175,7 +175,7 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 			{Name: "reboot", Time: time.Now()},
 			createXidEvent(time.Now().Add(-1*time.Hour), 999, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
 		}
-		state := evolveHealthyState(events, nil, DefaultRebootThreshold)
+		state := evolveHealthyState(events, nil, DefaultRebootThreshold, time.Now())
 		// Should be healthy because RebootSystem is cleared by reboot
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health,
 			"XID with RebootSystem action should be cleared on reboot")
@@ -183,7 +183,7 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 
 	t.Run("EmptyEvents_ReturnsHealthy", func(t *testing.T) {
 		events := eventstore.Events{}
-		state := evolveHealthyState(events, nil, DefaultRebootThreshold)
+		state := evolveHealthyState(events, nil, DefaultRebootThreshold, time.Now())
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health)
 		assert.Nil(t, state.SuggestedActions)
 		assert.Equal(t, "XIDComponent is healthy", state.Reason)
@@ -211,7 +211,7 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 		require.Len(t, merged, 3)
 		assert.Equal(t, []string{"error_xid", "reboot", "reboot"}, []string{merged[0].Name, merged[1].Name, merged[2].Name})
 
-		state := evolveHealthyState(merged, nil, DefaultRebootThreshold)
+		state := evolveHealthyState(merged, nil, DefaultRebootThreshold, time.Now())
 		require.NotNil(t, state.SuggestedActions)
 		require.NotEmpty(t, state.SuggestedActions.RepairActions)
 		assert.Equal(t, apiv1.RepairActionTypeRebootSystem, state.SuggestedActions.RepairActions[0])
@@ -226,8 +226,40 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 				ExtraInfo: map[string]string{EventKeyErrorXidData: "invalid json"},
 			},
 		}
-		state := evolveHealthyState(events, nil, DefaultRebootThreshold)
+		state := evolveHealthyState(events, nil, DefaultRebootThreshold, time.Now())
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health)
+	})
+
+	t.Run("multiple xids in lookback populate extra_info data", func(t *testing.T) {
+		now := time.Date(2025, 6, 2, 12, 0, 0, 0, time.UTC)
+		events := eventstore.Events{
+			createXidEvent(now.Add(-30*time.Second), 31, apiv1.EventTypeWarning, apiv1.RepairActionTypeCheckUserAppAndGPU),
+			createXidEvent(now.Add(-10*time.Second), 94, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
+		}
+		state := evolveHealthyState(events, nil, DefaultRebootThreshold, now)
+		require.NotNil(t, state.ExtraInfo)
+		require.NotEmpty(t, state.ExtraInfo["data"])
+
+		var data []xidHealthStateExtraInfoEntry
+		require.NoError(t, json.Unmarshal([]byte(state.ExtraInfo["data"]), &data))
+		require.Len(t, data, 2)
+		assert.Equal(t, uint64(31), data[0].Xid)
+		assert.Equal(t, uint64(94), data[1].Xid)
+		assert.Contains(t, state.Reason, "2 XID error(s) in the last minute")
+	})
+
+	t.Run("xid outside lookback omitted from extra_info", func(t *testing.T) {
+		now := time.Date(2025, 6, 2, 12, 0, 0, 0, time.UTC)
+		events := eventstore.Events{
+			createXidEvent(now.Add(-2*time.Minute), 94, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
+			createXidEvent(now.Add(-10*time.Second), 31, apiv1.EventTypeWarning, apiv1.RepairActionTypeCheckUserAppAndGPU),
+		}
+		state := evolveHealthyState(events, nil, DefaultRebootThreshold, now)
+		require.NotNil(t, state.ExtraInfo)
+		var data []xidHealthStateExtraInfoEntry
+		require.NoError(t, json.Unmarshal([]byte(state.ExtraInfo["data"]), &data))
+		require.Len(t, data, 1)
+		assert.Equal(t, uint64(31), data[0].Xid)
 	})
 }
 
@@ -862,7 +894,7 @@ func Test_HealthStateReason_evolveHealthyState_Integration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			state := evolveHealthyState(tc.events, devices, DefaultRebootThreshold)
+			state := evolveHealthyState(tc.events, devices, DefaultRebootThreshold, time.Now())
 
 			assert.Equal(t, tc.expectedHealth, state.Health)
 
@@ -1209,7 +1241,7 @@ func Test_ComponentEventCreation_SetsEventType(t *testing.T) {
 
 			// Step 5: Test evolveHealthyState with this event
 			events := eventstore.Events{event}
-			state := evolveHealthyState(events, nil, DefaultRebootThreshold)
+			state := evolveHealthyState(events, nil, DefaultRebootThreshold, time.Now())
 
 			// Verify the health state matches expected
 			assert.Equal(t, tc.expectedHealthType, state.Health,
@@ -1270,7 +1302,7 @@ func Test_NVLink_NonExtendedFormat_RebootRecovery(t *testing.T) {
 				},
 			}
 
-			state := evolveHealthyState(events, nil, DefaultRebootThreshold)
+			state := evolveHealthyState(events, nil, DefaultRebootThreshold, time.Now())
 			assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health,
 				"XID %d should be cleared after reboot, but got health=%s", xid, state.Health)
 			assert.Equal(t, "XIDComponent is healthy", state.Reason)

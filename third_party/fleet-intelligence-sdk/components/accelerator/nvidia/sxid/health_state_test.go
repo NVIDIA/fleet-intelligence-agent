@@ -39,7 +39,7 @@ func createSXidEvent(eventTime time.Time, sxid uint64, eventType apiv1.EventType
 
 func TestStateUpdateBasedOnEvents(t *testing.T) {
 	t.Run("no event found", func(t *testing.T) {
-		state := evolveHealthyState(eventstore.Events{})
+		state := evolveHealthyState(eventstore.Events{}, time.Now())
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health)
 		assert.Equal(t, "SXIDComponent is healthy", state.Reason)
 	})
@@ -48,7 +48,7 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 		events := eventstore.Events{
 			createSXidEvent(time.Time{}, 123, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
 		}
-		state := evolveHealthyState(events)
+		state := evolveHealthyState(events, time.Now())
 		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, state.Health)
 		assert.Equal(t, "SXID 123 detected on PCI:0000:9b:00", state.Reason)
 	})
@@ -57,7 +57,7 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 		events := eventstore.Events{
 			createSXidEvent(time.Time{}, 456, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
 		}
-		state := evolveHealthyState(events)
+		state := evolveHealthyState(events, time.Now())
 		assert.Equal(t, apiv1.HealthStateTypeUnhealthy, state.Health)
 		assert.Equal(t, "SXID 456 detected on PCI:0000:9b:00", state.Reason)
 	})
@@ -67,7 +67,7 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 			{Name: "reboot"},
 			createSXidEvent(time.Time{}, 789, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
 		}
-		state := evolveHealthyState(events)
+		state := evolveHealthyState(events, time.Now())
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health)
 	})
 
@@ -80,13 +80,13 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 			createSXidEvent(time.Time{}, 94, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
 			createSXidEvent(time.Time{}, 31, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
 		}
-		state := evolveHealthyState(events)
+		state := evolveHealthyState(events, time.Now())
 		assert.Equal(t, apiv1.RepairActionTypeHardwareInspection, state.SuggestedActions.RepairActions[0])
 	})
 
 	t.Run("EmptyEvents_ReturnsHealthy", func(t *testing.T) {
 		events := eventstore.Events{}
-		state := evolveHealthyState(events)
+		state := evolveHealthyState(events, time.Now())
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health)
 		assert.Nil(t, state.SuggestedActions)
 		assert.Equal(t, "SXIDComponent is healthy", state.Reason)
@@ -114,7 +114,7 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 		require.Len(t, merged, 3)
 		assert.Equal(t, []string{"error_sxid", "reboot", "reboot"}, []string{merged[0].Name, merged[1].Name, merged[2].Name})
 
-		state := evolveHealthyState(merged)
+		state := evolveHealthyState(merged, time.Now())
 		require.NotNil(t, state.SuggestedActions)
 		require.NotEmpty(t, state.SuggestedActions.RepairActions)
 		assert.Equal(t, apiv1.RepairActionTypeRebootSystem, state.SuggestedActions.RepairActions[0])
@@ -129,8 +129,26 @@ func TestStateUpdateBasedOnEvents(t *testing.T) {
 				ExtraInfo: map[string]string{EventKeyErrorSXidData: "invalid json"},
 			},
 		}
-		state := evolveHealthyState(events)
+		state := evolveHealthyState(events, time.Now())
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, state.Health)
+	})
+
+	t.Run("multiple sxids in lookback populate extra_info data", func(t *testing.T) {
+		now := time.Date(2025, 6, 2, 12, 0, 0, 0, time.UTC)
+		events := eventstore.Events{
+			createSXidEvent(now.Add(-30*time.Second), 100, apiv1.EventTypeCritical, apiv1.RepairActionTypeRebootSystem),
+			createSXidEvent(now.Add(-10*time.Second), 200, apiv1.EventTypeFatal, apiv1.RepairActionTypeRebootSystem),
+		}
+		state := evolveHealthyState(events, now)
+		require.NotNil(t, state.ExtraInfo)
+		require.NotEmpty(t, state.ExtraInfo["data"])
+
+		var data []sxidHealthStateExtraInfoEntry
+		require.NoError(t, json.Unmarshal([]byte(state.ExtraInfo["data"]), &data))
+		require.Len(t, data, 2)
+		assert.Equal(t, uint64(100), data[0].SXid)
+		assert.Equal(t, uint64(200), data[1].SXid)
+		assert.Contains(t, state.Reason, "2 SXID error(s) in the last minute")
 	})
 }
 

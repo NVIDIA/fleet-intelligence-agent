@@ -6,9 +6,11 @@ package xid
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -54,9 +56,19 @@ func init() {
 	})
 }
 
+// xidHealthStateExtraInfoEntry is one XID occurrence exported in HealthState.ExtraInfo["data"].
+type xidHealthStateExtraInfoEntry struct {
+	GPUUUID    string `json:"gpu_uuid,omitempty"`
+	DeviceUUID string `json:"device_uuid,omitempty"`
+	Xid        uint64 `json:"xid"`
+	Time       string `json:"time,omitempty"`
+	Message    string `json:"message,omitempty"`
+	EventType  string `json:"event_type,omitempty"`
+}
+
 // evolveHealthyState resolves the state of the XID error component.
 // note: assume events are sorted by time in descending order
-func evolveHealthyState(events eventstore.Events, devices map[string]device.Device, rebootThreshold int) (ret apiv1.HealthState) {
+func evolveHealthyState(events eventstore.Events, devices map[string]device.Device, rebootThreshold int, now time.Time) (ret apiv1.HealthState) {
 	defer func() {
 		log.Logger.Debugf("EvolveHealthyState: %v", ret)
 	}()
@@ -116,18 +128,81 @@ func evolveHealthyState(events eventstore.Events, devices map[string]device.Devi
 			}
 		}
 	}
-	var reason string
-	if lastXidErr == nil {
-		reason = "XIDComponent is healthy"
-	} else {
-		reason = lastXidErr.buildMessage(devices)
-	}
-	return apiv1.HealthState{
+	since := now.Add(-DefaultMetadataLookback)
+	window := collectXIDsInLookback(events, since, devices)
+
+	state := apiv1.HealthState{
+		Time:             metav1.NewTime(now),
+		Component:        Name,
 		Name:             StateNameErrorXid,
 		Health:           translateToStateHealth(lastHealth),
-		Reason:           reason,
+		Reason:           formatXIDHealthStateReason(lastXidErr, window, devices),
 		SuggestedActions: lastSuggestedAction,
 	}
+	if len(window) > 0 {
+		if dataJSON, err := json.Marshal(window); err == nil {
+			state.ExtraInfo = map[string]string{"data": string(dataJSON)}
+		} else {
+			log.Logger.Errorw("failed to marshal XID lookback extra_info", "error", err)
+		}
+	}
+	return state
+}
+
+// collectXIDsInLookback returns every error_xid event in [since, now] (option A: no reboot filtering).
+func collectXIDsInLookback(events eventstore.Events, since time.Time, devices map[string]device.Device) []xidHealthStateExtraInfoEntry {
+	var entries []xidHealthStateExtraInfoEntry
+	for _, event := range events {
+		if event.Name != EventNameErrorXid {
+			continue
+		}
+		if event.Time.Before(since) {
+			continue
+		}
+		resolvedEvent := resolveXIDEvent(event, devices)
+		var xidErr xidErrorEventDetail
+		if err := json.Unmarshal([]byte(resolvedEvent.ExtraInfo[EventKeyErrorXidData]), &xidErr); err != nil {
+			log.Logger.Errorf("failed to unmarshal lookback XID event: %s", err)
+			continue
+		}
+		if xidErr.Time.IsZero() {
+			xidErr.Time = metav1.NewTime(event.Time)
+		}
+		entries = append(entries, xidHealthStateExtraInfoEntryFromDetail(&xidErr, resolvedEvent.Type, devices))
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Time < entries[j].Time
+	})
+	return entries
+}
+
+func xidHealthStateExtraInfoEntryFromDetail(xidErr *xidErrorEventDetail, eventType string, devices map[string]device.Device) xidHealthStateExtraInfoEntry {
+	entry := xidHealthStateExtraInfoEntry{
+		DeviceUUID: xidErr.DeviceUUID,
+		Xid:        xidErr.Xid,
+		Message:    xidErr.buildMessage(devices),
+		EventType:  eventType,
+	}
+	if gpuUUID := convertBusIDToUUID(xidErr.DeviceUUID, devices); gpuUUID != "" {
+		entry.GPUUUID = gpuUUID
+	}
+	if !xidErr.Time.IsZero() {
+		entry.Time = xidErr.Time.UTC().Format(time.RFC3339)
+	}
+	return entry
+}
+
+func formatXIDHealthStateReason(lastXidErr *xidErrorEventDetail, window []xidHealthStateExtraInfoEntry, devices map[string]device.Device) string {
+	if len(window) == 0 {
+		if lastXidErr == nil {
+			return "XIDComponent is healthy"
+		}
+		return lastXidErr.buildMessage(devices)
+	}
+	if len(window) == 1 {
+		return window[0].Message
+	}
+	return fmt.Sprintf("%d XID error(s) in the last minute; latest: %s", len(window), window[len(window)-1].Message)
 }
 
 func (xidErr *xidErrorEventDetail) buildMessage(devices map[string]device.Device) string {
