@@ -106,7 +106,7 @@ func ValidateNodeUpsertRequest(req *backendclient.NodeUpsertRequest) []Issue {
 		prefix := fmt.Sprintf("resources.gpuInfo.gpus[%d]", i)
 		validateLen(&issues, "length", prefix+".uuid", gpu.UUID, 255)
 		validateLen(&issues, "length", prefix+".gpuIndex", gpu.GPUIndex, 64)
-		validateUUID(&issues, "format", prefix+".uuid", gpu.UUID)
+		validateGPUUUID(&issues, "format", prefix+".uuid", gpu.UUID)
 		if gpu.UUID != "" {
 			if _, exists := seenGPUUUID[gpu.UUID]; exists {
 				issues = append(issues, newIssue(SeverityWarning, "dedup", prefix+".uuid", "duplicate GPU UUID in payload"))
@@ -317,12 +317,20 @@ func validateIP(issues *[]Issue, category, field, value string) {
 	}
 }
 
-func validateUUID(issues *[]Issue, category, field, value string) {
-	if strings.TrimSpace(value) == "" {
+// validateGPUUUID checks NVIDIA GPU UUIDs as returned by NVML/nvidia-smi (e.g.
+// "GPU-b1631f34-4ee6-b7a8-5afc-00c88d0fcae1"). The "GPU-" prefix is optional;
+// the remainder must be a valid RFC 4122 UUID.
+func validateGPUUUID(issues *[]Issue, category, field, value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
 		return
 	}
-	if _, err := uuid.Parse(strings.TrimSpace(value)); err != nil {
-		*issues = append(*issues, newIssue(SeverityWarning, category, field, "invalid UUID format"))
+	uuidPart := value
+	if strings.HasPrefix(value, "GPU-") {
+		uuidPart = strings.TrimPrefix(value, "GPU-")
+	}
+	if _, err := uuid.Parse(uuidPart); err != nil {
+		*issues = append(*issues, newIssue(SeverityWarning, category, field, "invalid GPU UUID format"))
 	}
 }
 

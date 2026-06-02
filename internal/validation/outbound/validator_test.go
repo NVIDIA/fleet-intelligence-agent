@@ -72,6 +72,51 @@ func TestValidateNodeUpsertRequest(t *testing.T) {
 	})
 }
 
+func TestValidateNodeUpsertRequest_GPUUUID(t *testing.T) {
+	t.Run("accepts NVIDIA GPU UUID format", func(t *testing.T) {
+		req := &backendclient.NodeUpsertRequest{
+			Hostname:   "host",
+			MachineID:  "machine-1",
+			SystemUUID: "4c4c4544-004a-3410-804c-c7c04f313434",
+			Resources: backendclient.NodeResources{
+				GPUInfo: backendclient.GPUInfo{
+					GPUs: []backendclient.GPUDevice{{
+						UUID: "GPU-b1631f34-4ee6-b7a8-5afc-00c88d0fcae1",
+					}},
+				},
+			},
+		}
+
+		for _, issue := range ValidateNodeUpsertRequest(req) {
+			require.NotEqual(t, "resources.gpuInfo.gpus[0].uuid", issue.Field,
+				"unexpected GPU UUID validation issue: %+v", issue)
+		}
+	})
+
+	t.Run("rejects malformed GPU UUID", func(t *testing.T) {
+		req := &backendclient.NodeUpsertRequest{
+			Hostname:   "host",
+			MachineID:  "machine-1",
+			SystemUUID: "4c4c4544-004a-3410-804c-c7c04f313434",
+			Resources: backendclient.NodeResources{
+				GPUInfo: backendclient.GPUInfo{
+					GPUs: []backendclient.GPUDevice{{
+						UUID: "GPU-not-a-valid-uuid",
+					}},
+				},
+			},
+		}
+
+		issues := ValidateNodeUpsertRequest(req)
+		require.Contains(t, issues, Issue{
+			Severity: SeverityWarning,
+			Category: "format",
+			Field:    "resources.gpuInfo.gpus[0].uuid",
+			Message:  "invalid GPU UUID format",
+		})
+	})
+}
+
 func TestValidateAttestationRequest(t *testing.T) {
 	req := &backendclient.AttestationRequest{
 		AttestationData: backendclient.AttestationData{

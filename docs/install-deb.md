@@ -59,7 +59,7 @@ sudo apt install ./fleetint_VERSION_arm64.deb
 Verify:
 
 ```bash
-fleetint --version
+sudo fleetint --version
 systemctl status fleetintd
 ```
 
