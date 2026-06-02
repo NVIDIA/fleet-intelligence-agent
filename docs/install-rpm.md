@@ -84,7 +84,7 @@ sudo dnf install ./fleetint-VERSION-1.aarch64.rpm
 Verify:
 
 ```bash
-fleetint --version
+sudo fleetint --version
 systemctl status fleetintd
 ```
 
