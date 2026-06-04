@@ -25,6 +25,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -639,41 +640,12 @@ func TestExportToHTTP(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("skips when no auth token configured", func(t *testing.T) {
-		cfg := &config.HealthExporterConfig{
-			Interval:        metav1.Duration{Duration: 1 * time.Minute},
-			Timeout:         metav1.Duration{Duration: 30 * time.Second},
-			MetricsEndpoint: "http://example.com",
-			LogsEndpoint:    "http://example.com",
-			AuthToken:       "",
-		}
-
-		ctx := context.Background()
-		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
-		require.NoError(t, err)
-		require.NotNil(t, exporter)
-
-		he := exporter.(*healthExporter)
-
-		healthData := &collector.HealthData{
-			MachineID: "test-machine",
-			Timestamp: time.Now(),
-		}
-
-		err = he.exportToHTTP(ctx, healthData)
-		require.NoError(t, err) // Should not error, just skip gracefully
-
-		// Cleanup
-		err = exporter.Stop()
-		require.NoError(t, err)
-	})
-
 	t.Run("updates token from server response", func(t *testing.T) {
 		newToken := "new-test-token"
 
 		// Create mock server that returns new token
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("X-New-JWT-Token", newToken)
+			w.Header().Set("jwt_assertion", newToken)
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("SUCCESS"))
 		}))
@@ -718,10 +690,65 @@ func TestExportToHTTP(t *testing.T) {
 		err = he.exportToHTTP(ctx, healthData)
 		require.NoError(t, err)
 
+		// Verify token was updated in config
+		assert.Equal(t, newToken, he.options.config.AuthToken, "token should be refreshed in config")
+
+		// Verify token was persisted to DB
+		storedToken, err := pkgmetadata.ReadMetadata(ctx, tmpDB, pkgmetadata.MetadataKeyToken)
+		require.NoError(t, err)
+		assert.Equal(t, newToken, storedToken, "token should be persisted to database")
+
 		// Cleanup
 		err = exporter.Stop()
 		require.NoError(t, err)
 	})
+
+	t.Run("exports without auth token when endpoints configured", func(t *testing.T) {
+		// Create mock server that accepts requests without Authorization header
+		var requestCount atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestCount.Add(1)
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.Empty(t, r.Header.Get("Authorization"), "should not send Authorization header when token is empty")
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		cfg := &config.HealthExporterConfig{
+			Interval:        metav1.Duration{Duration: 1 * time.Minute},
+			Timeout:         metav1.Duration{Duration: 30 * time.Second},
+			MetricsEndpoint: server.URL,
+			LogsEndpoint:    server.URL,
+			AuthToken:       "", // No auth token - should still export
+		}
+
+		ctx := context.Background()
+		exporter, err := New(ctx, WithConfig(cfg), WithMachineID("test-machine-id"))
+		require.NoError(t, err)
+		require.NotNil(t, exporter)
+
+		he := exporter.(*healthExporter)
+
+		healthData := &collector.HealthData{
+			MachineID: "test-machine",
+			Timestamp: time.Now(),
+			Metrics: []pkgmetrics.Metric{
+				{
+					Name:             "test_metric",
+					Value:            42.0,
+					UnixMilliseconds: time.Now().UnixMilli(),
+				},
+			},
+		}
+
+		err = he.exportToHTTP(ctx, healthData)
+		require.NoError(t, err)
+		assert.Greater(t, requestCount.Load(), int32(0), "expected at least one request to the server")
+
+		err = exporter.Stop()
+		require.NoError(t, err)
+	})
+
 }
 
 // TestExportNow tests the ExportNow function
