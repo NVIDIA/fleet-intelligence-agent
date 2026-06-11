@@ -18,17 +18,32 @@ else
     systemctl daemon-reload || echo "[WARNING] Failed to reload systemd daemon"
 
     case "$1" in
-        configure|install|1)
+        configure)
+            if [ -n "$2" ]; then
+                # $2 is the previous version — Debian upgrade path
+                echo "Upgrade detected - restarting service if already running..."
+                if systemctl is-active --quiet fleetintd.service; then
+                    systemctl restart fleetintd.service || echo "[WARNING] Failed to restart service"
+                else
+                    echo "Service is not running - not starting during upgrade"
+                fi
+            else
+                echo "Fresh installation - enabling and starting service..."
+                systemctl enable fleetintd.service || echo "[WARNING] Failed to enable service"
+                systemctl start fleetintd.service || echo "[WARNING] Failed to start service"
+            fi
+            ;;
+        install|1)
             echo "Fresh installation - enabling and starting service..."
             systemctl enable fleetintd.service || echo "[WARNING] Failed to enable service"
             systemctl start fleetintd.service || echo "[WARNING] Failed to start service"
             ;;
         upgrade|2)
-            echo "Upgrade detected - (re)starting service..."
+            echo "Upgrade detected - restarting service if already running..."
             if systemctl is-active --quiet fleetintd.service; then
                 systemctl restart fleetintd.service || echo "[WARNING] Failed to restart service"
             else
-                systemctl start fleetintd.service || echo "[WARNING] Failed to start service"
+                echo "Service is not running - not starting during upgrade"
             fi
             ;;
         abort-upgrade|abort-remove|abort-deconfigure)
