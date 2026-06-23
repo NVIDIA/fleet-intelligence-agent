@@ -2,7 +2,7 @@
 set -e
 
 case "$1" in
-    remove|0)
+    remove)
         echo "Removing Fleet Intelligence Agent..."
         
         if [ -d /run/systemd/system ]; then
@@ -15,6 +15,25 @@ case "$1" in
         fi
         
         echo "Fleet Intelligence Agent service stopped"
+        ;;
+
+    0)
+        echo "Erasing Fleet Intelligence Agent..."
+
+        if [ -d /run/systemd/system ]; then
+            # Stop if active
+            if systemctl is-active --quiet fleetintd.service 2>/dev/null; then
+                echo "Stopping fleetintd service..."
+                systemctl stop fleetintd.service || echo "[WARNING] Failed to stop service"
+            fi
+
+            echo "Disabling fleetintd service..."
+            systemctl disable fleetintd.service || echo "[WARNING] Failed to disable service"
+        fi
+
+        rm -f /etc/systemd/system/multi-user.target.wants/fleetintd.service 2>/dev/null || echo "[WARNING] Failed to remove service enablement symlink"
+
+        echo "Fleet Intelligence Agent service stopped and disabled"
         ;;
         
     upgrade|1|2)
