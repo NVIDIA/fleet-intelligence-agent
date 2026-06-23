@@ -246,6 +246,12 @@ var newConnectedInstanceWithGroupNameFunc = func(groupName string) (Instance, er
 	return newConnectedInstance(groupName)
 }
 
+var dcgmInitFunc = func(initParams dcgmInitParams) (func(), error) {
+	return dcgm.Init(dcgm.Standalone, initParams.address, initParams.isUnixSocket)
+}
+
+var dcgmNewDefaultGroupFunc = dcgm.NewDefaultGroup
+
 func newInitializedInstance() (Instance, error) {
 	connectedInst, err := newConnectedInstanceFunc()
 	if err != nil {
@@ -280,7 +286,7 @@ func newConnectedInstance(groupName string) (Instance, error) {
 	}
 	initParams := resolveInitFromEnv()
 
-	cleanup, err := dcgm.Init(dcgm.Standalone, initParams.address, initParams.isUnixSocket)
+	cleanup, err := dcgmInitFunc(initParams)
 	if err != nil {
 		return nil, err
 	}
@@ -288,8 +294,11 @@ func newConnectedInstance(groupName string) (Instance, error) {
 	log.Logger.Debugw("DCGM initialized successfully")
 
 	// Create group with GPUs. Components add their own entities (e.g., NVSwitch).
-	groupHandle, err := dcgm.NewDefaultGroup(groupName)
+	groupHandle, err := dcgmNewDefaultGroupFunc(groupName)
 	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
 		return nil, fmt.Errorf("failed to create custom DCGM group: %w", err)
 	}
 
