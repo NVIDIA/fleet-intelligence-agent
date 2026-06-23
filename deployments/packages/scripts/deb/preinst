@@ -3,13 +3,9 @@ set -e
 
 case "$1" in
     install)
-        echo "Preparing to install Fleet Intelligence Agent..."
         if [ -z "${DPKG_ROOT:-}" ] && [ ! -d /run/systemd/system ]; then
             echo "[WARNING] Systemd not detected - service management will be limited"
         fi
-        ;;
-    upgrade)
-        echo "Preparing to upgrade Fleet Intelligence Agent${2:+ from version $2}..."
         ;;
     abort-upgrade)
         echo "Aborting Fleet Intelligence Agent upgrade..."

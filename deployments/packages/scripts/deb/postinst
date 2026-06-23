@@ -3,8 +3,8 @@ set -e
 
 service=fleetintd.service
 
-echo "Configuring Fleet Intelligence Agent..."
-echo "Setting up Fleet Intelligence Agent service..."
+service_was_stopped=false
+service_action="installed"
 
 if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ]; then
     if command -v deb-systemd-helper >/dev/null 2>&1; then
@@ -20,14 +20,13 @@ if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-decon
         systemctl --system daemon-reload >/dev/null || true
 
         if [ "$1" = "configure" ] && [ -n "$2" ]; then
-            echo "Upgrade detected - restarting service if already running..."
+            service_action="upgraded"
             if systemctl is-active --quiet "$service"; then
                 deb-systemd-invoke restart "$service" >/dev/null || true
             else
-                echo "Service is not running - not starting during upgrade"
+                service_was_stopped=true
             fi
         else
-            echo "Fresh installation - enabling and starting service..."
             deb-systemd-invoke start "$service" >/dev/null || true
         fi
     else
@@ -38,16 +37,19 @@ fi
 echo ""
 if [ -z "${DPKG_ROOT:-}" ] && [ -d /run/systemd/system ]; then
     if systemctl is-active --quiet "$service"; then
-        echo "[SUCCESS] Fleet Intelligence Agent installed and started successfully!"
+        echo "[SUCCESS] Fleet Intelligence Agent ${service_action} and service is running"
         echo ""
         echo "Configuration: sudo vi /etc/default/fleetint"
         echo "Logs: sudo journalctl -u fleetintd -f"
+    elif [ "$service_was_stopped" = true ]; then
+        echo "[INFO] Fleet Intelligence Agent upgraded; service was not running and was left stopped"
+        echo "Start manually: sudo systemctl start fleetintd"
     else
-        echo "[WARNING] Fleet Intelligence Agent installed but service is not running"
+        echo "[WARNING] Fleet Intelligence Agent ${service_action} but service is not running"
         echo "Start manually: sudo systemctl start fleetintd"
     fi
 else
-    echo "[SUCCESS] Fleet Intelligence Agent installed (systemd not available)"
+    echo "[SUCCESS] Fleet Intelligence Agent ${service_action} (systemd not available)"
     echo "Manual start: /usr/bin/fleetint run --log-level=warn"
 fi
 echo ""

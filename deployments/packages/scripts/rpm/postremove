@@ -3,10 +3,10 @@ set -e
 
 case "$1" in
     0)
-        echo "Fleet Intelligence Agent erased"
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload >/dev/null || true
         fi
+        echo "Fleet Intelligence Agent erased"
         ;;
     1)
         if [ -d /run/systemd/system ]; then
