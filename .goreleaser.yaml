@@ -74,6 +74,8 @@ nfpms:
     bindir: /usr/bin
     contents:
       # License and notices
+      - src: LICENSE
+        dst: /usr/share/doc/fleetint/copyright
       - src: NOTICE
         dst: /usr/share/doc/fleetint/NOTICE
       # SystemD service file
@@ -113,6 +115,8 @@ nfpms:
     bindir: /usr/bin
     contents:
       # License and notices
+      - src: LICENSE
+        dst: /usr/share/licenses/fleetint/LICENSE
       - src: NOTICE
         dst: /usr/share/doc/fleetint/NOTICE
       # SystemD service file

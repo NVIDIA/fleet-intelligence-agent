@@ -31,8 +31,6 @@ case "$1" in
             systemctl disable fleetintd.service || echo "[WARNING] Failed to disable service"
         fi
 
-        rm -f /etc/systemd/system/multi-user.target.wants/fleetintd.service 2>/dev/null || echo "[WARNING] Failed to remove service enablement symlink"
-
         echo "Fleet Intelligence Agent service stopped and disabled"
         ;;
         

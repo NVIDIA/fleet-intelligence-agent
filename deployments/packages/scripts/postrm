@@ -1,17 +1,8 @@
 #!/bin/bash
 set -e
 
-disable_fleetintd() {
+remove_enablement_symlink() {
     rm -f /etc/systemd/system/multi-user.target.wants/fleetintd.service 2>/dev/null || echo "[WARNING] Failed to remove service enablement symlink"
-
-    if [ -d /run/systemd/system ] && {
-        [ -e /etc/systemd/system/fleetintd.service ] ||
-        [ -e /run/systemd/system/fleetintd.service ] ||
-        [ -e /usr/lib/systemd/system/fleetintd.service ] ||
-        [ -e /lib/systemd/system/fleetintd.service ]
-    }; then
-        systemctl disable fleetintd.service || echo "[WARNING] Failed to disable service"
-    fi
 }
 
 case "$1" in
@@ -29,7 +20,7 @@ case "$1" in
     0)
         echo "Fleet Intelligence Agent erased"
 
-        disable_fleetintd
+        remove_enablement_symlink
 
         # Simple systemd cleanup
         if [ -d /run/systemd/system ]; then
@@ -40,7 +31,7 @@ case "$1" in
     purge)
         echo "Completely removing Fleet Intelligence Agent..."
         
-        disable_fleetintd
+        remove_enablement_symlink
 
         # Basic systemd cleanup
         if [ -d /run/systemd/system ]; then
