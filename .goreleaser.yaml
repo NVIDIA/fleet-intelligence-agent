@@ -91,10 +91,10 @@ nfpms:
         file_info:
           mode: 0755
     scripts:
-      preinstall: deployments/packages/scripts/preinst
-      postinstall: deployments/packages/scripts/postinst
-      preremove: deployments/packages/scripts/prerm
-      postremove: deployments/packages/scripts/postrm
+      preinstall: deployments/packages/scripts/deb/preinst
+      postinstall: deployments/packages/scripts/deb/postinst
+      preremove: deployments/packages/scripts/deb/prerm
+      postremove: deployments/packages/scripts/deb/postrm
 
   - id: fleetint-rpm
     package_name: fleetint
@@ -131,10 +131,10 @@ nfpms:
         file_info:
           mode: 0755
     scripts:
-      preinstall: deployments/packages/scripts/preinst
-      postinstall: deployments/packages/scripts/postinst
-      preremove: deployments/packages/scripts/prerm
-      postremove: deployments/packages/scripts/postrm
+      preinstall: deployments/packages/scripts/rpm/preinstall
+      postinstall: deployments/packages/scripts/rpm/postinstall
+      preremove: deployments/packages/scripts/rpm/preremove
+      postremove: deployments/packages/scripts/rpm/postremove
 
 # Checksum configuration
 checksum:

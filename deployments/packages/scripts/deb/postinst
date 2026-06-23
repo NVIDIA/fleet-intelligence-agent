@@ -1,0 +1,55 @@
+#!/bin/sh
+set -e
+
+service=fleetintd.service
+
+echo "Configuring Fleet Intelligence Agent..."
+echo "Setting up Fleet Intelligence Agent service..."
+
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ]; then
+    if command -v deb-systemd-helper >/dev/null 2>&1; then
+        deb-systemd-helper unmask "$service" >/dev/null || true
+        if deb-systemd-helper --quiet was-enabled "$service"; then
+            deb-systemd-helper enable "$service" >/dev/null || true
+        else
+            deb-systemd-helper update-state "$service" >/dev/null || true
+        fi
+    fi
+
+    if [ -z "${DPKG_ROOT:-}" ] && [ -d /run/systemd/system ]; then
+        systemctl --system daemon-reload >/dev/null || true
+
+        if [ "$1" = "configure" ] && [ -n "$2" ]; then
+            echo "Upgrade detected - restarting service if already running..."
+            if systemctl is-active --quiet "$service"; then
+                deb-systemd-invoke restart "$service" >/dev/null || true
+            else
+                echo "Service is not running - not starting during upgrade"
+            fi
+        else
+            echo "Fresh installation - enabling and starting service..."
+            deb-systemd-invoke start "$service" >/dev/null || true
+        fi
+    else
+        echo "Systemd not available - manual service management required"
+    fi
+fi
+
+echo ""
+if [ -z "${DPKG_ROOT:-}" ] && [ -d /run/systemd/system ]; then
+    if systemctl is-active --quiet "$service"; then
+        echo "[SUCCESS] Fleet Intelligence Agent installed and started successfully!"
+        echo ""
+        echo "Configuration: sudo vi /etc/default/fleetint"
+        echo "Logs: sudo journalctl -u fleetintd -f"
+    else
+        echo "[WARNING] Fleet Intelligence Agent installed but service is not running"
+        echo "Start manually: sudo systemctl start fleetintd"
+    fi
+else
+    echo "[SUCCESS] Fleet Intelligence Agent installed (systemd not available)"
+    echo "Manual start: /usr/bin/fleetint run --log-level=warn"
+fi
+echo ""
+
+exit 0

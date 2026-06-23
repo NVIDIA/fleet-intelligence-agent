@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    1)
+        echo "Preparing to install Fleet Intelligence Agent..."
+        if [ ! -d /run/systemd/system ]; then
+            echo "[WARNING] Systemd not detected - service management will be limited"
+        fi
+        ;;
+    2)
+        echo "Preparing to upgrade Fleet Intelligence Agent..."
+        ;;
+esac
+
+exit 0
