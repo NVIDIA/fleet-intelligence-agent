@@ -124,8 +124,10 @@ func Scan(ctx context.Context, opts ...Option) error {
 		}
 	}
 
+	dcgmGroupNames := components.NewDCGMGroupNames(fmt.Sprintf("scan-%d", os.Getpid()))
+
 	// Initialize DCGM instance for DCGM-based health checks
-	dcgmInstance, err := nvidiadcgm.New()
+	dcgmInstance, err := nvidiadcgm.NewWithGroupName(dcgmGroupNames.HealthMonitoringGroup)
 	if err != nil {
 		return err
 	}
@@ -159,6 +161,7 @@ func Scan(ctx context.Context, opts ...Option) error {
 		DCGMInstance:        dcgmInstance,
 		DCGMHealthCache:     dcgmHealthCache,
 		DCGMFieldValueCache: dcgmFieldValueCache,
+		DCGMGroupNames:      dcgmGroupNames,
 		NVIDIAToolOverwrites: nvidiacommon.ToolOverwrites{
 			InfinibandClassRootDir: op.infinibandClassRootDir,
 		},
@@ -191,7 +194,7 @@ func Scan(ctx context.Context, opts ...Option) error {
 	}
 
 	// Set up DCGM field watching after all components have registered their fields
-	if err := dcgmFieldValueCache.SetupFieldWatching(); err != nil {
+	if err := dcgmFieldValueCache.SetupFieldWatchingWithName(dcgmGroupNames.GPUFieldGroup); err != nil {
 		log.Logger.Warnw("failed to set up DCGM field watching", "error", err)
 	}
 

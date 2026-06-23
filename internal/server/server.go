@@ -296,9 +296,11 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 		return nil, fmt.Errorf("failed to create NVML instance: %w", err)
 	}
 
+	dcgmGroupNames := components.NewDCGMGroupNames(fmt.Sprintf("daemon-%d", stdos.Getpid()))
+
 	// Initialize DCGM instance
 	dcgmInitCtx, dcgmInitCancel := context.WithTimeout(ctx, time.Minute)
-	dcgmInstance, err := nvidiadcgm.NewWithContext(dcgmInitCtx)
+	dcgmInstance, err := nvidiadcgm.NewWithContextAndGroupName(dcgmInitCtx, dcgmGroupNames.HealthMonitoringGroup)
 	dcgmInitCancel()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create DCGM instance: %w", err)
@@ -337,6 +339,7 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 		DCGMInstance:         dcgmInstance,
 		DCGMHealthCache:      dcgmHealthCache,
 		DCGMFieldValueCache:  dcgmFieldValueCache,
+		DCGMGroupNames:       dcgmGroupNames,
 		NVIDIAToolOverwrites: config.NvidiaToolOverwrites,
 		DBRW:                 dbRW,
 		DBRO:                 dbRO,
@@ -364,7 +367,7 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 
 	// Set up DCGM field watching after all components have registered their fields
 	if dcgmFieldValueCache != nil {
-		if err := dcgmFieldValueCache.SetupFieldWatching(); err != nil {
+		if err := dcgmFieldValueCache.SetupFieldWatchingWithName(dcgmGroupNames.GPUFieldGroup); err != nil {
 			log.Logger.Errorw("failed to set up DCGM field watching, DCGM metrics collection unavailable", "error", err)
 		}
 	}

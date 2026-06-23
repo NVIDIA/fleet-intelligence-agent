@@ -56,7 +56,7 @@ func NewFieldValueCache(ctx context.Context, instance Instance, pollInterval tim
 		cancel:         ccancel,
 		instance:       instance,
 		values:         make(map[uint]map[dcgm.Short]dcgm.FieldValue_v1),
-		fieldGroupName: "gpud-gpu-fields",
+		fieldGroupName: "fleetint-default-gpu-fields",
 		pollInterval:   pollInterval,
 	}
 
