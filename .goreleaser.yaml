@@ -89,7 +89,7 @@ nfpms:
       - dst: /var/lib/fleetint
         type: dir
         file_info:
-          mode: 0755
+          mode: 0700
     scripts:
       preinstall: deployments/packages/scripts/deb/preinst
       postinstall: deployments/packages/scripts/deb/postinst
@@ -129,7 +129,7 @@ nfpms:
       - dst: /var/lib/fleetint
         type: dir
         file_info:
-          mode: 0755
+          mode: 0700
     scripts:
       preinstall: deployments/packages/scripts/rpm/preinstall
       postinstall: deployments/packages/scripts/rpm/postinstall
