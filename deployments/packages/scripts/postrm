@@ -18,11 +18,6 @@ case "$1" in
         
         # Basic systemd cleanup
         if [ -d /run/systemd/system ]; then
-            if systemctl is-enabled --quiet fleetintd.service 2>/dev/null; then
-                echo "Disabling fleetintd service..."
-                systemctl disable fleetintd.service || echo "[WARNING] Failed to disable service"
-            fi
-
             systemctl daemon-reload || echo "[WARNING] Failed to reload systemd daemon"
         fi
         
