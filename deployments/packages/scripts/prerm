@@ -12,14 +12,9 @@ case "$1" in
                 systemctl stop fleetintd.service || echo "[WARNING] Failed to stop service"
             fi
             
-            # Disable if enabled
-            if systemctl is-enabled --quiet fleetintd.service 2>/dev/null; then
-                echo "Disabling fleetintd service..."
-                systemctl disable fleetintd.service || echo "[WARNING] Failed to disable service"
-            fi
         fi
         
-        echo "Fleet Intelligence Agent service stopped and disabled"
+        echo "Fleet Intelligence Agent service stopped"
         ;;
         
     upgrade|1|2)
