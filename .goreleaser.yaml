@@ -81,7 +81,6 @@ nfpms:
       # SystemD service file
       - src: deployments/packages/systemd/fleetintd.service
         dst: /usr/lib/systemd/system/fleetintd.service
-        type: config|noreplace
       # Environment configuration
       - src: deployments/packages/systemd/fleetint.env
         dst: /etc/default/fleetint
@@ -122,7 +121,6 @@ nfpms:
       # SystemD service file
       - src: deployments/packages/systemd/fleetintd.service
         dst: /usr/lib/systemd/system/fleetintd.service
-        type: config|noreplace
       # Environment configuration (RPM uses /etc/default like Debian)
       - src: deployments/packages/systemd/fleetint.env
         dst: /etc/default/fleetint
