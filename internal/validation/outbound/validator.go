@@ -94,6 +94,7 @@ func ValidateNodeUpsertRequest(req *backendclient.NodeUpsertRequest) []Issue {
 
 	validateNonNegative(&issues, "numeric", "agentConfig.totalComponents", req.AgentConfig.TotalComponents)
 	validateNonNegative(&issues, "numeric", "agentConfig.retentionPeriodSeconds", req.AgentConfig.RetentionPeriodSeconds)
+	validateNonNegative(&issues, "numeric", "agentConfig.metricScrapeIntervalSeconds", req.AgentConfig.MetricScrapeIntervalSeconds)
 	validateNonNegative(&issues, "numeric", "agentConfig.inventoryIntervalSeconds", req.AgentConfig.InventoryIntervalSeconds)
 	validateNonNegative(&issues, "numeric", "agentConfig.attestationIntervalSeconds", req.AgentConfig.AttestationIntervalSeconds)
 

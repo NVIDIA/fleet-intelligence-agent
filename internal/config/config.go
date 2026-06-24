@@ -345,6 +345,19 @@ func (config *Config) AttestationLoopAgentConfig() (enabled bool, intervalSecond
 	return config.Attestation.Enabled, int64(config.Attestation.Interval.Seconds())
 }
 
+// HealthCheckInterval returns the resolved component health-check interval.
+func (config *Config) HealthCheckInterval() time.Duration {
+	if config == nil || config.HealthExporter == nil || config.HealthExporter.HealthCheckInterval.Duration <= 0 {
+		return time.Minute
+	}
+	return config.HealthExporter.HealthCheckInterval.Duration
+}
+
+// MetricScrapeIntervalSeconds returns the resolved metric scrape interval stored in inventory.
+func (config *Config) MetricScrapeIntervalSeconds() int64 {
+	return int64(config.HealthCheckInterval().Seconds())
+}
+
 // getComponentLists computes enabled/disabled lists from config rules against all available components.
 func (config *Config) getComponentLists(allComponentNames []string) (enabled, disabled []string) {
 	enabled, disabled = []string{}, []string{}

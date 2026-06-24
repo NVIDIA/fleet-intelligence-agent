@@ -129,14 +129,15 @@ func TestMachineInfoSourceCollectWithAgentConfig(t *testing.T) {
 			},
 		},
 		&inventory.AgentConfig{
-			TotalComponents:            42,
-			RetentionPeriodSeconds:     86400,
-			EnabledComponents:          []string{"cpu", "gpu"},
-			DisabledComponents:         []string{"disk"},
-			InventoryEnabled:           true,
-			InventoryIntervalSeconds:   3600,
-			AttestationEnabled:         true,
-			AttestationIntervalSeconds: 86400,
+			TotalComponents:             42,
+			RetentionPeriodSeconds:      86400,
+			MetricScrapeIntervalSeconds: 60,
+			EnabledComponents:           []string{"cpu", "gpu"},
+			DisabledComponents:          []string{"disk"},
+			InventoryEnabled:            true,
+			InventoryIntervalSeconds:    3600,
+			AttestationEnabled:          true,
+			AttestationIntervalSeconds:  86400,
 		},
 	)
 
@@ -146,6 +147,7 @@ func TestMachineInfoSourceCollectWithAgentConfig(t *testing.T) {
 	require.Equal(t, "machine-id", snap.MachineID)
 	require.Equal(t, int64(42), snap.AgentConfig.TotalComponents)
 	require.Equal(t, int64(86400), snap.AgentConfig.RetentionPeriodSeconds)
+	require.Equal(t, int64(60), snap.AgentConfig.MetricScrapeIntervalSeconds)
 	require.Equal(t, []string{"cpu", "gpu"}, snap.AgentConfig.EnabledComponents)
 	require.Equal(t, []string{"disk"}, snap.AgentConfig.DisabledComponents)
 	require.True(t, snap.AgentConfig.InventoryEnabled)

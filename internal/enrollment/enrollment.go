@@ -219,14 +219,15 @@ func syncInventoryOnce(ctx context.Context, cfg *config.Config) error {
 			return machineinfo.GetMachineInfo(nvmlInstance)
 		}),
 		&inventory.AgentConfig{
-			TotalComponents:            int64(len(allComponents)),
-			RetentionPeriodSeconds:     retentionPeriodSeconds,
-			EnabledComponents:          enabledComponents,
-			DisabledComponents:         disabledComponents,
-			InventoryEnabled:           inventoryEnabled,
-			InventoryIntervalSeconds:   inventoryIntervalSeconds,
-			AttestationEnabled:         attestationEnabled,
-			AttestationIntervalSeconds: attestationIntervalSeconds,
+			TotalComponents:             int64(len(allComponents)),
+			RetentionPeriodSeconds:      retentionPeriodSeconds,
+			MetricScrapeIntervalSeconds: cfg.MetricScrapeIntervalSeconds(),
+			EnabledComponents:           enabledComponents,
+			DisabledComponents:          disabledComponents,
+			InventoryEnabled:            inventoryEnabled,
+			InventoryIntervalSeconds:    inventoryIntervalSeconds,
+			AttestationEnabled:          attestationEnabled,
+			AttestationIntervalSeconds:  attestationIntervalSeconds,
 		},
 	)
 	manager := inventory.NewManager(src, sink, inventory.InventoryConfig{})
