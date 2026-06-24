@@ -1,0 +1,24 @@
+#!/bin/sh
+set -e
+
+service=fleetintd.service
+
+case "$1" in
+    remove|deconfigure)
+        echo "Stopping Fleet Intelligence Agent service..."
+        if [ -z "${DPKG_ROOT:-}" ] && [ -d /run/systemd/system ]; then
+            deb-systemd-invoke stop "$service" >/dev/null || true
+        fi
+        ;;
+    upgrade)
+        # Leave the service running during upgrade. postinst restarts it only if it is already active.
+        ;;
+    failed-upgrade)
+        echo "Stopping Fleet Intelligence Agent service after failed upgrade..."
+        if [ -z "${DPKG_ROOT:-}" ] && [ -d /run/systemd/system ]; then
+            deb-systemd-invoke stop "$service" >/dev/null || true
+        fi
+        ;;
+esac
+
+exit 0

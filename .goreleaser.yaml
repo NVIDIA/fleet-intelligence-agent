@@ -74,12 +74,13 @@ nfpms:
     bindir: /usr/bin
     contents:
       # License and notices
+      - src: LICENSE
+        dst: /usr/share/doc/fleetint/copyright
       - src: NOTICE
         dst: /usr/share/doc/fleetint/NOTICE
       # SystemD service file
       - src: deployments/packages/systemd/fleetintd.service
         dst: /usr/lib/systemd/system/fleetintd.service
-        type: config|noreplace
       # Environment configuration
       - src: deployments/packages/systemd/fleetint.env
         dst: /etc/default/fleetint
@@ -88,12 +89,12 @@ nfpms:
       - dst: /var/lib/fleetint
         type: dir
         file_info:
-          mode: 0755
+          mode: 0700
     scripts:
-      preinstall: deployments/packages/scripts/preinst
-      postinstall: deployments/packages/scripts/postinst
-      preremove: deployments/packages/scripts/prerm
-      postremove: deployments/packages/scripts/postrm
+      preinstall: deployments/packages/scripts/deb/preinst
+      postinstall: deployments/packages/scripts/deb/postinst
+      preremove: deployments/packages/scripts/deb/prerm
+      postremove: deployments/packages/scripts/deb/postrm
 
   - id: fleetint-rpm
     package_name: fleetint
@@ -113,12 +114,13 @@ nfpms:
     bindir: /usr/bin
     contents:
       # License and notices
+      - src: LICENSE
+        dst: /usr/share/licenses/fleetint/LICENSE
       - src: NOTICE
         dst: /usr/share/doc/fleetint/NOTICE
       # SystemD service file
       - src: deployments/packages/systemd/fleetintd.service
         dst: /usr/lib/systemd/system/fleetintd.service
-        type: config|noreplace
       # Environment configuration (RPM uses /etc/default like Debian)
       - src: deployments/packages/systemd/fleetint.env
         dst: /etc/default/fleetint
@@ -127,12 +129,12 @@ nfpms:
       - dst: /var/lib/fleetint
         type: dir
         file_info:
-          mode: 0755
+          mode: 0700
     scripts:
-      preinstall: deployments/packages/scripts/preinst
-      postinstall: deployments/packages/scripts/postinst
-      preremove: deployments/packages/scripts/prerm
-      postremove: deployments/packages/scripts/postrm
+      preinstall: deployments/packages/scripts/rpm/preinstall
+      postinstall: deployments/packages/scripts/rpm/postinstall
+      preremove: deployments/packages/scripts/rpm/preremove
+      postremove: deployments/packages/scripts/rpm/postremove
 
 # Checksum configuration
 checksum:

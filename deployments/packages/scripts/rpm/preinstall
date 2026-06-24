@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    1)
+        if [ ! -d /run/systemd/system ]; then
+            echo "[WARNING] Systemd not detected - service management will be limited"
+        fi
+        ;;
+esac
+
+exit 0
