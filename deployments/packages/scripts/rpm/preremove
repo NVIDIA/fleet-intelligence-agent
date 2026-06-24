@@ -1,0 +1,18 @@
+#!/bin/sh
+set -e
+
+service=fleetintd.service
+
+case "$1" in
+    0)
+        echo "Stopping and disabling Fleet Intelligence Agent service..."
+        if [ -d /run/systemd/system ]; then
+            systemctl --no-reload disable --now "$service" >/dev/null || true
+        fi
+        ;;
+    1)
+        # Leave the service running during upgrade. postinstall try-restarts it only if it is already active.
+        ;;
+esac
+
+exit 0

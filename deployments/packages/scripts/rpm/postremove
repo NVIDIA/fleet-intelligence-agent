@@ -1,0 +1,18 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    0)
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload >/dev/null || true
+        fi
+        echo "Fleet Intelligence Agent erased"
+        ;;
+    1)
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload >/dev/null || true
+        fi
+        ;;
+esac
+
+exit 0

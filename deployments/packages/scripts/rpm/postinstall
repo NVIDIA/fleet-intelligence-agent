@@ -1,0 +1,49 @@
+#!/bin/sh
+set -e
+
+service=fleetintd.service
+
+service_was_stopped=false
+service_action="installed"
+
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload >/dev/null || true
+
+    case "$1" in
+        1)
+            systemctl enable --now "$service" >/dev/null || true
+            ;;
+        2)
+            service_action="upgraded"
+            if systemctl is-active --quiet "$service"; then
+                systemctl restart "$service" >/dev/null || true
+            else
+                service_was_stopped=true
+            fi
+            ;;
+    esac
+else
+    echo "Systemd not available - manual service management required"
+fi
+
+echo ""
+if [ -d /run/systemd/system ]; then
+    if systemctl is-active --quiet "$service"; then
+        echo "[SUCCESS] Fleet Intelligence Agent ${service_action} and service is running"
+        echo ""
+        echo "Configuration: sudo vi /etc/default/fleetint"
+        echo "Logs: sudo journalctl -u fleetintd -f"
+    elif [ "$service_was_stopped" = true ]; then
+        echo "[INFO] Fleet Intelligence Agent upgraded; service was not running and was left stopped"
+        echo "Start manually: sudo systemctl start fleetintd"
+    else
+        echo "[WARNING] Fleet Intelligence Agent ${service_action} but service is not running"
+        echo "Start manually: sudo systemctl start fleetintd"
+    fi
+else
+    echo "[SUCCESS] Fleet Intelligence Agent ${service_action} (systemd not available)"
+    echo "Manual start: /usr/bin/fleetint run --log-level=warn"
+fi
+echo ""
+
+exit 0
