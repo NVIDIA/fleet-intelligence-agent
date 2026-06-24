@@ -210,9 +210,7 @@ func IsUnhealthyAPIError(err error) bool {
 	case dcgm.DCGM_ST_NVML_ERROR,
 		dcgm.DCGM_ST_GPU_IS_LOST,
 		dcgm.DCGM_ST_RESET_REQUIRED,
-		dcgm.DCGM_ST_GPU_NOT_SUPPORTED,
-		dcgm.DCGM_ST_TIMEOUT,
-		dcgm.DCGM_ST_NVML_DRIVER_TIMEOUT:
+		dcgm.DCGM_ST_GPU_NOT_SUPPORTED:
 		return true
 	default:
 		return false

@@ -16,7 +16,10 @@
 package dcgm
 
 import (
+	"fmt"
 	"testing"
+
+	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 )
 
 // Note: Tests for CheckSentinel() and CheckSentinelV2() require actual DCGM library
@@ -62,6 +65,31 @@ func TestSentinelType_String(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.sentinel.String(); got != tt.want {
 				t.Errorf("SentinelType.String() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsUnhealthyAPIError(t *testing.T) {
+	tests := []struct {
+		name string
+		code int32
+		want bool
+	}{
+		{"nvml error is unhealthy", dcgm.DCGM_ST_NVML_ERROR, true},
+		{"gpu lost is unhealthy", dcgm.DCGM_ST_GPU_IS_LOST, true},
+		{"reset required is unhealthy", dcgm.DCGM_ST_RESET_REQUIRED, true},
+		{"gpu not supported is unhealthy", dcgm.DCGM_ST_GPU_NOT_SUPPORTED, true},
+		{"dcgm timeout is degraded", dcgm.DCGM_ST_TIMEOUT, false},
+		{"nvml driver timeout is degraded", dcgm.DCGM_ST_NVML_DRIVER_TIMEOUT, false},
+		{"stale data is not unhealthy", dcgm.DCGM_ST_STALE_DATA, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := fmt.Errorf("dcgm request failed with error code %d", tt.code)
+			if got := IsUnhealthyAPIError(err); got != tt.want {
+				t.Errorf("IsUnhealthyAPIError() = %v, want %v", got, tt.want)
 			}
 		})
 	}
