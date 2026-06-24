@@ -881,6 +881,9 @@ func TestInventoryAgentConfig(t *testing.T) {
 		APIVersion:      "v1",
 		RetentionPeriod: metav1.Duration{Duration: 24 * time.Hour},
 		Components:      []string{"*", "-memory", "-disk"},
+		HealthExporter: &HealthExporterConfig{
+			HealthCheckInterval: metav1.Duration{Duration: 30 * time.Second},
+		},
 		Inventory: &InventoryConfig{
 			Enabled:  true,
 			Interval: metav1.Duration{Duration: time.Hour},
@@ -903,4 +906,9 @@ func TestInventoryAgentConfig(t *testing.T) {
 	attestationEnabled, attestationIntervalSeconds := cfg.AttestationLoopAgentConfig()
 	assert.True(t, attestationEnabled)
 	assert.Equal(t, int64(86400), attestationIntervalSeconds)
+
+	assert.Equal(t, 30*time.Second, cfg.HealthCheckInterval())
+	assert.Equal(t, int64(30), cfg.MetricScrapeIntervalSeconds())
+	assert.Equal(t, time.Minute, (*Config)(nil).HealthCheckInterval())
+	assert.Equal(t, int64(60), (*Config)(nil).MetricScrapeIntervalSeconds())
 }
