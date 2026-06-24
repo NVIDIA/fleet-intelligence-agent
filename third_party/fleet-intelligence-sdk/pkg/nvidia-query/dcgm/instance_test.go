@@ -59,6 +59,41 @@ func TestResolveInitFromEnv(t *testing.T) {
 	}
 }
 
+func TestNewConnectedInstanceCleansUpWhenGroupCreationFails(t *testing.T) {
+	originalDCGMInitFunc := dcgmInitFunc
+	originalDCGMNewDefaultGroupFunc := dcgmNewDefaultGroupFunc
+	defer func() {
+		dcgmInitFunc = originalDCGMInitFunc
+		dcgmNewDefaultGroupFunc = originalDCGMNewDefaultGroupFunc
+	}()
+
+	cleanupCalled := false
+	dcgmInitFunc = func(_ dcgmInitParams) (func(), error) {
+		return func() {
+			cleanupCalled = true
+		}, nil
+	}
+
+	expectedErr := errors.New("invalid group name")
+	dcgmNewDefaultGroupFunc = func(_ string) (dcgm.GroupHandle, error) {
+		return dcgm.GroupHandle{}, expectedErr
+	}
+
+	inst, err := newConnectedInstance("invalid group")
+	if err == nil {
+		t.Fatalf("expected newConnectedInstance() to fail")
+	}
+	if inst != nil {
+		t.Fatalf("expected nil instance on group creation failure")
+	}
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected error %v, got %v", expectedErr, err)
+	}
+	if !cleanupCalled {
+		t.Fatalf("expected DCGM cleanup to be called when group creation fails")
+	}
+}
+
 func TestInstance(t *testing.T) {
 	inst, err := New()
 	if err != nil {
