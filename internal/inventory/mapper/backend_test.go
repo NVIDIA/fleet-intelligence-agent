@@ -38,6 +38,7 @@ func TestToNodeUpsertRequestAgentConfigJSONIncludesZeroValues(t *testing.T) {
 	require.JSONEq(t, `{
 		"totalComponents": 0,
 		"retentionPeriodSeconds": 0,
+		"metricScrapeIntervalSeconds": 0,
 		"enabledComponents": [],
 		"disabledComponents": [],
 		"inventoryEnabled": false,
@@ -65,14 +66,15 @@ func TestToNodeUpsertRequest(t *testing.T) {
 		ContainerRuntimeVersion: "containerd://1.7.13",
 		NetPrivateIP:            "10.0.0.10",
 		AgentConfig: inventory.AgentConfig{
-			TotalComponents:            30,
-			RetentionPeriodSeconds:     86400,
-			EnabledComponents:          []string{"cpu", "gpu"},
-			DisabledComponents:         []string{"disk"},
-			InventoryEnabled:           true,
-			InventoryIntervalSeconds:   3600,
-			AttestationEnabled:         true,
-			AttestationIntervalSeconds: 86400,
+			TotalComponents:             30,
+			RetentionPeriodSeconds:      86400,
+			MetricScrapeIntervalSeconds: 60,
+			EnabledComponents:           []string{"cpu", "gpu"},
+			DisabledComponents:          []string{"disk"},
+			InventoryEnabled:            true,
+			InventoryIntervalSeconds:    3600,
+			AttestationEnabled:          true,
+			AttestationIntervalSeconds:  86400,
 		},
 		Resources: inventory.Resources{
 			CPUInfo: inventory.CPUInfo{
@@ -130,6 +132,7 @@ func TestToNodeUpsertRequest(t *testing.T) {
 	require.Equal(t, bootTime.UTC(), *req.Uptime)
 	require.Equal(t, int64(30), req.AgentConfig.TotalComponents)
 	require.Equal(t, int64(86400), req.AgentConfig.RetentionPeriodSeconds)
+	require.Equal(t, int64(60), req.AgentConfig.MetricScrapeIntervalSeconds)
 	require.Equal(t, []string{"cpu", "gpu"}, req.AgentConfig.EnabledComponents)
 	require.Equal(t, []string{"disk"}, req.AgentConfig.DisabledComponents)
 	require.True(t, req.AgentConfig.InventoryEnabled)
