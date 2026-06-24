@@ -68,6 +68,7 @@ type component struct {
 // fieldValidator validates fields based on hardware support
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
+	dcgmGroupNames := gpudInstance.DCGMGroupNames.WithDefaults()
 
 	healthCheckInterval := defaultHealthCheckInterval
 	if gpudInstance.HealthCheckInterval > 0 {
@@ -119,7 +120,7 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		c.watchedFields = validFields
 
 		// Create field group with ONLY hardware-validated fields
-		fieldGroupName := "gpud-prof-fields"
+		fieldGroupName := dcgmGroupNames.ProfilingFieldGroup
 		fieldGroupID, err := dcgm.FieldGroupCreate(fieldGroupName, validFields)
 		if err != nil {
 			log.Logger.Warnw("failed to create DCGM field group", "error", err)
@@ -280,7 +281,7 @@ func (c *component) Check() components.CheckResult {
 					"action", "systemd/k8s will restart agent and recreate DCGM resources")
 				os.Exit(1)
 			}
-			
+
 			// Check if this is a transient error (benign, skip)
 			if nvidiadcgm.IsTransientError(err) {
 				log.Logger.Infow("DCGM transient error, will retry",
@@ -289,7 +290,7 @@ func (c *component) Check() components.CheckResult {
 					"error", err)
 				continue
 			}
-			
+
 			// For unhealthy or unknown errors, set component state
 			if nvidiadcgm.IsUnhealthyAPIError(err) {
 				cr.health = apiv1.HealthStateTypeUnhealthy
@@ -314,101 +315,101 @@ func (c *component) Check() components.CheckResult {
 
 			// Value is valid - export metric based on field type
 			switch val.FieldID {
-		case dcgm.DCGM_FI_PROF_GR_ENGINE_ACTIVE:
-			metricDCGMFIProfGrEngineActive.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(val.Float64())
+			case dcgm.DCGM_FI_PROF_GR_ENGINE_ACTIVE:
+				metricDCGMFIProfGrEngineActive.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(val.Float64())
 
-		case dcgm.DCGM_FI_PROF_SM_ACTIVE:
-			metricDCGMFIProfSmActive.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(val.Float64())
+			case dcgm.DCGM_FI_PROF_SM_ACTIVE:
+				metricDCGMFIProfSmActive.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(val.Float64())
 
-		case dcgm.DCGM_FI_PROF_SM_OCCUPANCY:
-			metricDCGMFIProfSmOccupancy.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(val.Float64())
+			case dcgm.DCGM_FI_PROF_SM_OCCUPANCY:
+				metricDCGMFIProfSmOccupancy.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(val.Float64())
 
-		case dcgm.DCGM_FI_PROF_PIPE_TENSOR_ACTIVE:
-			metricDCGMFIProfPipeTensorActive.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(val.Float64())
+			case dcgm.DCGM_FI_PROF_PIPE_TENSOR_ACTIVE:
+				metricDCGMFIProfPipeTensorActive.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(val.Float64())
 
-		case dcgm.DCGM_FI_PROF_PIPE_TENSOR_IMMA_ACTIVE:
-			metricDCGMFIProfPipeTensorImmaActive.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(val.Float64())
+			case dcgm.DCGM_FI_PROF_PIPE_TENSOR_IMMA_ACTIVE:
+				metricDCGMFIProfPipeTensorImmaActive.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(val.Float64())
 
-		case dcgm.DCGM_FI_PROF_PIPE_TENSOR_HMMA_ACTIVE:
-			metricDCGMFIProfPipeTensorHmmaActive.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(val.Float64())
+			case dcgm.DCGM_FI_PROF_PIPE_TENSOR_HMMA_ACTIVE:
+				metricDCGMFIProfPipeTensorHmmaActive.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(val.Float64())
 
-		case dcgm.DCGM_FI_PROF_PIPE_TENSOR_DFMA_ACTIVE:
-			metricDCGMFIProfPipeTensorDfmaActive.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(val.Float64())
+			case dcgm.DCGM_FI_PROF_PIPE_TENSOR_DFMA_ACTIVE:
+				metricDCGMFIProfPipeTensorDfmaActive.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(val.Float64())
 
-		case dcgm.DCGM_FI_PROF_PIPE_INT_ACTIVE:
-			metricDCGMFIProfPipeIntActive.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(val.Float64())
+			case dcgm.DCGM_FI_PROF_PIPE_INT_ACTIVE:
+				metricDCGMFIProfPipeIntActive.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(val.Float64())
 
-		case dcgm.DCGM_FI_PROF_DRAM_ACTIVE:
-			metricDCGMFIProfDramActive.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(val.Float64())
+			case dcgm.DCGM_FI_PROF_DRAM_ACTIVE:
+				metricDCGMFIProfDramActive.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(val.Float64())
 
-		case dcgm.DCGM_FI_PROF_PIPE_FP64_ACTIVE:
-			metricDCGMFIProfPipeFp64Active.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(val.Float64())
+			case dcgm.DCGM_FI_PROF_PIPE_FP64_ACTIVE:
+				metricDCGMFIProfPipeFp64Active.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(val.Float64())
 
-		case dcgm.DCGM_FI_PROF_PIPE_FP32_ACTIVE:
-			metricDCGMFIProfPipeFp32Active.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(val.Float64())
+			case dcgm.DCGM_FI_PROF_PIPE_FP32_ACTIVE:
+				metricDCGMFIProfPipeFp32Active.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(val.Float64())
 
-		case dcgm.DCGM_FI_PROF_PIPE_FP16_ACTIVE:
-			metricDCGMFIProfPipeFp16Active.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(val.Float64())
+			case dcgm.DCGM_FI_PROF_PIPE_FP16_ACTIVE:
+				metricDCGMFIProfPipeFp16Active.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(val.Float64())
 
-		case dcgm.DCGM_FI_PROF_PCIE_TX_BYTES:
-			metricDCGMFIProfPcieTxBytes.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(float64(val.Int64()))
+			case dcgm.DCGM_FI_PROF_PCIE_TX_BYTES:
+				metricDCGMFIProfPcieTxBytes.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(float64(val.Int64()))
 
-		case dcgm.DCGM_FI_PROF_PCIE_RX_BYTES:
-			metricDCGMFIProfPcieRxBytes.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(float64(val.Int64()))
+			case dcgm.DCGM_FI_PROF_PCIE_RX_BYTES:
+				metricDCGMFIProfPcieRxBytes.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(float64(val.Int64()))
 
-		case dcgm.DCGM_FI_PROF_NVLINK_TX_BYTES:
-			metricDCGMFIProfNvlinkTxBytes.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(float64(val.Int64()))
+			case dcgm.DCGM_FI_PROF_NVLINK_TX_BYTES:
+				metricDCGMFIProfNvlinkTxBytes.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(float64(val.Int64()))
 
-		case dcgm.DCGM_FI_PROF_NVLINK_RX_BYTES:
-			metricDCGMFIProfNvlinkRxBytes.With(prometheus.Labels{
-				"uuid":      device.UUID,
-				"gpu": fmt.Sprintf("%d", device.ID),
-			}).Set(float64(val.Int64()))
+			case dcgm.DCGM_FI_PROF_NVLINK_RX_BYTES:
+				metricDCGMFIProfNvlinkRxBytes.With(prometheus.Labels{
+					"uuid": device.UUID,
+					"gpu":  fmt.Sprintf("%d", device.ID),
+				}).Set(float64(val.Int64()))
 			}
 		}
 	}
