@@ -65,6 +65,7 @@ type component struct {
 
 func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 	cctx, ccancel := context.WithCancel(gpudInstance.RootCtx)
+	dcgmGroupNames := gpudInstance.DCGMGroupNames.WithDefaults()
 
 	healthCheckInterval := defaultHealthCheckInterval
 	if gpudInstance.HealthCheckInterval > 0 {
@@ -100,7 +101,7 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		c.cpuEntities = cpuEntities
 
 		// Create a dedicated DCGM group for CPUs
-		cpuGroupHandle, err := dcgm.CreateGroup("gpud-cpu-group")
+		cpuGroupHandle, err := dcgm.CreateGroup(dcgmGroupNames.CPUGroup)
 		if err != nil {
 			log.Logger.Warnw("failed to create DCGM group for CPUs", "error", err)
 			c.setupDegradedReason = fmt.Sprintf("failed to create DCGM CPU group: %v", err)
@@ -119,7 +120,7 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		}
 
 		// Create a field group for this component's CPU fields
-		fieldGroupName := "gpud-cpu-fields"
+		fieldGroupName := dcgmGroupNames.CPUFieldGroup
 		fieldGroupID, err := dcgm.FieldGroupCreate(fieldGroupName, cpuLevelFields)
 		if err != nil {
 			log.Logger.Warnw("failed to create DCGM field group for CPU fields", "error", err)

@@ -33,6 +33,7 @@ import (
 var _ Instance = &instance{}
 
 const defaultDCGMReconnectInterval = 30 * time.Second
+const defaultDCGMGroupName = "fleetint-default-health"
 
 var dcgmReconnectInterval = defaultDCGMReconnectInterval
 var errReconnectAborted = errors.New("dcgm reconnect aborted")
@@ -172,10 +173,21 @@ func New() (Instance, error) {
 	return newInitializedInstance()
 }
 
+// NewWithGroupName creates a DCGM instance with a caller-owned DCGM group name.
+func NewWithGroupName(groupName string) (Instance, error) {
+	return newInitializedInstanceWithGroupName(groupName)
+}
+
 // NewWithContext creates a DCGM instance with a bounded wait. If initialization
 // exceeds the context deadline, it returns a no-op instance so callers can
 // continue startup without blocking on slow DCGM device enumeration.
 func NewWithContext(ctx context.Context) (Instance, error) {
+	return NewWithContextAndGroupName(ctx, defaultDCGMGroupName)
+}
+
+// NewWithContextAndGroupName creates a DCGM instance with a bounded wait and
+// caller-owned DCGM group name.
+func NewWithContextAndGroupName(ctx context.Context, groupName string) (Instance, error) {
 	type result struct {
 		inst Instance
 		err  error
@@ -186,7 +198,7 @@ func NewWithContext(ctx context.Context) (Instance, error) {
 	initFn := newInstanceFunc
 
 	go func() {
-		inst, err := initFn()
+		inst, err := initFnWithGroupName(initFn, groupName)
 		select {
 		case resultCh <- result{inst: inst, err: err}:
 		case <-abandonCh:
@@ -207,7 +219,7 @@ func NewWithContext(ctx context.Context) (Instance, error) {
 				"retryInterval", dcgmReconnectInterval.String(),
 			)
 		}
-		return newReconnectingInstance(res.inst, dcgmReconnectInterval), nil
+		return newReconnectingInstanceWithGroupName(res.inst, dcgmReconnectInterval, groupName), nil
 	case <-ctx.Done():
 		close(abandonCh)
 		log.Logger.Warnw(
@@ -215,13 +227,30 @@ func NewWithContext(ctx context.Context) (Instance, error) {
 			"error", ctx.Err(),
 			"retryInterval", dcgmReconnectInterval.String(),
 		)
-		return newReconnectingInstance(NewNoOp(), dcgmReconnectInterval), nil
+		return newReconnectingInstanceWithGroupName(NewNoOp(), dcgmReconnectInterval, groupName), nil
 	}
 }
 
-var newConnectedInstanceFunc = func() (Instance, error) {
-	return newConnectedInstance()
+func initFnWithGroupName(initFn func() (Instance, error), groupName string) (Instance, error) {
+	if groupName == "" || groupName == defaultDCGMGroupName {
+		return initFn()
+	}
+	return newInitializedInstanceWithGroupName(groupName)
 }
+
+var newConnectedInstanceFunc = func() (Instance, error) {
+	return newConnectedInstance(defaultDCGMGroupName)
+}
+
+var newConnectedInstanceWithGroupNameFunc = func(groupName string) (Instance, error) {
+	return newConnectedInstance(groupName)
+}
+
+var dcgmInitFunc = func(initParams dcgmInitParams) (func(), error) {
+	return dcgm.Init(dcgm.Standalone, initParams.address, initParams.isUnixSocket)
+}
+
+var dcgmNewDefaultGroupFunc = dcgm.NewDefaultGroup
 
 func newInitializedInstance() (Instance, error) {
 	connectedInst, err := newConnectedInstanceFunc()
@@ -232,10 +261,32 @@ func newInitializedInstance() (Instance, error) {
 	return connectedInst, nil
 }
 
-func newConnectedInstance() (Instance, error) {
+func newInitializedInstanceWithGroupName(groupName string) (Instance, error) {
+	if groupName == "" {
+		groupName = defaultDCGMGroupName
+	}
+	connectedInst, err := connectWithGroupName(groupName)
+	if err != nil {
+		log.Logger.Warnw("DCGM initialization failed, returning no-op instance", "error", err)
+		return NewNoOp(), nil
+	}
+	return connectedInst, nil
+}
+
+func connectWithGroupName(groupName string) (Instance, error) {
+	if groupName == "" || groupName == defaultDCGMGroupName {
+		return newConnectedInstanceFunc()
+	}
+	return newConnectedInstanceWithGroupNameFunc(groupName)
+}
+
+func newConnectedInstance(groupName string) (Instance, error) {
+	if groupName == "" {
+		groupName = defaultDCGMGroupName
+	}
 	initParams := resolveInitFromEnv()
 
-	cleanup, err := dcgm.Init(dcgm.Standalone, initParams.address, initParams.isUnixSocket)
+	cleanup, err := dcgmInitFunc(initParams)
 	if err != nil {
 		return nil, err
 	}
@@ -243,12 +294,15 @@ func newConnectedInstance() (Instance, error) {
 	log.Logger.Debugw("DCGM initialized successfully")
 
 	// Create group with GPUs. Components add their own entities (e.g., NVSwitch).
-	groupHandle, err := dcgm.NewDefaultGroup("gpud-health-monitoring")
+	groupHandle, err := dcgmNewDefaultGroupFunc(groupName)
 	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
 		return nil, fmt.Errorf("failed to create custom DCGM group: %w", err)
 	}
 
-	log.Logger.Infow("created custom DCGM group for isolated health monitoring")
+	log.Logger.Infow("created custom DCGM group for isolated health monitoring", "groupName", groupName)
 
 	// Fetch and cache device information once during initialization
 	deviceIDs, err := dcgm.GetSupportedDevices()
@@ -497,6 +551,7 @@ type reconnectingInstance struct {
 	generation     uint64
 
 	reconnectInterval time.Duration
+	groupName         string
 	stopCh            chan struct{}
 	shutdownOnce      sync.Once
 }
@@ -508,11 +563,18 @@ type reconnectStateSnapshot struct {
 }
 
 func newReconnectingInstance(initial Instance, reconnectInterval time.Duration) Instance {
+	return newReconnectingInstanceWithGroupName(initial, reconnectInterval, defaultDCGMGroupName)
+}
+
+func newReconnectingInstanceWithGroupName(initial Instance, reconnectInterval time.Duration, groupName string) Instance {
 	if initial == nil {
 		initial = NewNoOp()
 	}
 	if reconnectInterval <= 0 {
 		reconnectInterval = defaultDCGMReconnectInterval
+	}
+	if groupName == "" {
+		groupName = defaultDCGMGroupName
 	}
 
 	inst := &reconnectingInstance{
@@ -520,6 +582,7 @@ func newReconnectingInstance(initial Instance, reconnectInterval time.Duration) 
 		watchedFields:     make(map[dcgm.Short]struct{}),
 		groupEntities:     make(map[uint]struct{}),
 		reconnectInterval: reconnectInterval,
+		groupName:         groupName,
 		stopCh:            make(chan struct{}),
 	}
 
@@ -589,7 +652,7 @@ func (inst *reconnectingInstance) reconnectNow() error {
 	expectedGeneration := inst.generation
 	inst.reconnectMu.Unlock()
 
-	connectedInst, err := newConnectedInstanceFunc()
+	connectedInst, err := connectWithGroupName(inst.groupName)
 	if err != nil {
 		return err
 	}
