@@ -37,6 +37,9 @@ func TestValidateNodeUpsertRequest(t *testing.T) {
 		MachineID:  "machine-1",
 		SystemUUID: "not-a-uuid",
 		Uptime:     &now,
+		AgentConfig: backendclient.AgentConfig{
+			MetricScrapeIntervalSeconds: -1,
+		},
 		Resources: backendclient.NodeResources{
 			CPUInfo: backendclient.CPUInfo{LogicalCores: "-1"},
 			MemoryInfo: backendclient.MemoryInfo{
@@ -63,6 +66,12 @@ func TestValidateNodeUpsertRequest(t *testing.T) {
 		Category: "identity",
 		Field:    "hostname",
 		Message:  "field is required",
+	})
+	require.Contains(t, issues, Issue{
+		Severity: SeverityWarning,
+		Category: "numeric",
+		Field:    "agentConfig.metricScrapeIntervalSeconds",
+		Message:  "value is negative",
 	})
 	require.Contains(t, issues, Issue{
 		Severity: SeverityCritical,

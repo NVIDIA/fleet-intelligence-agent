@@ -175,11 +175,7 @@ func initializeMachineID(ctx context.Context, dbRW, dbRO *sql.DB) (string, error
 
 // getHealthCheckInterval determines the health check interval from config
 func getHealthCheckInterval(config *config.Config) time.Duration {
-	healthCheckInterval := time.Minute // default
-	if config.HealthExporter != nil && config.HealthExporter.HealthCheckInterval.Duration > 0 {
-		healthCheckInterval = config.HealthExporter.HealthCheckInterval.Duration
-	}
-	return healthCheckInterval
+	return config.HealthCheckInterval()
 }
 
 func getInventorySyncInterval(config *config.Config) time.Duration {
@@ -474,14 +470,15 @@ func (s *Server) startInventoryLoop(
 			return machineinfo.GetMachineInfo(nvmlInstance, machineinfo.WithDCGMGPUIndexes(dcgmGPUIndexes))
 		}),
 		&inventory.AgentConfig{
-			TotalComponents:            int64(len(allComponents)),
-			RetentionPeriodSeconds:     retentionPeriodSeconds,
-			EnabledComponents:          enabledComponents,
-			DisabledComponents:         disabledComponents,
-			InventoryEnabled:           inventoryEnabled,
-			InventoryIntervalSeconds:   inventoryIntervalSeconds,
-			AttestationEnabled:         attestationEnabled,
-			AttestationIntervalSeconds: attestationIntervalSeconds,
+			TotalComponents:             int64(len(allComponents)),
+			RetentionPeriodSeconds:      retentionPeriodSeconds,
+			MetricScrapeIntervalSeconds: cfg.MetricScrapeIntervalSeconds(),
+			EnabledComponents:           enabledComponents,
+			DisabledComponents:          disabledComponents,
+			InventoryEnabled:            inventoryEnabled,
+			InventoryIntervalSeconds:    inventoryIntervalSeconds,
+			AttestationEnabled:          attestationEnabled,
+			AttestationIntervalSeconds:  attestationIntervalSeconds,
 		},
 	)
 	sink := inventorysink.NewBackendSink(agentstate.NewSQLite())
