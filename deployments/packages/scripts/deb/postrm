@@ -1,0 +1,32 @@
+#!/bin/sh
+set -e
+
+service=fleetintd.service
+
+case "$1" in
+    remove)
+        if [ -z "${DPKG_ROOT:-}" ] && [ -d /run/systemd/system ]; then
+            systemctl --system daemon-reload >/dev/null || true
+        fi
+        echo "Fleet Intelligence Agent removed (configuration preserved)"
+        echo "To completely remove including data: sudo apt purge fleetint"
+        ;;
+    purge)
+        if command -v deb-systemd-helper >/dev/null 2>&1; then
+            deb-systemd-helper purge "$service" >/dev/null || true
+        fi
+        if [ -z "${DPKG_ROOT:-}" ] && [ -d /run/systemd/system ]; then
+            systemctl --system daemon-reload >/dev/null || true
+        fi
+        rm -rf /var/lib/fleetint 2>/dev/null || echo "[WARNING] Failed to remove data directory"
+        rm -f /etc/default/fleetint 2>/dev/null || echo "[WARNING] Failed to remove configuration"
+        echo "Fleet Intelligence Agent purged"
+        ;;
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        if [ -z "${DPKG_ROOT:-}" ] && [ -d /run/systemd/system ]; then
+            systemctl --system daemon-reload >/dev/null || true
+        fi
+        ;;
+esac
+
+exit 0
