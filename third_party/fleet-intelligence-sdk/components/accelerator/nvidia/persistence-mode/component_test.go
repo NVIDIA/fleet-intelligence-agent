@@ -337,8 +337,8 @@ func TestCheck_MultipleDevices(t *testing.T) {
 	require.True(t, ok, "result should be of type *checkResult")
 
 	require.NotNil(t, data, "data should not be nil")
-	// This should be unhealthy since one device has persistence mode supported but not enabled
-	assert.Equal(t, apiv1.HealthStateTypeUnhealthy, data.health, "data should be marked unhealthy")
+	// This should be degraded (warning) since one device has persistence mode supported but not enabled
+	assert.Equal(t, apiv1.HealthStateTypeDegraded, data.health, "data should be marked degraded")
 	assert.Equal(t, "gpu-uuid-456 persistence mode supported but not enabled", data.reason)
 	assert.Len(t, data.PersistenceModes, 2)
 
@@ -734,7 +734,7 @@ func TestPersistenceModeCheck(t *testing.T) {
 				{UUID: "GPU-1", Supported: true, Enabled: true},
 				{UUID: "GPU-2", Supported: true, Enabled: false},
 			},
-			expectedHealth:    apiv1.HealthStateTypeUnhealthy,
+			expectedHealth:    apiv1.HealthStateTypeDegraded,
 			expectedReasonCmp: "GPU-2 persistence mode supported but not enabled",
 		},
 		{
@@ -743,7 +743,7 @@ func TestPersistenceModeCheck(t *testing.T) {
 				{UUID: "GPU-1", Supported: true, Enabled: false},
 				{UUID: "GPU-2", Supported: true, Enabled: false},
 			},
-			expectedHealth:    apiv1.HealthStateTypeUnhealthy,
+			expectedHealth:    apiv1.HealthStateTypeDegraded,
 			expectedReasonCmp: "all 2 GPU(s) disabled persistence mode",
 		},
 		{

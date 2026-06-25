@@ -170,6 +170,7 @@ func (c *component) Check() components.CheckResult {
 		persistenceMode, err := c.getPersistenceModeFunc(uuid, dev)
 		if err != nil {
 			cr.err = err
+			// deliberately stayed Unhealthy to indicate NVML query errors, GPU-lost, and GPU-requires-reset
 			cr.health = apiv1.HealthStateTypeUnhealthy
 			cr.reason = "error getting persistence mode"
 
@@ -208,7 +209,10 @@ func (c *component) Check() components.CheckResult {
 	}
 
 	if len(notEnabled) > 0 {
-		cr.health = apiv1.HealthStateTypeUnhealthy
+		// Persistence mode being disabled is a configuration issue that does not
+		// affect running workloads, so it is flagged as a warning (Degraded)
+		// rather than critical (Unhealthy).
+		cr.health = apiv1.HealthStateTypeDegraded
 		if len(notEnabled) == len(cr.PersistenceModes) {
 			cr.reason = fmt.Sprintf("all %d GPU(s) disabled persistence mode", len(devs))
 		} else {
