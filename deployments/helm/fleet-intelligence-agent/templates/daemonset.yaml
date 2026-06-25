@@ -101,6 +101,9 @@ spec:
           volumeMounts:
             - name: dev
               mountPath: /dev
+            - name: sys
+              mountPath: /sys
+              readOnly: true
             - name: state
               mountPath: /var/lib/fleetint
       {{- else if .Values.enroll.unenroll }}
