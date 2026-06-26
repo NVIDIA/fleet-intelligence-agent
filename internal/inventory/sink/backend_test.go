@@ -63,6 +63,20 @@ func (f *fakeState) GetNodeUUID(context.Context) (string, bool, error) {
 	return f.nodeUUID, f.nodeUUID != "", nil
 }
 func (f *fakeState) SetNodeUUID(context.Context, string) error { return nil }
+func (f *fakeState) GetOrCreateNodeUUID(_ context.Context, create func() (string, error)) (string, bool, error) {
+	if f.err != nil {
+		return "", false, f.err
+	}
+	if f.nodeUUID != "" {
+		return f.nodeUUID, false, nil
+	}
+	value, err := create()
+	if err != nil {
+		return "", false, err
+	}
+	f.nodeUUID = value
+	return value, true, nil
+}
 func (f *fakeState) GetNodeGroup(context.Context) (string, bool, error) {
 	if f.nodeGroupErr != nil {
 		return "", false, f.nodeGroupErr

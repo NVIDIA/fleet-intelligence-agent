@@ -382,35 +382,18 @@ func TestInitializeDatabasesSecuresFreshStateFile(t *testing.T) {
 // TestInitializeMachineID tests the initializeMachineID function.
 func TestInitializeMachineID(t *testing.T) {
 	ctx := context.Background()
-
-	// Initialize databases first (required for machine ID storage)
-	config := &config.Config{
-		State: "", // Use in-memory database
-	}
-	dbRW, dbRO, err := initializeDatabases(ctx, config)
+	dbRW, dbRO, err := initializeDatabases(ctx, &config.Config{State: filepath.Join(t.TempDir(), "fleetint.state")})
 	require.NoError(t, err)
 	defer dbRW.Close()
 	defer dbRO.Close()
 
-	// Test initializeMachineID
 	machineID, err := initializeMachineID(ctx, dbRW, dbRO)
-
-	// The function should either succeed or fail gracefully
-	if err != nil {
-		// If it fails, it's likely due to missing pkgmetadata functionality
-		// which is acceptable in a unit test environment
-		t.Logf("initializeMachineID returned error (expected in test environment): %v", err)
-		return
-	}
-
-	// If successful, verify the behavior
+	require.NoError(t, err)
 	assert.NotEmpty(t, machineID)
 
-	// Verify machine ID can be read back
 	machineID2, err := initializeMachineID(ctx, dbRW, dbRO)
-	if err == nil {
-		assert.Equal(t, machineID, machineID2, "Machine ID should be consistent across calls")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, machineID, machineID2, "Machine ID should be consistent across calls")
 }
 
 // TestServerStop tests the Stop method.
