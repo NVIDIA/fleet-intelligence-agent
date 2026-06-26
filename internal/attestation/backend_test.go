@@ -51,6 +51,21 @@ func (s *stubState) GetNodeUUID(context.Context) (string, bool, error) {
 	return s.nodeUUID, s.nodeOK, s.nodeErr
 }
 func (s *stubState) SetNodeUUID(context.Context, string) error { return nil }
+func (s *stubState) GetOrCreateNodeUUID(_ context.Context, create func() (string, error)) (string, bool, error) {
+	if s.nodeErr != nil {
+		return "", false, s.nodeErr
+	}
+	if s.nodeOK && s.nodeUUID != "" {
+		return s.nodeUUID, false, nil
+	}
+	value, err := create()
+	if err != nil {
+		return "", false, err
+	}
+	s.nodeUUID = value
+	s.nodeOK = true
+	return value, true, nil
+}
 func (s *stubState) GetNodeGroup(context.Context) (string, bool, error) {
 	return "", false, nil
 }

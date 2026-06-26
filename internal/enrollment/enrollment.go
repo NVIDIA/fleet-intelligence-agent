@@ -36,12 +36,15 @@ import (
 	inventorysink "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/sink"
 	inventorysource "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/source"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/nodeidentity"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/registry"
 )
 
 var (
 	newBackendClient               = backendclient.New
 	syncInventoryAfterEnroll       = syncInventoryOnce
+	ensureNodeUUID                 = nodeidentity.EnsureNodeUUID
+	storeEnrollmentConfig          = storeConfigInMetadata
 	postEnrollInventorySyncTimeout = time.Minute
 )
 
@@ -76,8 +79,11 @@ func EnrollWithConfigAndMetadata(ctx context.Context, baseEndpoint, sakToken str
 	if err != nil {
 		return err
 	}
+	if _, err := ensureNodeUUID(ctx, agentstate.NewSQLite()); err != nil {
+		return fmt.Errorf("failed to initialize node UUID: %w", err)
+	}
 	enrolledAt := time.Now().UTC()
-	if err := storeConfigInMetadata(ctx, baseURL.String(), jwtToken, sakToken, enrolledAt, normalizedEnrollMetadata(metadata)); err != nil {
+	if err := storeEnrollmentConfig(ctx, baseURL.String(), jwtToken, sakToken, enrolledAt, normalizedEnrollMetadata(metadata)); err != nil {
 		return fmt.Errorf("failed to store configuration: %w", err)
 	}
 	syncCtx, cancel := context.WithTimeout(ctx, postEnrollInventorySyncTimeout)

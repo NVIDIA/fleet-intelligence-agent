@@ -34,7 +34,6 @@ import (
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/NVIDIA/fleet-intelligence-sdk/components"
@@ -61,6 +60,7 @@ import (
 	inventorysink "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/sink"
 	inventorysource "github.com/NVIDIA/fleet-intelligence-agent/internal/inventory/source"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/machineinfo"
+	"github.com/NVIDIA/fleet-intelligence-agent/internal/nodeidentity"
 	"github.com/NVIDIA/fleet-intelligence-agent/internal/registry"
 )
 
@@ -137,40 +137,23 @@ func initializeDatabases(ctx context.Context, cfg *config.Config) (*sql.DB, *sql
 	return dbRW, dbRO, nil
 }
 
+type dbNodeUUIDState struct {
+	dbRW *sql.DB
+	dbRO *sql.DB
+}
+
+func (s dbNodeUUIDState) GetOrCreateNodeUUID(ctx context.Context, create func() (string, error)) (string, bool, error) {
+	if err := pkgmetadata.CreateTableMetadata(ctx, s.dbRW); err != nil {
+		return "", false, fmt.Errorf("create metadata table: %w", err)
+	}
+	return agentstate.GetOrCreateNodeUUIDMetadata(ctx, s.dbRW, create)
+}
+
 // initializeMachineID retrieves or creates a machine ID
 // This establishes the agent's stable identity for metrics reporting.
-// Priority: DB (persisted) → dmidecode (hardware UUID) → random UUID
+// Priority: DB (persisted) → DMI product UUID → random UUID
 func initializeMachineID(ctx context.Context, dbRW, dbRO *sql.DB) (string, error) {
-	// Try to read existing machine ID from database
-	machineID, err := pkgmetadata.ReadMachineID(ctx, dbRO)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return "", fmt.Errorf("failed to read machine uid: %w", err)
-	}
-
-	// If no machine ID found in database, initialize a new one
-	if machineID == "" {
-		// First, try to get hardware UUID from dmidecode
-		machineID, err = pkghost.GetDmidecodeUUID(ctx)
-		if err != nil || machineID == "" {
-			// If dmidecode fails (permissions, not available, etc.), generate a random UUID
-			machineID = uuid.New().String()
-			log.Logger.Warnw("Failed to get hardware UUID, generated random agent ID",
-				"error", err,
-				"generated_id", machineID)
-		} else {
-			log.Logger.Infow("Initialized agent ID from hardware UUID", "machine_id", machineID)
-		}
-
-		// Store the machine ID in database for persistence
-		if err := pkgmetadata.SetMetadata(ctx, dbRW, pkgmetadata.MetadataKeyMachineID, machineID); err != nil {
-			return "", fmt.Errorf("failed to store machine ID in database: %w", err)
-		}
-		log.Logger.Infow("Persisted agent ID to database", "machine_id", machineID)
-	} else {
-		log.Logger.Infow("Using persisted agent ID from database", "machine_id", machineID)
-	}
-
-	return machineID, nil
+	return nodeidentity.EnsureNodeUUID(ctx, dbNodeUUIDState{dbRW: dbRW, dbRO: dbRO})
 }
 
 // getHealthCheckInterval determines the health check interval from config
