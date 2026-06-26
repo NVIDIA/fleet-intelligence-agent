@@ -119,8 +119,7 @@ func (s *sqliteState) GetOrCreateNodeUUID(ctx context.Context, create func() (st
 	}
 	defer db.Close()
 
-	stateFile, err := s.stateFileFn()
-	if err == nil {
+	if stateFile, err := s.stateFileFn(); err == nil {
 		if err := config.SecureStateFilePermissions(stateFile); err != nil {
 			return "", false, fmt.Errorf("secure state file permissions: %w", err)
 		}
@@ -254,8 +253,7 @@ func (s *sqliteState) setMetadata(ctx context.Context, key, value string) error 
 	}
 	defer db.Close()
 
-	stateFile, err := s.stateFileFn()
-	if err == nil {
+	if stateFile, err := s.stateFileFn(); err == nil {
 		if err := config.SecureStateFilePermissions(stateFile); err != nil {
 			return fmt.Errorf("secure state file permissions: %w", err)
 		}
