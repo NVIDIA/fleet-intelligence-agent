@@ -120,6 +120,44 @@ func TestSQLiteStateMissingValue(t *testing.T) {
 	require.Empty(t, value)
 }
 
+func TestSQLiteStateGetOrCreateNodeUUID(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	state := newTestSQLiteState(t)
+
+	value, created, err := state.GetOrCreateNodeUUID(ctx, func() (string, error) {
+		return "node-created", nil
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+	require.Equal(t, "node-created", value)
+
+	value, created, err = state.GetOrCreateNodeUUID(ctx, func() (string, error) {
+		t.Fatal("create should not run when node UUID is already persisted")
+		return "", nil
+	})
+	require.NoError(t, err)
+	require.False(t, created)
+	require.Equal(t, "node-created", value)
+
+	emptyRowState := newTestSQLiteState(t)
+	err = emptyRowState.SetNodeUUID(ctx, "")
+	require.NoError(t, err)
+
+	value, created, err = emptyRowState.GetOrCreateNodeUUID(ctx, func() (string, error) {
+		return "node-repaired", nil
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+	require.Equal(t, "node-repaired", value)
+
+	value, ok, err := emptyRowState.GetNodeUUID(ctx)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "node-repaired", value)
+}
+
 func TestSQLiteStateMissingMetadataTableIsTreatedAsAbsent(t *testing.T) {
 	t.Parallel()
 

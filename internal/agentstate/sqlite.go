@@ -112,6 +112,85 @@ func (s *sqliteState) SetNodeUUID(ctx context.Context, value string) error {
 	return s.setMetadata(ctx, pkgmetadata.MetadataKeyMachineID, value)
 }
 
+func (s *sqliteState) GetOrCreateNodeUUID(ctx context.Context, create func() (string, error)) (string, bool, error) {
+	db, err := s.openReadWrite()
+	if err != nil {
+		return "", false, err
+	}
+	defer db.Close()
+
+	if stateFile, err := s.stateFileFn(); err == nil {
+		if err := config.SecureStateFilePermissions(stateFile); err != nil {
+			return "", false, fmt.Errorf("secure state file permissions: %w", err)
+		}
+	}
+	if err := pkgmetadata.CreateTableMetadata(ctx, db); err != nil {
+		return "", false, fmt.Errorf("create metadata table: %w", err)
+	}
+
+	return GetOrCreateNodeUUIDMetadata(ctx, db, create)
+}
+
+// GetOrCreateNodeUUIDMetadata atomically returns the committed node UUID
+// metadata value, creating it when missing or repairing an empty value.
+func GetOrCreateNodeUUIDMetadata(ctx context.Context, db *sql.DB, create func() (string, error)) (string, bool, error) {
+	if create == nil {
+		return "", false, fmt.Errorf("node UUID create function is required")
+	}
+
+	existing, ok, err := readNodeUUIDDB(ctx, db)
+	if err != nil {
+		return "", false, err
+	} else if ok {
+		return existing, false, nil
+	}
+
+	candidate, err := create()
+	if err != nil {
+		return "", false, err
+	}
+	if candidate == "" {
+		return "", false, fmt.Errorf("created node UUID is empty")
+	}
+	if _, err := db.ExecContext(ctx, `
+INSERT INTO gpud_metadata (key, value) VALUES (?, ?)
+ON CONFLICT(key) DO UPDATE SET value = excluded.value
+WHERE gpud_metadata.value = ''`,
+		pkgmetadata.MetadataKeyMachineID,
+		candidate,
+	); err != nil {
+		return "", false, fmt.Errorf("insert node UUID metadata: %w", err)
+	}
+
+	committed, ok, err := readNodeUUIDDB(ctx, db)
+	if err != nil {
+		return "", false, err
+	} else if !ok {
+		return "", false, fmt.Errorf("node UUID metadata was not committed")
+	} else if committed == "" {
+		return "", false, fmt.Errorf("node UUID metadata is empty")
+	}
+	return committed, committed == candidate, nil
+}
+
+func readNodeUUIDDB(ctx context.Context, db *sql.DB) (string, bool, error) {
+	var value string
+	err := db.QueryRowContext(ctx, `
+SELECT value FROM gpud_metadata WHERE key = ?`,
+		pkgmetadata.MetadataKeyMachineID,
+	).Scan(&value)
+	switch {
+	case err == nil && value != "":
+		return value, true, nil
+	case err == nil:
+		return "", false, nil
+	case errors.Is(err, sql.ErrNoRows):
+		return "", false, nil
+	default:
+		return "", false, fmt.Errorf("read node UUID metadata: %w", err)
+	}
+}
+
 func (s *sqliteState) GetNodeGroup(ctx context.Context) (string, bool, error) {
 	return s.getMetadata(ctx, MetadataKeyNodeGroup)
 }
@@ -174,8 +253,7 @@ func (s *sqliteState) setMetadata(ctx context.Context, key, value string) error 
 	}
 	defer db.Close()
 
-	stateFile, err := s.stateFileFn()
-	if err == nil {
+	if stateFile, err := s.stateFileFn(); err == nil {
 		if err := config.SecureStateFilePermissions(stateFile); err != nil {
 			return fmt.Errorf("secure state file permissions: %w", err)
 		}
