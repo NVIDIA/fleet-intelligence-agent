@@ -92,7 +92,6 @@ func (c *cliEvidenceCollector) Collect(ctx context.Context, nonce string) (*SDKR
 		fields = append(fields, "exit_error", err)
 	}
 	log.Logger.Infow("nvattest completed", fields...)
-	log.Logger.Infow("nvattest response", "response", response)
 	return &response, nil
 }
 
