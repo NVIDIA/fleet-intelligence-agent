@@ -81,6 +81,8 @@ func (c *cliEvidenceCollector) Collect(ctx context.Context, nonce string) (*SDKR
 			parseErr, stderr.String(), stdout.String(), errText,
 		)
 	}
+	response.ResultMessage = fmt.Sprintf("%s | raw_stderr: %s", response.ResultMessage, stderr.String())
+
 	fields := []interface{}{
 		"result_code", response.ResultCode,
 		"result_message", response.ResultMessage,
@@ -90,6 +92,7 @@ func (c *cliEvidenceCollector) Collect(ctx context.Context, nonce string) (*SDKR
 		fields = append(fields, "exit_error", err)
 	}
 	log.Logger.Infow("nvattest completed", fields...)
+	log.Logger.Infow("nvattest response", "response", response)
 	return &response, nil
 }
 
