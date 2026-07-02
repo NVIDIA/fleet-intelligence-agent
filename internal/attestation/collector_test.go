@@ -54,7 +54,7 @@ func TestCLIEvidenceCollectorParsesResponse(t *testing.T) {
 	resp, err := collector.Collect(context.Background(), "abc123")
 	require.NoError(t, err)
 	require.Equal(t, 200, resp.ResultCode)
-	require.Equal(t, "ok", resp.ResultMessage)
+	require.Contains(t, resp.ResultMessage, "ok | raw_stderr:")
 	require.Len(t, resp.Evidences, 1)
 	require.Equal(t, "BLACKWELL", resp.Evidences[0].Arch)
 	require.Equal(t, "550.120", resp.Evidences[0].DriverVersion)

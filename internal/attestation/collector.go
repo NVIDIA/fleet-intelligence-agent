@@ -81,6 +81,8 @@ func (c *cliEvidenceCollector) Collect(ctx context.Context, nonce string) (*SDKR
 			parseErr, stderr.String(), stdout.String(), errText,
 		)
 	}
+	response.ResultMessage = fmt.Sprintf("%s | raw_stderr: %s", response.ResultMessage, stderr.String())
+
 	fields := []interface{}{
 		"result_code", response.ResultCode,
 		"result_message", response.ResultMessage,
