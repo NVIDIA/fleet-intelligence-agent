@@ -16,8 +16,9 @@
 package dcgm
 
 import (
-	"errors"
 	"fmt"
+	"slices"
+	"sync"
 
 	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 
@@ -25,8 +26,9 @@ import (
 )
 
 // DeviceInfo stores cached GPU identity and inventory information.
-// A connected instance populates it with one batched live field query and
-// refreshes it whenever the reconnecting instance establishes a new session.
+// A connected instance populates it with a batched live field query. Failed
+// enrichment is retried during field-cache polling for that session's fixed
+// device membership.
 type DeviceInfo struct {
 	ID                     uint
 	UUID                   string
@@ -66,16 +68,94 @@ var deviceInventoryFields = []dcgm.Short{
 var getSupportedDevicesForInventory = dcgm.GetSupportedDevices
 var getLatestInventoryValues = dcgm.EntitiesGetLatestValues
 
-var errDeviceEnumeration = errors.New("enumerate supported DCGM devices")
+type deviceInventoryEnricher interface {
+	enrichDeviceInventoryIfIncomplete() error
+}
+
+// deviceInventory owns the fixed GPU membership and its best-known inventory
+// data. Membership is established once when the DCGM session is created;
+// incomplete identity fields can then be retried without re-enumerating GPUs.
+type deviceInventory struct {
+	refreshMu sync.Mutex
+	mu        sync.RWMutex
+	devices   []DeviceInfo
+	complete  bool
+}
+
+func newDeviceInventory(devices []DeviceInfo, complete bool) *deviceInventory {
+	return &deviceInventory{
+		devices:  slices.Clone(devices),
+		complete: complete,
+	}
+}
+
+func (inventory *deviceInventory) snapshot() []DeviceInfo {
+	if inventory == nil {
+		return nil
+	}
+
+	inventory.mu.RLock()
+	defer inventory.mu.RUnlock()
+	return slices.Clone(inventory.devices)
+}
+
+// enrichIfIncomplete retries inventory fields for the membership established
+// at session creation. Once a complete snapshot is available, inventory fields
+// are static enough that subsequent collection cycles can skip the live query.
+func (inventory *deviceInventory) enrichIfIncomplete() error {
+	if inventory == nil {
+		return nil
+	}
+
+	// Poll can be called manually while its background loop is active. Allow
+	// only one live inventory query at a time.
+	inventory.refreshMu.Lock()
+	defer inventory.refreshMu.Unlock()
+
+	inventory.mu.RLock()
+	if inventory.complete {
+		inventory.mu.RUnlock()
+		return nil
+	}
+	deviceIDs := make([]uint, 0, len(inventory.devices))
+	for _, device := range inventory.devices {
+		deviceIDs = append(deviceIDs, device.ID)
+	}
+	inventory.mu.RUnlock()
+
+	devices, complete, err := queryDeviceInventoryFields(deviceIDs)
+	if err != nil {
+		return err
+	}
+	if !complete {
+		return nil
+	}
+
+	inventory.mu.Lock()
+	if !inventory.complete {
+		inventory.devices = slices.Clone(devices)
+		inventory.complete = true
+	}
+	inventory.mu.Unlock()
+	return nil
+}
 
 // queryDeviceInventory enumerates supported GPUs and reads all inventory
 // fields in one request. No DCGM group, field group, or watch is required.
 func queryDeviceInventory() ([]DeviceInfo, bool, error) {
-	deviceIDs, err := getSupportedDevicesForInventory()
+	deviceIDs, err := enumerateDeviceInventory()
 	if err != nil {
-		return nil, false, fmt.Errorf("%w: %w", errDeviceEnumeration, err)
+		return nil, false, err
 	}
 	return queryDeviceInventoryFields(deviceIDs)
+}
+
+func enumerateDeviceInventory() ([]uint, error) {
+	deviceIDs, err := getSupportedDevicesForInventory()
+	if err != nil {
+		return nil, fmt.Errorf("enumerate supported DCGM devices: %w", err)
+	}
+	return deviceIDs, nil
 }
 
 // queryDeviceInventoryFields enriches a fixed set of enumerated device IDs.

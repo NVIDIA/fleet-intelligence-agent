@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -161,10 +160,6 @@ type reconnectCallbackRegistrar interface {
 	RegisterReconnectCallback(callback func())
 }
 
-type deviceInventoryEnrichmentRetrier interface {
-	retryDeviceInventoryEnrichment() error
-}
-
 var newInstanceFunc = newInitializedInstance
 
 // New creates a DCGM instance. It returns a no-op instance when a complete
@@ -294,12 +289,21 @@ func newConnectedInstance(groupName string) (Instance, error) {
 
 	log.Logger.Debugw("DCGM initialized successfully")
 
-	// Build the initial inventory before creating session resources. An
-	// enumeration error invalidates this candidate session so a reconnecting
-	// caller can retry the complete initialization instead of publishing an
-	// empty, but apparently connected, inventory.
-	devices, inventoryComplete, inventoryErr := queryDeviceInventory()
-	if errors.Is(inventoryErr, errDeviceEnumeration) {
+	// GPU membership is required session state. If enumeration fails, reject
+	// this candidate so the reconnect loop retries complete initialization
+	// instead of publishing an apparently connected session with no GPUs.
+	deviceIDs, err := enumerateDeviceInventory()
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, err
+	}
+
+	devices, inventoryComplete, inventoryErr := queryDeviceInventoryFields(deviceIDs)
+	if IsRestartRequired(inventoryErr) {
+		// The live query proved that this candidate session is unusable. Let the
+		// reconnect loop build a fresh session instead of publishing this one.
 		if cleanup != nil {
 			cleanup()
 		}
@@ -319,7 +323,7 @@ func newConnectedInstance(groupName string) (Instance, error) {
 
 	if inventoryErr != nil {
 		// Enumeration succeeded, so retain the ID-only devices for presence
-		// checks and retry inventory enrichment in the background.
+		// checks and retry inventory enrichment during field-cache polling.
 		log.Logger.Warnw("DCGM device inventory is incomplete; will retry", "error", inventoryErr)
 	} else if !inventoryComplete {
 		log.Logger.Warnw("DCGM device inventory has retryable field failures; will retry")
@@ -327,11 +331,10 @@ func newConnectedInstance(groupName string) (Instance, error) {
 	log.Logger.Infow("cached device information", "numDevices", len(devices))
 
 	connectedInst := &instance{
-		dcgmExists:        true,
-		groupHandle:       groupHandle,
-		cleanup:           cleanup,
-		devices:           devices,
-		inventoryEnriched: inventoryComplete,
+		dcgmExists:  true,
+		groupHandle: groupHandle,
+		cleanup:     cleanup,
+		inventory:   newDeviceInventory(devices, inventoryComplete),
 	}
 
 	return connectedInst, nil
@@ -350,9 +353,7 @@ type instance struct {
 	groupHandle dcgm.GroupHandle
 	cleanup     func()
 
-	devicesMu         sync.RWMutex
-	devices           []DeviceInfo
-	inventoryEnriched bool
+	inventory *deviceInventory
 
 	// Health watch tracking
 	watchedSystemsMu sync.Mutex
@@ -379,40 +380,11 @@ func (inst *instance) GetGroupHandle() dcgm.GroupHandle {
 }
 
 func (inst *instance) GetDevices() []DeviceInfo {
-	inst.devicesMu.RLock()
-	defer inst.devicesMu.RUnlock()
-	return slices.Clone(inst.devices)
+	return inst.inventory.snapshot()
 }
 
-// retryDeviceInventoryEnrichment retries identity fields for the device IDs
-// established at initialization. It never re-enumerates or changes membership.
-func (inst *instance) retryDeviceInventoryEnrichment() error {
-	inst.devicesMu.RLock()
-	if inst.inventoryEnriched {
-		inst.devicesMu.RUnlock()
-		return nil
-	}
-	deviceIDs := make([]uint, 0, len(inst.devices))
-	for _, device := range inst.devices {
-		deviceIDs = append(deviceIDs, device.ID)
-	}
-	inst.devicesMu.RUnlock()
-
-	devices, complete, err := queryDeviceInventoryFields(deviceIDs)
-	if err != nil {
-		return err
-	}
-	if !complete {
-		return nil
-	}
-
-	inst.devicesMu.Lock()
-	if !inst.inventoryEnriched {
-		inst.devices = slices.Clone(devices)
-		inst.inventoryEnriched = true
-	}
-	inst.devicesMu.Unlock()
-	return nil
+func (inst *instance) enrichDeviceInventoryIfIncomplete() error {
+	return inst.inventory.enrichIfIncomplete()
 }
 
 func (inst *instance) AddHealthWatch(system dcgm.HealthSystem) error {
@@ -656,9 +628,6 @@ func (inst *reconnectingInstance) reconnectLoop() {
 			return
 		case <-ticker.C:
 			if inst.DCGMExists() {
-				if err := inst.retryDeviceInventoryEnrichment(); err != nil {
-					log.Logger.Warnw("DCGM device inventory enrichment retry failed", "error", err)
-				}
 				continue
 			}
 			if err := inst.reconnectNow(); err != nil {
@@ -679,7 +648,7 @@ func (inst *reconnectingInstance) reconnectLoop() {
 	}
 }
 
-func (inst *reconnectingInstance) retryDeviceInventoryEnrichment() error {
+func (inst *reconnectingInstance) enrichDeviceInventoryIfIncomplete() error {
 	inst.currentMu.RLock()
 	defer inst.currentMu.RUnlock()
 
@@ -687,8 +656,8 @@ func (inst *reconnectingInstance) retryDeviceInventoryEnrichment() error {
 	if currentInst == nil || !currentInst.DCGMExists() {
 		return nil
 	}
-	if retrier, ok := currentInst.(deviceInventoryEnrichmentRetrier); ok {
-		return retrier.retryDeviceInventoryEnrichment()
+	if enricher, ok := currentInst.(deviceInventoryEnricher); ok {
+		return enricher.enrichDeviceInventoryIfIncomplete()
 	}
 	return nil
 }

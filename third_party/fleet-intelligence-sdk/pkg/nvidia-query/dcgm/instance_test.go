@@ -18,6 +18,7 @@ package dcgm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"testing"
@@ -137,6 +138,45 @@ func TestNewConnectedInstanceFailsWhenDeviceEnumerationFails(t *testing.T) {
 	}
 }
 
+func TestNewConnectedInstanceRejectsRestartRequiredInventoryError(t *testing.T) {
+	originalDCGMInitFunc := dcgmInitFunc
+	originalDCGMNewDefaultGroupFunc := dcgmNewDefaultGroupFunc
+	originalGetSupportedDevices := getSupportedDevicesForInventory
+	originalGetLatestValues := getLatestInventoryValues
+	t.Cleanup(func() {
+		dcgmInitFunc = originalDCGMInitFunc
+		dcgmNewDefaultGroupFunc = originalDCGMNewDefaultGroupFunc
+		getSupportedDevicesForInventory = originalGetSupportedDevices
+		getLatestInventoryValues = originalGetLatestValues
+	})
+
+	cleanupCalled := false
+	dcgmInitFunc = func(_ dcgmInitParams) (func(), error) {
+		return func() { cleanupCalled = true }, nil
+	}
+	getSupportedDevicesForInventory = func() ([]uint, error) {
+		return []uint{3}, nil
+	}
+	getLatestInventoryValues = func([]dcgm.GroupEntityPair, []dcgm.Short, uint) ([]dcgm.FieldValue_v2, error) {
+		return nil, fmt.Errorf("inventory query failed with error code %d", dcgm.DCGM_ST_CONNECTION_NOT_VALID)
+	}
+	dcgmNewDefaultGroupFunc = func(string) (dcgm.GroupHandle, error) {
+		t.Fatal("DCGM group created for an unusable candidate session")
+		return dcgm.GroupHandle{}, nil
+	}
+
+	inst, err := newConnectedInstance("inventory-session-failure")
+	if !IsRestartRequired(err) {
+		t.Fatalf("newConnectedInstance() error = %v, want restart-required error", err)
+	}
+	if inst != nil {
+		t.Fatalf("newConnectedInstance() = %v, want nil", inst)
+	}
+	if !cleanupCalled {
+		t.Fatal("expected DCGM cleanup after restart-required inventory failure")
+	}
+}
+
 func TestNewInitializedInstanceReturnsNoOpOnDeviceEnumerationFailure(t *testing.T) {
 	originalNewConnectedInstanceFunc := newConnectedInstanceFunc
 	t.Cleanup(func() {
@@ -145,7 +185,7 @@ func TestNewInitializedInstanceReturnsNoOpOnDeviceEnumerationFailure(t *testing.
 
 	expectedErr := errors.New("enumeration failed")
 	newConnectedInstanceFunc = func() (Instance, error) {
-		return nil, errors.Join(errDeviceEnumeration, expectedErr)
+		return nil, expectedErr
 	}
 
 	inst, err := newInitializedInstance()
@@ -165,7 +205,7 @@ func TestNewInitializedInstanceWithGroupNameReturnsNoOpOnDeviceEnumerationFailur
 
 	expectedErr := errors.New("enumeration failed")
 	newConnectedInstanceWithGroupNameFunc = func(string) (Instance, error) {
-		return nil, errors.Join(errDeviceEnumeration, expectedErr)
+		return nil, expectedErr
 	}
 
 	inst, err := newInitializedInstanceWithGroupName("inventory-enumeration-failure")
@@ -177,7 +217,7 @@ func TestNewInitializedInstanceWithGroupNameReturnsNoOpOnDeviceEnumerationFailur
 	}
 }
 
-func TestInstanceRetriesOnlyIncompleteDeviceInventory(t *testing.T) {
+func TestFieldValueCacheRetriesOnlyIncompleteDeviceInventory(t *testing.T) {
 	originalGetSupportedDevices := getSupportedDevicesForInventory
 	originalGetLatestValues := getLatestInventoryValues
 	t.Cleanup(func() {
@@ -213,15 +253,15 @@ func TestInstanceRetriesOnlyIncompleteDeviceInventory(t *testing.T) {
 	}
 
 	inst := &instance{
-		dcgmExists:        true,
-		devices:           devices,
-		inventoryEnriched: complete,
+		dcgmExists: true,
+		inventory:  newDeviceInventory(devices, complete),
 	}
-	if err := inst.retryDeviceInventoryEnrichment(); err != nil {
-		t.Fatalf("first retryDeviceInventoryEnrichment() error = %v", err)
+	fieldCache := NewFieldValueCache(context.Background(), inst, time.Second)
+	if err := fieldCache.Poll(); err != nil {
+		t.Fatalf("first Poll() error = %v", err)
 	}
-	if err := inst.retryDeviceInventoryEnrichment(); err != nil {
-		t.Fatalf("second retryDeviceInventoryEnrichment() error = %v", err)
+	if err := fieldCache.Poll(); err != nil {
+		t.Fatalf("second Poll() error = %v", err)
 	}
 	if queryCount != 2 {
 		t.Fatalf("inventory query count = %d, want 2", queryCount)
@@ -251,9 +291,12 @@ func TestInstanceRetainsPartialInventoryWhenRetryFails(t *testing.T) {
 	}
 
 	want := []DeviceInfo{{ID: 3, MinorNumber: -1}}
-	inst := &instance{dcgmExists: true, devices: slices.Clone(want)}
-	if err := inst.retryDeviceInventoryEnrichment(); !errors.Is(err, expectedErr) {
-		t.Fatalf("retryDeviceInventoryEnrichment() error = %v, want %v", err, expectedErr)
+	inst := &instance{
+		dcgmExists: true,
+		inventory:  newDeviceInventory(want, false),
+	}
+	if err := inst.enrichDeviceInventoryIfIncomplete(); !errors.Is(err, expectedErr) {
+		t.Fatalf("enrichDeviceInventoryIfIncomplete() error = %v, want %v", err, expectedErr)
 	}
 	if got := inst.GetDevices(); !slices.Equal(got, want) {
 		t.Fatalf("GetDevices() = %+v, want retained inventory %+v", got, want)
@@ -427,7 +470,7 @@ func TestReconnectingInstanceRetriesDeviceEnumerationFailure(t *testing.T) {
 	newConnectedInstanceFunc = func() (Instance, error) {
 		attempts++
 		if attempts == 1 {
-			return nil, errors.Join(errDeviceEnumeration, expectedErr)
+			return nil, expectedErr
 		}
 		return connected, nil
 	}
