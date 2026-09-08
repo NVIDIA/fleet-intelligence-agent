@@ -50,6 +50,7 @@ import (
 	pkgmetricssyncer "github.com/NVIDIA/fleet-intelligence-sdk/pkg/metrics/syncer"
 	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
 	nvidianvml "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/nvml"
+	nvidiapci "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia/pci"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/sqlite"
 
 	"github.com/dsx-ai-factory/fleet-intelligence-agent/internal/agentstate"
@@ -284,6 +285,19 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 	if err != nil {
 		return nil, fmt.Errorf("failed to create DCGM instance: %w", err)
 	}
+	// If DCGM returns no devices, use PCI to detect hardware presence.
+	// DCGM remains authoritative for device inventory and watch membership.
+	gpuHardwarePresent := len(dcgmInstance.GetDevices()) > 0
+	if !gpuHardwarePresent {
+		detectionCtx, detectionCancel := context.WithTimeout(ctx, 5*time.Second)
+		detected, detectionErr := nvidiapci.DetectGPUHardware(detectionCtx)
+		detectionCancel()
+		if detectionErr != nil {
+			log.Logger.Warnw("failed to detect NVIDIA GPU hardware independently of DCGM", "error", detectionErr)
+		} else {
+			gpuHardwarePresent = detected
+		}
+	}
 
 	// Create event store needed for health exporter
 	log.Logger.Infow("initializing event store", "retention", config.RetentionPeriod.Duration)
@@ -320,6 +334,7 @@ func New(ctx context.Context, auditLogger log.AuditLogger, config *config.Config
 		DCGMFieldValueCache:  dcgmFieldValueCache,
 		DCGMGroupNames:       dcgmGroupNames,
 		NVIDIAToolOverwrites: config.NvidiaToolOverwrites,
+		GPUHardwarePresent:   gpuHardwarePresent,
 		DBRW:                 dbRW,
 		DBRO:                 dbRO,
 		EventStore:           eventStore,

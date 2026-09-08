@@ -41,6 +41,9 @@ type GPUdInstance struct {
 	DCGMGroupNames       DCGMGroupNames
 	NVMLInstance         nvidianvml.Instance
 	NVIDIAToolOverwrites nvidiacommon.ToolOverwrites
+	// GPUHardwarePresent is the startup hardware-presence result. DCGM inventory
+	// is checked first, with independent PCI detection used when it is empty.
+	GPUHardwarePresent bool
 
 	DBRW *sql.DB
 	DBRO *sql.DB
@@ -57,13 +60,11 @@ type GPUdInstance struct {
 	FailureInjector *FailureInjector
 }
 
-// GPUDeviceProvider supplies GPU inventory without exposing a
-// vendor-library-specific query interface to components. An empty inventory can
-// mean either that DCGM enumerated no GPUs or that DCGM is temporarily unavailable.
-// Components intentionally preserve the legacy provider-gating behavior and treat both as
-// no detected GPU while the DCGM instance reconnects in the background.
+// GPUDeviceProvider supplies GPU hardware presence and inventory without
+// exposing a vendor-library-specific query interface to components.
 type GPUDeviceProvider interface {
 	GPUDevices() []nvidiadcgm.DeviceInfo
+	GPUDetected() bool
 }
 
 // GPUDevices returns the current inventory exposed by the DCGM instance.
@@ -72,6 +73,11 @@ func (i *GPUdInstance) GPUDevices() []nvidiadcgm.DeviceInfo {
 		return nil
 	}
 	return i.DCGMInstance.GetDevices()
+}
+
+// GPUDetected combines the current DCGM inventory with the startup presence result.
+func (i *GPUdInstance) GPUDetected() bool {
+	return i != nil && (i.GPUHardwarePresent || len(i.GPUDevices()) > 0)
 }
 
 // DCGMGroupNames names the DCGM groups and field groups owned by one fleetint process.

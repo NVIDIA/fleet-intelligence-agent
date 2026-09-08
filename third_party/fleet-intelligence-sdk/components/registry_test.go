@@ -40,6 +40,29 @@ func TestGPUdInstanceGPUDevices(t *testing.T) {
 	})
 }
 
+func TestGPUDetected(t *testing.T) {
+	t.Run("DCGM inventory", func(t *testing.T) {
+		instance := &GPUdInstance{DCGMInstance: staticDCGMInstance{
+			Instance: nvidiadcgm.NewNoOp(),
+			devices:  []nvidiadcgm.DeviceInfo{{ID: 0}},
+		}}
+		assert.True(t, instance.GPUDetected())
+	})
+
+	t.Run("independent PCI detection", func(t *testing.T) {
+		instance := &GPUdInstance{
+			DCGMInstance:       nvidiadcgm.NewNoOp(),
+			GPUHardwarePresent: true,
+		}
+		assert.True(t, instance.GPUDetected())
+	})
+
+	t.Run("no detected GPU", func(t *testing.T) {
+		instance := &GPUdInstance{DCGMInstance: nvidiadcgm.NewNoOp()}
+		assert.False(t, instance.GPUDetected())
+	})
+}
+
 // mockComponent implements the Component interface for testing
 type mockComponent struct {
 	name string
