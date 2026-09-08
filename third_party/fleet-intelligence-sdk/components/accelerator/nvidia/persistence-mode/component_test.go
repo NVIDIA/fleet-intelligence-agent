@@ -20,10 +20,14 @@ import (
 )
 
 type testGPUProvider struct {
-	devices []nvidiadcgm.DeviceInfo
+	devices         []nvidiadcgm.DeviceInfo
+	hardwarePresent bool
 }
 
 func (p testGPUProvider) GPUDevices() []nvidiadcgm.DeviceInfo { return p.devices }
+func (p testGPUProvider) GPUDetected() bool {
+	return p.hardwarePresent || len(p.devices) > 0
+}
 
 func newTestComponent(devices []nvidiadcgm.DeviceInfo, modes []PersistenceMode, err error) *component {
 	return &component{
@@ -41,6 +45,15 @@ func TestCheckWithoutGPU(t *testing.T) {
 	result := newTestComponent(nil, nil, nil).Check().(*checkResult)
 	assert.Equal(t, apiv1.HealthStateTypeHealthy, result.health)
 	assert.Equal(t, "GPU is not detected by DCGM", result.reason)
+}
+
+func TestCheckWithHardwareButWithoutDCGMInventory(t *testing.T) {
+	comp := newTestComponent(nil, nil, nil)
+	comp.gpuProvider = testGPUProvider{hardwarePresent: true}
+
+	result := comp.Check().(*checkResult)
+	assert.Equal(t, apiv1.HealthStateTypeDegraded, result.health)
+	assert.Equal(t, "GPU hardware is detected, but DCGM inventory is unavailable", result.reason)
 }
 
 func TestCheckPersistenceModeDisabled(t *testing.T) {

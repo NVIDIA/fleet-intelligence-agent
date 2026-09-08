@@ -559,6 +559,7 @@ func (m *MockGPUProviderNoProduct) ProductName() string {
 }
 
 func (m *MockGPUProviderNoProduct) GPUDevices() []nvidiadcgm.DeviceInfo { return nil }
+func (m *MockGPUProviderNoProduct) GPUDetected() bool                   { return false }
 
 // MockGPUProviderWithProduct is a mock implementation that has exists=true and a valid product name
 type MockGPUProviderWithProduct struct {
@@ -900,6 +901,8 @@ func (m *MockGPUProvider) GPUDevices() []nvidiadcgm.DeviceInfo {
 	}
 	return []nvidiadcgm.DeviceInfo{{ID: 0, UUID: "GPU-test", Model: m.ProductName()}}
 }
+
+func (m *MockGPUProvider) GPUDetected() bool { return len(m.GPUDevices()) > 0 }
 
 func TestSXIDComponent_Start(t *testing.T) {
 	// Initialize component

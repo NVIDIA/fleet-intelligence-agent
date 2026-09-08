@@ -106,10 +106,7 @@ func (c *component) Tags() []string {
 }
 
 func (c *component) IsSupported() bool {
-	if c.gpuProvider == nil {
-		return false
-	}
-	return len(c.gpuProvider.GPUDevices()) > 0
+	return c.gpuProvider != nil && c.gpuProvider.GPUDetected()
 }
 
 func (c *component) Start() error {
@@ -166,6 +163,11 @@ func (c *component) Check() components.CheckResult {
 		devices = c.gpuProvider.GPUDevices()
 	}
 	if len(devices) == 0 {
+		if c.gpuProvider != nil && c.gpuProvider.GPUDetected() {
+			cr.health = apiv1.HealthStateTypeDegraded
+			cr.reason = "GPU hardware is detected, but DCGM inventory is unavailable"
+			return cr
+		}
 		cr.health = apiv1.HealthStateTypeHealthy
 		cr.reason = "GPU is not detected by DCGM"
 		return cr

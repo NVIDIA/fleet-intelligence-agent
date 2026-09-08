@@ -106,6 +106,8 @@ func (m *mockGPUProvider) GPUDevices() []nvidiadcgm.DeviceInfo {
 	return []nvidiadcgm.DeviceInfo{{ID: 0, UUID: "GPU-test", Model: product}}
 }
 
+func (m *mockGPUProvider) GPUDetected() bool { return len(m.GPUDevices()) > 0 }
+
 // TestCheck tests the Check method in various scenarios
 func TestCheck(t *testing.T) {
 	t.Parallel()

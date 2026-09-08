@@ -32,6 +32,8 @@ func (m *mockGPUProvider) GPUDevices() []nvidiadcgm.DeviceInfo {
 	return []nvidiadcgm.DeviceInfo{{ID: 0, UUID: "GPU-test", Model: "test"}}
 }
 
+func (m *mockGPUProvider) GPUDetected() bool { return len(m.GPUDevices()) > 0 }
+
 func (m *mockGPUProvider) GetDevices() []nvidiadcgm.DeviceInfo {
 	return m.GPUDevices()
 }

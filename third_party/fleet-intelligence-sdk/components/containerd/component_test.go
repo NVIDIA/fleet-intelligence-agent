@@ -38,6 +38,8 @@ func (m *mockGPUProvider) GPUDevices() []nvidiadcgm.DeviceInfo {
 	return []nvidiadcgm.DeviceInfo{{ID: 0, UUID: "GPU-test", Model: m.productName}}
 }
 
+func (m *mockGPUProvider) GPUDetected() bool { return len(m.GPUDevices()) > 0 }
+
 func Test_componentStart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &component{

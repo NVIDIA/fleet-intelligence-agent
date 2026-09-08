@@ -331,7 +331,7 @@ func (c *component) Check() components.CheckResult {
 	log.Logger.Debugw(cr.reason, "count", len(cr.Pods))
 
 	if c.gpuProvider != nil &&
-		len(c.gpuProvider.GPUDevices()) > 0 &&
+		c.gpuProvider.GPUDetected() &&
 		len(cr.Pods) > 0 &&
 		c.getContainerdConfigFunc != nil {
 

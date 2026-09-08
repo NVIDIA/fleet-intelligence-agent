@@ -492,6 +492,8 @@ func (m *mockGPUProvider) GPUDevices() []nvidiadcgm.DeviceInfo {
 	return []nvidiadcgm.DeviceInfo{{ID: 0, UUID: "GPU-test", Model: m.productName}}
 }
 
+func (m *mockGPUProvider) GPUDetected() bool { return len(m.GPUDevices()) > 0 }
+
 func mockGetThresholds() types.ExpectedPortStates {
 	return types.ExpectedPortStates{
 		AtLeastPorts: 1,

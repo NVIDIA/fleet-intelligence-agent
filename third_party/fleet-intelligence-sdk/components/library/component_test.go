@@ -18,10 +18,14 @@ import (
 )
 
 type testGPUProvider struct {
-	devices []nvidiadcgm.DeviceInfo
+	devices         []nvidiadcgm.DeviceInfo
+	hardwarePresent bool
 }
 
 func (p *testGPUProvider) GPUDevices() []nvidiadcgm.DeviceInfo { return p.devices }
+func (p *testGPUProvider) GPUDetected() bool {
+	return p.hardwarePresent || len(p.devices) > 0
+}
 
 // createTestComponent creates a test component with the given options
 func createTestComponent() *component {
@@ -115,6 +119,19 @@ func TestCheckStartsCheckingLibrariesAfterDCGMReconnect(t *testing.T) {
 	result = comp.Check()
 	assert.Equal(t, apiv1.HealthStateTypeUnhealthy, result.HealthStateType())
 	assert.Contains(t, result.Summary(), "libcuda.so")
+}
+
+func TestCheckUsesIndependentGPUDetection(t *testing.T) {
+	comp := createTestComponent()
+	comp.gpuProvider = &testGPUProvider{hardwarePresent: true}
+	comp.libraries = map[string][]string{"libcuda.so": {"libcuda.so.1"}}
+	comp.findLibrary = func(string, ...file.OpOption) (string, error) {
+		return "/usr/lib/libcuda.so.1", nil
+	}
+
+	result := comp.Check()
+	assert.Equal(t, apiv1.HealthStateTypeHealthy, result.HealthStateType())
+	assert.Equal(t, "all libraries exist", result.Summary())
 }
 
 func TestEvents(t *testing.T) {

@@ -962,6 +962,8 @@ func (m *mockGPUProvider) GPUDevices() []nvidiadcgm.DeviceInfo {
 	return devices
 }
 
+func (m *mockGPUProvider) GPUDetected() bool { return len(m.GPUDevices()) > 0 }
+
 func (m *mockGPUProvider) GetDevices() []nvidiadcgm.DeviceInfo {
 	return m.GPUDevices()
 }
