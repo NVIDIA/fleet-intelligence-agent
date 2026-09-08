@@ -33,6 +33,7 @@ import (
 	pkghost "github.com/NVIDIA/fleet-intelligence-sdk/pkg/host"
 	"github.com/NVIDIA/fleet-intelligence-sdk/pkg/log"
 	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
+	nvidiapci "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia/pci"
 	nvidiaproduct "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia/product"
 
 	"github.com/dsx-ai-factory/fleet-intelligence-agent/internal/cmdutil"
@@ -142,11 +143,25 @@ func Scan(ctx context.Context, opts ...Option) error {
 	// Field watching will be set up after components register their fields
 	// Note: CPU component manages its own field watching separately
 	dcgmFieldValueCache = nvidiadcgm.NewFieldValueCache(ctx, dcgmInstance, time.Minute)
-	if devices := dcgmInstance.GetDevices(); len(devices) > 0 {
+	devices := dcgmInstance.GetDevices()
+	if len(devices) > 0 {
 		product := nvidiaproduct.SanitizeProductName(devices[0].Model)
 		if threshold, err := nvidiainfiniband.SupportsInfinibandPortRate(product); err == nil {
 			log.Logger.Infow("setting default expected port states", "product", product, "at_least_ports", threshold.AtLeastPorts, "at_least_rate", threshold.AtLeastRate)
 			nvidiainfiniband.SetDefaultExpectedPortStates(threshold)
+		}
+	}
+	// If DCGM returns no devices, use PCI to detect hardware presence.
+	// DCGM remains authoritative for device inventory and watch membership.
+	gpuHardwarePresent := len(devices) > 0
+	if !gpuHardwarePresent {
+		detectionCtx, detectionCancel := context.WithTimeout(ctx, 5*time.Second)
+		detected, detectionErr := nvidiapci.DetectGPUHardware(detectionCtx)
+		detectionCancel()
+		if detectionErr != nil {
+			log.Logger.Warnw("failed to detect NVIDIA GPU hardware independently of DCGM", "error", detectionErr)
+		} else {
+			gpuHardwarePresent = detected
 		}
 	}
 
@@ -158,6 +173,7 @@ func Scan(ctx context.Context, opts ...Option) error {
 		DCGMHealthCache:     dcgmHealthCache,
 		DCGMFieldValueCache: dcgmFieldValueCache,
 		DCGMGroupNames:      dcgmGroupNames,
+		GPUHardwarePresent:  gpuHardwarePresent,
 		NVIDIAToolOverwrites: nvidiacommon.ToolOverwrites{
 			InfinibandClassRootDir: op.infinibandClassRootDir,
 		},

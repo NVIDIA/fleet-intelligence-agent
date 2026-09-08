@@ -239,7 +239,7 @@ func (g *globalHandler) machineInfo(c *gin.Context) {
 		"service":    "fleetint",
 	}
 
-	info["nvidia_available"] = len(g.gpudInstance.GPUDevices()) > 0
+	info["nvidia_available"] = g.gpudInstance.GPUDetected()
 
 	c.JSON(http.StatusOK, info)
 }
