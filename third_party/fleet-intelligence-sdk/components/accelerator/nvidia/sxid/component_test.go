@@ -501,7 +501,7 @@ func TestSXIDComponent_Check_NoNVML(t *testing.T) {
 	data, ok := result.(*checkResult)
 	assert.True(t, ok, "Result should be of type *checkResult")
 	assert.Equal(t, apiv1.HealthStateTypeHealthy, data.health)
-	assert.Contains(t, data.reason, "GPU is not detected by DCGM")
+	assert.Contains(t, data.reason, "GPU is not detected")
 }
 
 func TestSXIDComponent_Close(t *testing.T) {

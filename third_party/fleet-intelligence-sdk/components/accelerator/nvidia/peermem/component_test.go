@@ -228,7 +228,7 @@ func TestCheckWithNoNVML(t *testing.T) {
 
 	result := c.Check()
 	assert.Equal(t, apiv1.HealthStateTypeHealthy, result.HealthStateType())
-	assert.Contains(t, result.Summary(), "GPU is not detected by DCGM")
+	assert.Contains(t, result.Summary(), "GPU is not detected")
 }
 
 func TestCheckWithNVML(t *testing.T) {

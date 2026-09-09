@@ -54,7 +54,7 @@ func TestComponentCheck(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, data)
 	assert.Equal(t, apiv1.HealthStateTypeHealthy, data.health)
-	assert.Equal(t, "GPU is not detected by DCGM", data.reason)
+	assert.Equal(t, "GPU is not detected", data.reason)
 
 	// Case 2: With NVML but missing product name
 	nvmlMock := &mockGPUProvider{exists: true, productName: ""}
@@ -64,7 +64,7 @@ func TestComponentCheck(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, data)
 	assert.Equal(t, apiv1.HealthStateTypeHealthy, data.health)
-	assert.Equal(t, "GPU is not detected by DCGM", data.reason)
+	assert.Equal(t, "GPU is not detected", data.reason)
 
 	// Case 3: With NVML and valid product name but zero threshold
 	nvmlMock.productName = "Tesla V100"

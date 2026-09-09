@@ -44,7 +44,7 @@ func newTestComponent(devices []nvidiadcgm.DeviceInfo, modes []PersistenceMode, 
 func TestCheckWithoutGPU(t *testing.T) {
 	result := newTestComponent(nil, nil, nil).Check().(*checkResult)
 	assert.Equal(t, apiv1.HealthStateTypeHealthy, result.health)
-	assert.Equal(t, "GPU is not detected by DCGM", result.reason)
+	assert.Equal(t, "GPU is not detected", result.reason)
 }
 
 func TestCheckWithHardwareButWithoutDCGMInventory(t *testing.T) {

@@ -113,7 +113,7 @@ func TestCheckStartsCheckingLibrariesAfterDCGMReconnect(t *testing.T) {
 
 	result := comp.Check()
 	assert.Equal(t, apiv1.HealthStateTypeHealthy, result.HealthStateType())
-	assert.Equal(t, "GPU is not detected by DCGM", result.Summary())
+	assert.Equal(t, "GPU is not detected", result.Summary())
 
 	provider.devices = []nvidiadcgm.DeviceInfo{{ID: 0, UUID: "GPU-0"}}
 	result = comp.Check()

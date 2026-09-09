@@ -189,8 +189,9 @@ func deviceByBusID(busID string, devices map[string]nvidiadcgm.DeviceInfo) (stri
 }
 
 // normalizePCIBusID returns domain:bus:device with an eight-digit domain.
-// The function is intentionally omitted because kernel XID messages do not
-// include it, while DCGM device inventory commonly reports it as ".0".
+// The PCI function number is intentionally omitted so kernel XID bus IDs such
+// as "PCI:0000:04:00" match DCGM inventory bus IDs such as
+// "00000000:04:00.0"; both normalize to "00000000:04:00".
 func normalizePCIBusID(busID string) (string, bool) {
 	busID = strings.ToLower(strings.TrimSpace(busID))
 	busID = strings.TrimPrefix(busID, "pci:")

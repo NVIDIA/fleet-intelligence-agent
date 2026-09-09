@@ -169,7 +169,7 @@ func (c *component) Check() components.CheckResult {
 			return cr
 		}
 		cr.health = apiv1.HealthStateTypeHealthy
-		cr.reason = "GPU is not detected by DCGM"
+		cr.reason = "GPU is not detected"
 		return cr
 	}
 

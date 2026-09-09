@@ -119,7 +119,7 @@ func TestCheck(t *testing.T) {
 		result := comp.Check()
 		assert.NotNil(t, result)
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, result.HealthStateType())
-		assert.Contains(t, result.Summary(), "GPU is not detected by DCGM")
+		assert.Contains(t, result.Summary(), "GPU is not detected")
 	})
 
 	t.Run("nvml exists but no product name", func(t *testing.T) {
@@ -133,7 +133,7 @@ func TestCheck(t *testing.T) {
 		result := comp.Check()
 		assert.NotNil(t, result)
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, result.HealthStateType())
-		assert.Contains(t, result.Summary(), "GPU is not detected by DCGM")
+		assert.Contains(t, result.Summary(), "GPU is not detected")
 	})
 
 	t.Run("nvml does not exist", func(t *testing.T) {
@@ -146,7 +146,7 @@ func TestCheck(t *testing.T) {
 		result := comp.Check()
 		assert.NotNil(t, result)
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, result.HealthStateType())
-		assert.Contains(t, result.Summary(), "GPU is not detected by DCGM")
+		assert.Contains(t, result.Summary(), "GPU is not detected")
 	})
 
 	t.Run("nil readAllKmsg", func(t *testing.T) {
@@ -512,7 +512,7 @@ func TestCheck_NVML_NotExists(t *testing.T) {
 	result := comp.Check()
 	assert.NotNil(t, result)
 	assert.Equal(t, apiv1.HealthStateTypeHealthy, result.HealthStateType())
-	assert.Contains(t, result.Summary(), "GPU is not detected by DCGM")
+	assert.Contains(t, result.Summary(), "GPU is not detected")
 }
 
 func TestCheck_NVML_NoProductName(t *testing.T) {
@@ -528,7 +528,7 @@ func TestCheck_NVML_NoProductName(t *testing.T) {
 	result := comp.Check()
 	assert.NotNil(t, result)
 	assert.Equal(t, apiv1.HealthStateTypeHealthy, result.HealthStateType())
-	assert.Contains(t, result.Summary(), "GPU is not detected by DCGM")
+	assert.Contains(t, result.Summary(), "GPU is not detected")
 }
 
 func TestNew(t *testing.T) {

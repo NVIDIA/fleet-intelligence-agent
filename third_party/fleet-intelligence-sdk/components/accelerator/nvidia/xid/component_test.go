@@ -503,7 +503,7 @@ func TestCheck(t *testing.T) {
 
 		result := comp.Check()
 		assert.Equal(t, apiv1.HealthStateTypeHealthy, result.HealthStateType())
-		assert.Contains(t, result.Summary(), "GPU is not detected by DCGM")
+		assert.Contains(t, result.Summary(), "GPU is not detected")
 	})
 
 	t.Run("with no kmsg reader", func(t *testing.T) {

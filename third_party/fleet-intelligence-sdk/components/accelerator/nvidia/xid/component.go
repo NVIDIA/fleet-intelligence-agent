@@ -218,7 +218,7 @@ func (c *component) Check() components.CheckResult {
 	devices := c.currentDevices()
 	if len(devices) == 0 && (c.gpuProvider == nil || !c.gpuProvider.GPUDetected()) {
 		cr.health = apiv1.HealthStateTypeHealthy
-		cr.reason = "GPU is not detected by DCGM"
+		cr.reason = "GPU is not detected"
 		return cr
 	}
 
