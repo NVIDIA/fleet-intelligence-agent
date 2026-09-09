@@ -216,7 +216,12 @@ func deviceInventoryFromFieldValues(deviceIDs []uint, values []dcgm.FieldValue_v
 			complete = false
 			continue
 		}
-		if CheckSentinelV2(*value, "deviceID", value.EntityID) {
+		sentinelType, isSentinel := CheckSentinelV2Helper(*value)
+		if isSentinel {
+			CheckSentinelV2(*value, "deviceID", value.EntityID)
+			if sentinelType.ShouldRetry() {
+				complete = false
+			}
 			continue
 		}
 
@@ -266,7 +271,6 @@ func deviceInventoryFromFieldValues(deviceIDs []uint, values []dcgm.FieldValue_v
 
 	return devices, complete
 }
-
 func inventoryString(value *dcgm.FieldValue_v2) string {
 	if value.FieldType != dcgm.DCGM_FT_STRING {
 		return ""

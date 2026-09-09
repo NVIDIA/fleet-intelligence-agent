@@ -172,18 +172,34 @@ func TestQueryDeviceInventoryDoesNotQueryFieldsWithoutDevices(t *testing.T) {
 	}
 }
 
-func TestDeviceInventorySkipsUnavailableFieldsWithoutDroppingGPU(t *testing.T) {
-	nonOK := stringField(1, dcgm.DCGM_FI_DEV_NAME, "invalid")
-	nonOK.Status = dcgm.DCGM_ST_NOT_SUPPORTED
+func TestDeviceInventorySkipsUnsupportedFieldsWithoutDroppingGPU(t *testing.T) {
+	unsupportedStatus := stringField(1, dcgm.DCGM_FI_DEV_NAME, "invalid")
+	unsupportedStatus.Status = dcgm.DCGM_ST_NOT_SUPPORTED
+	unsupportedSentinel := int64Field(1, dcgm.DCGM_FI_DEV_FB_TOTAL, dcgm.DCGM_FT_INT64_NOT_SUPPORTED)
+
+	devices, complete := deviceInventoryFromFieldValues([]uint{1}, []dcgm.FieldValue_v2{
+		stringField(1, dcgm.DCGM_FI_DEV_UUID, "GPU-1"),
+		unsupportedStatus,
+		unsupportedSentinel,
+	})
+	if !complete {
+		t.Fatal("deviceInventoryFromFieldValues() complete = false for unsupported fields")
+	}
+	want := []DeviceInfo{{ID: 1, UUID: "GPU-1", MinorNumber: -1}}
+	if !slices.Equal(devices, want) {
+		t.Fatalf("devices = %+v, want %+v", devices, want)
+	}
+}
+
+func TestDeviceInventoryRetriesBlankSentinelWithoutDroppingGPU(t *testing.T) {
 	blankMemory := int64Field(1, dcgm.DCGM_FI_DEV_FB_TOTAL, dcgm.DCGM_FT_INT64_BLANK)
 
 	devices, complete := deviceInventoryFromFieldValues([]uint{1}, []dcgm.FieldValue_v2{
 		stringField(1, dcgm.DCGM_FI_DEV_UUID, "GPU-1"),
-		nonOK,
 		blankMemory,
 	})
-	if !complete {
-		t.Fatal("deviceInventoryFromFieldValues() complete = false for permanently unsupported field")
+	if complete {
+		t.Fatal("deviceInventoryFromFieldValues() complete = true for transient blank field")
 	}
 	want := []DeviceInfo{{ID: 1, UUID: "GPU-1", MinorNumber: -1}}
 	if !slices.Equal(devices, want) {
