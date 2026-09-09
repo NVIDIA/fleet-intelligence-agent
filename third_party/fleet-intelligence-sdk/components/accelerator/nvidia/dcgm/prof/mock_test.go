@@ -16,13 +16,14 @@
 package prof
 
 import (
-	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
+	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 )
 
 // mockDCGMInstance is a minimal mock for testing prof component behavior
 type mockDCGMInstance struct {
 	dcgmExists bool
+	devices    []nvidiadcgm.DeviceInfo
 }
 
 func (m *mockDCGMInstance) DCGMExists() bool {
@@ -67,8 +68,7 @@ func (m *mockDCGMInstance) GetGroupHandle() dcgm.GroupHandle {
 }
 
 func (m *mockDCGMInstance) GetDevices() []nvidiadcgm.DeviceInfo {
-	// Return one device to trigger field setup logic
-	return []nvidiadcgm.DeviceInfo{{ID: 0}}
+	return append([]nvidiadcgm.DeviceInfo(nil), m.devices...)
 }
 
 func (m *mockDCGMInstance) Shutdown() error {
