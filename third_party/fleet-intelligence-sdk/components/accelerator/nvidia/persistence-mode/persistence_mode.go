@@ -6,6 +6,7 @@ package persistencemode
 import (
 	"errors"
 	"fmt"
+	"sort"
 
 	dcgm "github.com/NVIDIA/go-dcgm/pkg/dcgm"
 
@@ -60,8 +61,22 @@ func persistenceModesFromFieldValues(devices []nvidiadcgm.DeviceInfo, results []
 		}
 	}
 
-	modes := make([]PersistenceMode, 0, len(devices))
-	for _, device := range devices {
+	// Device discovery order is not part of the health-state contract and can
+	// change across agent or DCGM restarts and device re-enumeration. Canonicalize
+	// by stable device identity so unchanged device state produces stable output.
+	orderedDevices := append([]nvidiadcgm.DeviceInfo(nil), devices...)
+	sort.Slice(orderedDevices, func(i, j int) bool {
+		if orderedDevices[i].UUID != orderedDevices[j].UUID {
+			return orderedDevices[i].UUID < orderedDevices[j].UUID
+		}
+		if orderedDevices[i].BusID != orderedDevices[j].BusID {
+			return orderedDevices[i].BusID < orderedDevices[j].BusID
+		}
+		return orderedDevices[i].ID < orderedDevices[j].ID
+	})
+
+	modes := make([]PersistenceMode, 0, len(orderedDevices))
+	for _, device := range orderedDevices {
 		mode := PersistenceMode{UUID: device.UUID, BusID: device.BusID}
 		value, ok := valuesByDevice[device.ID]
 		if !ok {

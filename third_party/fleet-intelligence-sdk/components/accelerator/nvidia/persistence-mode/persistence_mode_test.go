@@ -39,10 +39,42 @@ func TestPersistenceModesFromFieldValuesRequiresOKStatus(t *testing.T) {
 	modes, err := persistenceModesFromFieldValues(devices, results)
 	assert.NoError(t, err)
 	assert.Equal(t, []PersistenceMode{
-		{UUID: "GPU-enabled", Supported: true, Enabled: true},
 		{UUID: "GPU-disabled", Supported: true, Enabled: false},
+		{UUID: "GPU-enabled", Supported: true, Enabled: true},
 		{UUID: "GPU-unsupported", Supported: false, Enabled: false},
 	}, modes)
+}
+
+func TestPersistenceModesFromFieldValuesReturnsDeterministicDeviceOrder(t *testing.T) {
+	enabled := dcgm.FieldValue_v1{
+		FieldID: dcgm.DCGM_FI_DEV_PERSISTENCE_MODE,
+		Status:  dcgm.DCGM_ST_OK,
+	}
+	enabled.Value[0] = 1
+
+	disabled := enabled
+	disabled.Value[0] = 0
+
+	devices := []nvidiadcgm.DeviceInfo{
+		{ID: 7, UUID: "GPU-2", BusID: "0000:53:00.0"},
+		{ID: 2, UUID: "GPU-7", BusID: "0000:b9:00.0"},
+	}
+	results := []nvidiadcgm.DeviceFieldValues{
+		{DeviceID: 7, Values: []dcgm.FieldValue_v1{enabled}},
+		{DeviceID: 2, Values: []dcgm.FieldValue_v1{disabled}},
+	}
+
+	forward, err := persistenceModesFromFieldValues(devices, results)
+	assert.NoError(t, err)
+	reversed, err := persistenceModesFromFieldValues([]nvidiadcgm.DeviceInfo{devices[1], devices[0]}, results)
+	assert.NoError(t, err)
+
+	expected := []PersistenceMode{
+		{UUID: "GPU-2", BusID: "0000:53:00.0", Supported: true, Enabled: true},
+		{UUID: "GPU-7", BusID: "0000:b9:00.0", Supported: true, Enabled: false},
+	}
+	assert.Equal(t, expected, forward)
+	assert.Equal(t, expected, reversed)
 }
 
 func TestPersistenceModesFromFieldValuesReturnsMissingFieldError(t *testing.T) {
