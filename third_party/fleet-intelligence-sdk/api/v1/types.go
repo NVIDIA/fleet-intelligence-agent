@@ -436,21 +436,43 @@ type MachineGPUInstance struct {
 
 func (gi *MachineGPUInfo) RenderTable(wr io.Writer) {
 	if len(gi.GPUs) > 0 {
+		showBoardID := false
+		for _, gpu := range gi.GPUs {
+			if gpu.BoardID != 0 {
+				showBoardID = true
+				break
+			}
+		}
+
 		table := tablewriter.NewWriter(wr)
 		table.SetAlignment(tablewriter.ALIGN_CENTER)
-		table.SetHeader([]string{"GPU UUID", "GPU Index", "GPU Bus ID", "SN", "Minor ID", "Board ID", "VBIOS Version", "Chassis SN"})
+		header := []string{"GPU UUID", "GPU Index", "GPU Bus ID", "SN", "Minor ID"}
+		if showBoardID {
+			header = append(header, "Board ID")
+		}
+		header = append(header, "VBIOS Version", "Chassis SN")
+		table.SetHeader(header)
 
 		for _, gpu := range gi.GPUs {
-			table.Append([]string{
+			row := []string{
 				gpu.UUID,
 				gpu.GPUIndex,
 				gpu.BusID,
 				gpu.SN,
 				gpu.MinorID,
-				strconv.Itoa(int(gpu.BoardID)),
+			}
+			if showBoardID {
+				boardID := ""
+				if gpu.BoardID != 0 {
+					boardID = strconv.Itoa(int(gpu.BoardID))
+				}
+				row = append(row, boardID)
+			}
+			row = append(row,
 				gpu.VBIOSVersion,
 				gpu.ChassisSN,
-			})
+			)
+			table.Append(row)
 		}
 
 		table.Render()
