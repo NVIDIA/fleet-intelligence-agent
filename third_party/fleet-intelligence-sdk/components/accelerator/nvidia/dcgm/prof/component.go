@@ -51,7 +51,7 @@ type component struct {
 	dcgmHealthCache *nvidiadcgm.HealthCache
 
 	setupMu             sync.Mutex
-	fieldSetupAttempted bool
+	fieldSetupComplete  bool
 	fieldGroupName      string
 
 	// Track fields we're actually watching (post-validation)
@@ -96,13 +96,16 @@ func (c *component) setupFieldWatchingIfReady() {
 	c.setupMu.Lock()
 	defer c.setupMu.Unlock()
 
-	if c.fieldSetupAttempted || c.dcgmInstance == nil || !c.dcgmInstance.DCGMExists() {
+	if c.fieldSetupComplete || c.dcgmInstance == nil || !c.dcgmInstance.DCGMExists() {
 		return
 	}
-	c.fieldSetupAttempted = true
 
 	devices := c.dcgmInstance.GetDevices()
 	if len(devices) == 0 {
+		// Device membership is fixed when the connected DCGM session is built.
+		// An empty inventory is therefore a terminal setup outcome for this
+		// session, rather than something repeated checks can discover later.
+		c.fieldSetupComplete = true
 		log.Logger.Warnw("no GPU devices found, skipping profiling field setup")
 		return
 	}
@@ -112,6 +115,9 @@ func (c *component) setupFieldWatchingIfReady() {
 	deviceID := devices[0].ID
 	validFields := newFieldValidator(deviceID).validateFields(profFields)
 	if len(validFields) == 0 {
+		// No supported fields is a terminal outcome under the existing profiling
+		// policy. Avoid repeating the same validation on every health check.
+		c.fieldSetupComplete = true
 		log.Logger.Warnw("no valid profiling fields after hardware validation",
 			"requestedFields", len(profFields),
 			"deviceID", deviceID,
@@ -129,6 +135,7 @@ func (c *component) setupFieldWatchingIfReady() {
 	if err != nil {
 		log.Logger.Warnw("failed to create DCGM field group", "error", err)
 		c.setupDegradedReason = fmt.Sprintf("failed to create DCGM profiling field group: %v", err)
+		// Leave setup incomplete so the next health check can retry.
 		return
 	}
 	c.fieldGroupID = fieldGroupID
@@ -146,8 +153,12 @@ func (c *component) setupFieldWatchingIfReady() {
 		log.Logger.Warnw("failed to set up DCGM field watching", "error", err)
 		c.cleanupFieldGroupLocked()
 		c.setupDegradedReason = fmt.Sprintf("failed to set up DCGM profiling field watching: %v", err)
+		// Leave setup incomplete so the next health check can recreate the field
+		// group and retry the watch.
 		return
 	}
+	c.fieldSetupComplete = true
+	c.setupDegradedReason = ""
 	c.watchedFields = validFields
 
 	log.Logger.Infow("profiling field watching configured",

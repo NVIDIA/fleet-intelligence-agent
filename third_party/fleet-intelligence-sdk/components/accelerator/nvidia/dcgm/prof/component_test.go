@@ -189,8 +189,8 @@ func TestCheck(t *testing.T) {
 	}
 }
 
-// TestSetupFailureHandling verifies that when field group creation or watching
-// setup fails during New(), the component returns Degraded state on Check().
+// TestSetupFailureHandling verifies that a recorded field setup failure is
+// returned as Degraded by Check().
 func TestSetupFailureHandling(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -212,10 +212,10 @@ func TestSetupFailureHandling(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	// Manually set setupDegradedReason to simulate a setup failure
-	// (In real scenarios, this would be set by FieldGroupCreate or WatchFieldsWithGroupEx failures)
+	// Manually record the terminal state so this test can exercise reporting
+	// without invoking DCGM's package-level CGO setup functions.
 	c := comp.(*component)
-	c.fieldSetupAttempted = true
+	c.fieldSetupComplete = true
 	c.setupDegradedReason = "failed to create DCGM profiling field group: mock error"
 
 	// Now enable DCGMExists so Check() proceeds past the early guards
@@ -255,13 +255,13 @@ func TestCheckAttemptsDeferredSetupAfterDCGMReconnect(t *testing.T) {
 	}
 
 	c := comp.(*component)
-	if c.fieldSetupAttempted {
+	if c.fieldSetupComplete {
 		t.Fatal("profiling field setup was attempted while DCGM was unavailable")
 	}
 
 	mockInstance.dcgmExists = true
 	result := comp.Check()
-	if !c.fieldSetupAttempted {
+	if !c.fieldSetupComplete {
 		t.Fatal("profiling field setup was not attempted after DCGM became available")
 	}
 	if result.HealthStateType() != apiv1.HealthStateTypeHealthy {
