@@ -17,7 +17,7 @@ func TestHealthState_JSONIncludesIncidents(t *testing.T) {
 			{
 				EntityID: "GPU-0",
 				Message:  "Clock throttled",
-				Health: HealthStateTypeDegraded,
+				Health:   HealthStateTypeDegraded,
 				Error:    "DCGM_FR_CLOCK_THROTTLE_POWER",
 			},
 		},
@@ -266,9 +266,10 @@ func TestMachineInfo_RenderTable(t *testing.T) {
 
 func TestMachineGPUInfo_RenderTable(t *testing.T) {
 	tests := []struct {
-		name         string
-		gpuInfo      MachineGPUInfo
-		wantContains []string
+		name            string
+		gpuInfo         MachineGPUInfo
+		wantContains    []string
+		wantNotContains []string
 	}{
 		{
 			name: "No GPUs",
@@ -296,7 +297,9 @@ func TestMachineGPUInfo_RenderTable(t *testing.T) {
 					},
 				},
 			},
-			wantContains: []string{"UUID", "GPU INDEX", "SN", "MINOR ID", "GPU-abc123", "SN12345", "0"}},
+			wantContains:    []string{"UUID", "GPU INDEX", "SN", "MINOR ID", "GPU-abc123", "SN12345", "0"},
+			wantNotContains: []string{"BOARD ID"},
+		},
 		{
 			name: "Multiple GPUs",
 			gpuInfo: MachineGPUInfo{
@@ -324,6 +327,17 @@ func TestMachineGPUInfo_RenderTable(t *testing.T) {
 				"GPU-abc123", "SN12345", "0",
 				"GPU-def456", "SN67890", "1",
 			},
+			wantNotContains: []string{"BOARD ID"},
+		},
+		{
+			name: "Board ID when available",
+			gpuInfo: MachineGPUInfo{
+				GPUs: []MachineGPUInstance{{
+					UUID:    "GPU-abc123",
+					BoardID: 7,
+				}},
+			},
+			wantContains: []string{"BOARD ID", "7"},
 		},
 	}
 
@@ -344,6 +358,11 @@ func TestMachineGPUInfo_RenderTable(t *testing.T) {
 			for _, wantStr := range tt.wantContains {
 				if !bytes.Contains(buf.Bytes(), []byte(wantStr)) {
 					t.Errorf("MachineGPUInfo.RenderTable() output does not contain %q\nGot: %q", wantStr, rendered)
+				}
+			}
+			for _, unwanted := range tt.wantNotContains {
+				if bytes.Contains(buf.Bytes(), []byte(unwanted)) {
+					t.Errorf("MachineGPUInfo.RenderTable() output unexpectedly contains %q\nGot: %q", unwanted, rendered)
 				}
 			}
 		})

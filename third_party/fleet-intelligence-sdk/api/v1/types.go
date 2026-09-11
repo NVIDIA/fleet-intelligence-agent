@@ -400,20 +400,20 @@ type MachineGPUInfo struct {
 }
 
 type MachineGPUInstance struct {
-	// UUID is the GPU UUID from the nvml API.
+	// UUID is the GPU UUID reported by the NVIDIA driver through DCGM.
 	// e.g., "GPU-46a3bbe2-3e87-3dde-b464-a03eba0c21d7"
 	UUID string `json:"uuid,omitempty"`
 
-	// GPUIndex is the GPU index as reported by NVML (matches nvidia-smi output).
+	// GPUIndex is the DCGM device ID (matches the DCGM exporter's gpu label).
 	// Note: this index may not be stable across DCGM host engine restarts,
 	// but matches the DCGM exporter's "gpu" label convention.
 	GPUIndex string `json:"gpuIndex,omitempty"`
 
-	// BusID is the GPU bus ID from the nvml API.
+	// BusID is the GPU PCI bus ID reported by DCGM.
 	//  e.g., "0000:0f:00.0"
 	BusID string `json:"busID,omitempty"`
 
-	// ModelName is the product name reported by NVML for this GPU.
+	// ModelName is the product name reported by DCGM for this GPU.
 	// It is used for metric identity enrichment and intentionally excluded from
 	// the existing machine-info JSON contract.
 	ModelName string `json:"-"`
@@ -429,28 +429,50 @@ type MachineGPUInstance struct {
 	BoardID      uint32 `json:"boardID,omitempty"`
 	VBIOSVersion string `json:"vbiosVersion,omitempty"`
 
-	// ChassisSN is reported by NVML platform info.
+	// ChassisSN is reported by the DCGM platform-info field.
 	// It is typically identical across GPUs on the same node, but is stored per GPU.
 	ChassisSN string `json:"chassisSN,omitempty"`
 }
 
 func (gi *MachineGPUInfo) RenderTable(wr io.Writer) {
 	if len(gi.GPUs) > 0 {
+		showBoardID := false
+		for _, gpu := range gi.GPUs {
+			if gpu.BoardID != 0 {
+				showBoardID = true
+				break
+			}
+		}
+
 		table := tablewriter.NewWriter(wr)
 		table.SetAlignment(tablewriter.ALIGN_CENTER)
-		table.SetHeader([]string{"GPU UUID", "GPU Index", "GPU Bus ID", "SN", "Minor ID", "Board ID", "VBIOS Version", "Chassis SN"})
+		header := []string{"GPU UUID", "GPU Index", "GPU Bus ID", "SN", "Minor ID"}
+		if showBoardID {
+			header = append(header, "Board ID")
+		}
+		header = append(header, "VBIOS Version", "Chassis SN")
+		table.SetHeader(header)
 
 		for _, gpu := range gi.GPUs {
-			table.Append([]string{
+			row := []string{
 				gpu.UUID,
 				gpu.GPUIndex,
 				gpu.BusID,
 				gpu.SN,
 				gpu.MinorID,
-				strconv.Itoa(int(gpu.BoardID)),
+			}
+			if showBoardID {
+				boardID := ""
+				if gpu.BoardID != 0 {
+					boardID = strconv.Itoa(int(gpu.BoardID))
+				}
+				row = append(row, boardID)
+			}
+			row = append(row,
 				gpu.VBIOSVersion,
 				gpu.ChassisSN,
-			})
+			)
+			table.Append(row)
 		}
 
 		table.Render()

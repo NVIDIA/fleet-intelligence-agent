@@ -568,6 +568,20 @@ func TestMachineInfo(t *testing.T) {
 				assert.Equal(t, false, response["nvidia_available"])
 			},
 		},
+		{
+			name: "gpu_detected_outside_dcgm",
+			gpudInstance: &components.GPUdInstance{
+				MachineID:          "test-machine-id",
+				GPUHardwarePresent: true,
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, body []byte) {
+				var response map[string]interface{}
+				err := json.Unmarshal(body, &response)
+				require.NoError(t, err)
+				assert.Equal(t, true, response["nvidia_available"])
+			},
+		},
 	}
 
 	for _, tt := range tests {
