@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -128,14 +127,7 @@ func (hc *HealthCache) Poll() error {
 	if err != nil {
 		wrappedErr := fmt.Errorf("failed to perform DCGM health check: %w", err)
 
-		// Check for fatal errors that require restart
-		if IsRestartRequired(err) {
-			log.Logger.Errorw("DCGM fatal error, exiting for restart",
-				"component", "health_cache",
-				"error", err,
-				"action", "systemd/k8s will restart agent and recreate DCGM resources")
-			os.Exit(1)
-		}
+		exitForRestartIfRequired("health_cache", err)
 
 		// Check if this is a transient error (benign, don't store)
 		if errors.Is(err, errTransientGroupNotReady) || IsTransientError(err) {

@@ -18,7 +18,6 @@ package dcgm
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -217,6 +216,16 @@ func (fc *FieldValueCache) Poll() error {
 		return nil
 	}
 
+	// Inventory identity fields are queried live only until the fixed device
+	// membership has a complete snapshot. Sharing this cadence avoids a second
+	// background ticker and keeps reconnect responsible only for session setup.
+	if enricher, ok := fc.instance.(deviceInventoryEnricher); ok {
+		if err := enricher.enrichDeviceInventoryIfIncomplete(); err != nil {
+			exitForRestartIfRequired("device_inventory", err)
+			log.Logger.Warnw("DCGM device inventory enrichment retry failed", "error", err)
+		}
+	}
+
 	if err := fc.ensureFieldWatchingSetup(); err != nil {
 		return err
 	}
@@ -234,15 +243,7 @@ func (fc *FieldValueCache) Poll() error {
 	for _, device := range devices {
 		fieldValues, err := dcgm.GetLatestValuesForFields(device.ID, watchedFields)
 		if err != nil {
-			// Check for fatal errors that require restart
-			if IsRestartRequired(err) {
-				log.Logger.Errorw("DCGM fatal error, exiting for restart",
-					"component", "field_cache",
-					"deviceID", device.ID,
-					"error", err,
-					"action", "systemd/k8s will restart agent and recreate DCGM resources")
-				os.Exit(1)
-			}
+			exitForRestartIfRequired("field_cache", err, "deviceID", device.ID)
 
 			// Check if this is a transient error (benign, don't store)
 			if IsTransientError(err) {

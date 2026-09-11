@@ -18,6 +18,7 @@ package dcgm
 import (
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 
@@ -198,6 +199,25 @@ func IsRestartRequired(err error) bool {
 	default:
 		return false
 	}
+}
+
+// exitForRestartIfRequired applies the common recovery policy for a DCGM
+// session that can no longer serve its configured groups or watches. Native
+// DCGM resources cannot be safely repaired in place while caches are active,
+// so the process supervisor must restart the agent and rebuild the session.
+func exitForRestartIfRequired(component string, err error, fields ...interface{}) {
+	if !IsRestartRequired(err) {
+		return
+	}
+
+	logFields := []interface{}{"component", component}
+	logFields = append(logFields, fields...)
+	logFields = append(logFields,
+		"error", err,
+		"action", "systemd/k8s will restart agent and recreate DCGM resources",
+	)
+	log.Logger.Errorw("DCGM fatal error, exiting for restart", logFields...)
+	os.Exit(1)
 }
 
 // IsUnhealthyAPIError returns true if the DCGM API error indicates unhealthy state.

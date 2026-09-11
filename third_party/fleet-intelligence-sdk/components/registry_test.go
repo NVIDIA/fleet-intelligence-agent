@@ -12,9 +12,56 @@ import (
 	"time"
 
 	apiv1 "github.com/NVIDIA/fleet-intelligence-sdk/api/v1"
+	nvidiadcgm "github.com/NVIDIA/fleet-intelligence-sdk/pkg/nvidia-query/dcgm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type staticDCGMInstance struct {
+	nvidiadcgm.Instance
+	devices []nvidiadcgm.DeviceInfo
+}
+
+func (i staticDCGMInstance) GetDevices() []nvidiadcgm.DeviceInfo { return i.devices }
+
+func TestGPUdInstanceGPUDevices(t *testing.T) {
+	t.Run("nil instance", func(t *testing.T) {
+		var instance *GPUdInstance
+		assert.Nil(t, instance.GPUDevices())
+	})
+
+	t.Run("DCGM inventory", func(t *testing.T) {
+		devices := []nvidiadcgm.DeviceInfo{{ID: 0, UUID: "GPU-dcgm"}}
+		instance := &GPUdInstance{DCGMInstance: staticDCGMInstance{
+			Instance: nvidiadcgm.NewNoOp(),
+			devices:  devices,
+		}}
+		assert.Equal(t, devices, instance.GPUDevices())
+	})
+}
+
+func TestGPUDetected(t *testing.T) {
+	t.Run("DCGM inventory", func(t *testing.T) {
+		instance := &GPUdInstance{DCGMInstance: staticDCGMInstance{
+			Instance: nvidiadcgm.NewNoOp(),
+			devices:  []nvidiadcgm.DeviceInfo{{ID: 0}},
+		}}
+		assert.True(t, instance.GPUDetected())
+	})
+
+	t.Run("independent PCI detection", func(t *testing.T) {
+		instance := &GPUdInstance{
+			DCGMInstance:       nvidiadcgm.NewNoOp(),
+			GPUHardwarePresent: true,
+		}
+		assert.True(t, instance.GPUDetected())
+	})
+
+	t.Run("no detected GPU", func(t *testing.T) {
+		instance := &GPUdInstance{DCGMInstance: nvidiadcgm.NewNoOp()}
+		assert.False(t, instance.GPUDetected())
+	})
+}
 
 // mockComponent implements the Component interface for testing
 type mockComponent struct {
