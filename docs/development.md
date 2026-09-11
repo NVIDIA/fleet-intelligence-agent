@@ -166,6 +166,11 @@ make fleetint
 
 - Follow standard Go conventions and idioms
 - Add tests for new functionality
+- Keep externally visible output deterministic. When collection or discovery
+  order has no semantic meaning, sort by stable identifiers before
+  serialization, hashing, comparison, or reporting. Do not sort when order
+  represents chronology, priority, ranking, topology, or another meaningful
+  sequence. When practical, test that shuffled input produces identical output.
 - Update documentation for user-facing changes
 - Ensure all tests pass before submitting PRs
 - Use `make fmt` to format code before committing
