@@ -189,8 +189,8 @@ func TestCheck(t *testing.T) {
 	}
 }
 
-// TestSetupFailureHandling verifies that when field group creation or watching
-// setup fails during New(), the component returns Degraded state on Check().
+// TestSetupFailureHandling verifies that a recorded field setup failure is
+// returned as Degraded by Check().
 func TestSetupFailureHandling(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -212,9 +212,10 @@ func TestSetupFailureHandling(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	// Manually set setupDegradedReason to simulate a setup failure
-	// (In real scenarios, this would be set by FieldGroupCreate or WatchFieldsWithGroupEx failures)
+	// Manually record the terminal state so this test can exercise reporting
+	// without invoking DCGM's package-level CGO setup functions.
 	c := comp.(*component)
+	c.fieldSetupComplete = true
 	c.setupDegradedReason = "failed to create DCGM profiling field group: mock error"
 
 	// Now enable DCGMExists so Check() proceeds past the early guards
@@ -237,6 +238,35 @@ func TestSetupFailureHandling(t *testing.T) {
 	}
 
 	t.Logf("Setup failure correctly returned Degraded: %s", summary)
+}
+
+func TestCheckAttemptsDeferredSetupAfterDCGMReconnect(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mockInstance := &mockDCGMInstance{dcgmExists: false}
+	comp, err := New(&components.GPUdInstance{
+		RootCtx:             ctx,
+		DCGMInstance:        mockInstance,
+		HealthCheckInterval: time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	c := comp.(*component)
+	if c.fieldSetupComplete {
+		t.Fatal("profiling field setup was attempted while DCGM was unavailable")
+	}
+
+	mockInstance.dcgmExists = true
+	result := comp.Check()
+	if !c.fieldSetupComplete {
+		t.Fatal("profiling field setup was not attempted after DCGM became available")
+	}
+	if result.HealthStateType() != apiv1.HealthStateTypeHealthy {
+		t.Fatalf("HealthStateType() = %v, want Healthy", result.HealthStateType())
+	}
 }
 
 // TestNoWatchedFieldsReturnsHealthy verifies that when no profiling fields

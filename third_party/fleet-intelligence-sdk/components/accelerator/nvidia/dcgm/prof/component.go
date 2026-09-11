@@ -50,15 +50,19 @@ type component struct {
 	dcgmInstance    nvidiadcgm.Instance
 	dcgmHealthCache *nvidiadcgm.HealthCache
 
+	setupMu             sync.Mutex
+	fieldSetupComplete  bool
+	fieldGroupName      string
+
 	// Track fields we're actually watching (post-validation)
 	watchedFields []dcgm.Short
 
 	// Field group handle for cleanup
 	fieldGroupID dcgm.FieldHandle
 
-	// setupDegradedReason is non-empty when field group creation or watching setup failed
-	// during New(). Check() returns Degraded immediately with this reason rather than
-	// querying fields that were never successfully registered.
+	// setupDegradedReason is non-empty when field group creation or watching setup
+	// failed. Check() returns Degraded with this reason rather than querying fields
+	// that were never successfully registered.
 	setupDegradedReason string
 
 	lastMu          sync.RWMutex
@@ -82,76 +86,86 @@ func New(gpudInstance *components.GPUdInstance) (components.Component, error) {
 		healthCheckInterval: healthCheckInterval,
 		dcgmInstance:        gpudInstance.DCGMInstance,
 		dcgmHealthCache:     gpudInstance.DCGMHealthCache,
-	}
-
-	// Set up DCGM field watching for profiling fields
-	if c.dcgmInstance != nil && c.dcgmInstance.DCGMExists() {
-		devices := c.dcgmInstance.GetDevices()
-		if len(devices) == 0 {
-			log.Logger.Warnw("no GPU devices found, skipping profiling field setup")
-			return c, nil
-		}
-
-		// Use first device for hardware validation
-		// NOTE: If fields differ per GPU, we'd need per-device validation
-		deviceID := devices[0].ID
-
-		// Create validator with hardware support check
-		validator := newFieldValidator(deviceID)
-
-		// Validate all requested profiling fields
-		validFields := validator.validateFields(profFields)
-
-		if len(validFields) == 0 {
-			log.Logger.Warnw("no valid profiling fields after hardware validation",
-				"requestedFields", len(profFields),
-				"deviceID", deviceID,
-				"suggestion", "Check if GPU supports DCP metrics (datacenter GPUs only)")
-			return c, nil
-		}
-
-		log.Logger.Infow("profiling field validation complete",
-			"requestedFields", len(profFields),
-			"validFields", len(validFields),
-			"skippedFields", len(profFields)-len(validFields),
-			"deviceID", deviceID)
-
-		// Save validated fields for query phase
-		c.watchedFields = validFields
-
-		// Create field group with ONLY hardware-validated fields
-		fieldGroupName := dcgmGroupNames.ProfilingFieldGroup
-		fieldGroupID, err := dcgm.FieldGroupCreate(fieldGroupName, validFields)
-		if err != nil {
-			log.Logger.Warnw("failed to create DCGM field group", "error", err)
-			c.setupDegradedReason = fmt.Sprintf("failed to create DCGM profiling field group: %v", err)
-			return c, nil
-		}
-		c.fieldGroupID = fieldGroupID
-
-		// Setup field watching
-		updateFreqMicroseconds := int64(healthCheckInterval / time.Microsecond)
-		maxKeepAge := healthCheckInterval.Seconds() * 2
-		maxKeepSamples := int32(3)
-
-		err = dcgm.WatchFieldsWithGroupEx(fieldGroupID,
-			dcgm.GroupAllGPUs(),
-			updateFreqMicroseconds, maxKeepAge, maxKeepSamples)
-		if err != nil {
-			log.Logger.Warnw("failed to set up DCGM field watching", "error", err)
-			c.cleanup()
-			c.setupDegradedReason = fmt.Sprintf("failed to set up DCGM profiling field watching: %v", err)
-			return c, nil
-		}
-
-		log.Logger.Infow("profiling field watching configured",
-			"numFields", len(validFields),
-			"updateFreq", healthCheckInterval,
-			"maxKeepAge", maxKeepAge,
-			"maxKeepSamples", maxKeepSamples)
+		fieldGroupName:      dcgmGroupNames.ProfilingFieldGroup,
 	}
 
 	return c, nil
+}
+
+func (c *component) setupFieldWatchingIfReady() {
+	c.setupMu.Lock()
+	defer c.setupMu.Unlock()
+
+	if c.fieldSetupComplete || c.dcgmInstance == nil || !c.dcgmInstance.DCGMExists() {
+		return
+	}
+
+	devices := c.dcgmInstance.GetDevices()
+	if len(devices) == 0 {
+		// Device membership is fixed when the connected DCGM session is built.
+		// An empty inventory is therefore a terminal setup outcome for this
+		// session, rather than something repeated checks can discover later.
+		c.fieldSetupComplete = true
+		log.Logger.Warnw("no GPU devices found, skipping profiling field setup")
+		return
+	}
+
+	// Use the first device for hardware validation. If field support can differ
+	// between GPUs, profiling will need per-device validation.
+	deviceID := devices[0].ID
+	validFields := newFieldValidator(deviceID).validateFields(profFields)
+	if len(validFields) == 0 {
+		// No supported fields is a terminal outcome under the existing profiling
+		// policy. Avoid repeating the same validation on every health check.
+		c.fieldSetupComplete = true
+		log.Logger.Warnw("no valid profiling fields after hardware validation",
+			"requestedFields", len(profFields),
+			"deviceID", deviceID,
+			"suggestion", "Check if GPU supports DCP metrics (datacenter GPUs only)")
+		return
+	}
+
+	log.Logger.Infow("profiling field validation complete",
+		"requestedFields", len(profFields),
+		"validFields", len(validFields),
+		"skippedFields", len(profFields)-len(validFields),
+		"deviceID", deviceID)
+
+	fieldGroupID, err := dcgm.FieldGroupCreate(c.fieldGroupName, validFields)
+	if err != nil {
+		log.Logger.Warnw("failed to create DCGM field group", "error", err)
+		c.setupDegradedReason = fmt.Sprintf("failed to create DCGM profiling field group: %v", err)
+		// Leave setup incomplete so the next health check can retry.
+		return
+	}
+	c.fieldGroupID = fieldGroupID
+
+	updateFreqMicroseconds := int64(c.healthCheckInterval / time.Microsecond)
+	maxKeepAge := c.healthCheckInterval.Seconds() * 2
+	maxKeepSamples := int32(3)
+	if err := dcgm.WatchFieldsWithGroupEx(
+		fieldGroupID,
+		dcgm.GroupAllGPUs(),
+		updateFreqMicroseconds,
+		maxKeepAge,
+		maxKeepSamples,
+	); err != nil {
+		log.Logger.Warnw("failed to set up DCGM field watching", "error", err)
+		c.cleanupFieldGroupLocked()
+		c.setupDegradedReason = fmt.Sprintf("failed to set up DCGM profiling field watching: %v", err)
+		// Leave setup incomplete so the next health check can recreate the field
+		// group and retry the watch.
+		return
+	}
+	c.fieldSetupComplete = true
+	c.setupDegradedReason = ""
+	c.watchedFields = validFields
+
+	log.Logger.Infow("profiling field watching configured",
+		"numFields", len(validFields),
+		"updateFreq", c.healthCheckInterval,
+		"maxKeepAge", maxKeepAge,
+		"maxKeepSamples", maxKeepSamples)
 }
 
 func (c *component) Name() string { return Name }
@@ -211,6 +225,12 @@ func (c *component) Events(ctx context.Context, since time.Time) (apiv1.Events, 
 }
 
 func (c *component) cleanup() {
+	c.setupMu.Lock()
+	defer c.setupMu.Unlock()
+	c.cleanupFieldGroupLocked()
+}
+
+func (c *component) cleanupFieldGroupLocked() {
 	if c.fieldGroupID.GetHandle() != 0 {
 		if err := dcgm.FieldGroupDestroy(c.fieldGroupID); err != nil {
 			log.Logger.Warnw("failed to destroy field group", "error", err)
@@ -239,13 +259,6 @@ func (c *component) Check() components.CheckResult {
 		c.lastMu.Unlock()
 	}()
 
-	// Early return if setup failed during New()
-	if c.setupDegradedReason != "" {
-		cr.health = apiv1.HealthStateTypeDegraded
-		cr.reason = c.setupDegradedReason
-		return cr
-	}
-
 	if c.dcgmInstance == nil {
 		cr.health = apiv1.HealthStateTypeHealthy
 		cr.reason = "DCGM instance is nil"
@@ -256,7 +269,22 @@ func (c *component) Check() components.CheckResult {
 		cr.reason = "DCGM library is not loaded"
 		return cr
 	}
-	if len(c.watchedFields) == 0 {
+
+	// New() may have received a reconnecting instance that was still backed by
+	// its no-op session. Keep setup here so the first check after DCGM becomes
+	// available creates the profiling field group and watch.
+	c.setupFieldWatchingIfReady()
+	c.setupMu.Lock()
+	setupDegradedReason := c.setupDegradedReason
+	watchedFields := append([]dcgm.Short(nil), c.watchedFields...)
+	c.setupMu.Unlock()
+
+	if setupDegradedReason != "" {
+		cr.health = apiv1.HealthStateTypeDegraded
+		cr.reason = setupDegradedReason
+		return cr
+	}
+	if len(watchedFields) == 0 {
 		cr.health = apiv1.HealthStateTypeHealthy
 		cr.reason = "no profiling fields to monitor (hardware doesn't support)"
 		return cr
@@ -266,9 +294,9 @@ func (c *component) Check() components.CheckResult {
 	for _, device := range devices {
 		// Query values using EntityGetLatestValues (FieldValue_v1)
 		vals, err := dcgm.EntityGetLatestValues(
-			dcgm.FE_GPU,     // Entity type: GPU
-			device.ID,       // Entity ID
-			c.watchedFields, // Only query hardware-validated fields
+			dcgm.FE_GPU,   // Entity type: GPU
+			device.ID,     // Entity ID
+			watchedFields, // Only query hardware-validated fields
 		)
 
 		if err != nil {
